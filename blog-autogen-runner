@@ -1,0 +1,3 @@
+#!/bin/bash
+source /Users/admin/Documents/scripts/story-autogen/venv/bin/activate
+blog-autogen "$@"

@@ -40,8 +40,19 @@ source venv/bin/activate
 pip install --upgrade pip
 pip install -e .
 
+# 4. Create a global runner script (optional but convenient)
+echo "Creating global runner..."
+cat <<EOF > blog-autogen-runner
+#!/bin/bash
+source $(pwd)/venv/bin/activate
+blog-autogen "\$@"
+EOF
+chmod +x blog-autogen-runner
+
 echo ""
 echo "=== Setup Complete! ==="
-echo "To start using the tool, run:"
-echo "source venv/bin/activate"
-echo "blog-autogen"
+echo "You can now run the tool using:"
+echo "./blog-autogen-runner"
+echo ""
+echo "To run it from ANYWHERE using just 'blog-autogen', run this ONCE (requires sudo):"
+echo "sudo ln -sf $(pwd)/blog-autogen-runner /usr/local/bin/blog-autogen"
