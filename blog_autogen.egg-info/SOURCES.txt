@@ -18,4 +18,9 @@ providers/storage.py
 publishers/__init__.py
 publishers/base_pub.py
 publishers/wp_rest.py
+tests/test_ai_9router.py
+tests/test_config_manager.py
+tests/test_integrations.py
+tests/test_orchestrator.py
+tests/test_wp_rest.py
 utils/helpers.py
