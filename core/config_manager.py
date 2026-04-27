@@ -63,14 +63,37 @@ class ConfigManager:
         def validate_9router_key(val, config):
             try:
                 import requests
+                base_url = config.get("ninerouter_base_url", "https://api.9router.ai/v1").rstrip('/')
                 headers = {"Authorization": f"Bearer {val}"}
-                # Use a lightweight endpoint to check key
-                resp = requests.get("https://api.9router.ai/v1/models", headers=headers, timeout=10)
+                resp = requests.get(f"{base_url}/models", headers=headers, timeout=10)
                 if resp.status_code == 200:
-                    return True, "9router API Key is valid."
+                    return True, "9router connection successful."
                 return False, f"API returned {resp.status_code}: {resp.text}"
             except Exception as e:
                 return False, str(e)
+
+        def fetch_models(api_key, base_url):
+            try:
+                import requests
+                headers = {"Authorization": f"Bearer {api_key}"}
+                resp = requests.get(f"{base_url.rstrip('/')}/models", headers=headers, timeout=10)
+                if resp.status_code == 200:
+                    models = [m['id'] for m in resp.json().get('data', [])]
+                    return sorted(models)
+            except:
+                pass
+            return []
+
+        def ask_model(prompt, key, models):
+            choices = models + ["--- Enter Custom Model Name ---"]
+            default_val = self.config.get(key, "")
+            if default_val not in choices:
+                default_val = choices[0] if choices else ""
+
+            choice = questionary.select(prompt, choices=choices, default=default_val).ask()
+            if choice == "--- Enter Custom Model Name ---":
+                return questionary.text(f"Enter custom name for {key}:").ask()
+            return choice
 
         def validate_wp(val, config, type="url"):
             # Simple check since we need multiple fields to test fully
@@ -108,9 +131,22 @@ class ConfigManager:
             except Exception as e:
                 return False, str(e)
 
-        self.config["ninerouter_api_key"] = ask_with_validation("9router API Key:", "ninerouter_api_key", validator=validate_9router_key)
-        self.config["ninerouter_text_model"] = ask_with_validation("9router Model (Text):", "ninerouter_text_model")
-        self.config["ninerouter_image_model"] = ask_with_validation("9router Model (Image):", "ninerouter_image_model")
+        self.config["ninerouter_base_url"] = ask_with_validation(
+            "9router Base URL:", 
+            "ninerouter_base_url"
+        )
+        
+        self.config["ninerouter_api_key"] = ask_with_validation(
+            "9router API Key:", 
+            "ninerouter_api_key", 
+            validator=validate_9router_key
+        )
+
+        print("Fetching available models from 9router...")
+        available_models = fetch_models(self.config["ninerouter_api_key"], self.config["ninerouter_base_url"])
+        
+        self.config["ninerouter_text_model"] = ask_model("Select 9router Model (Text):", "ninerouter_text_model", available_models)
+        self.config["ninerouter_image_model"] = ask_model("Select 9router Model (Image):", "ninerouter_image_model", available_models)
         
         self.config["wordpress_url"] = ask_with_validation("WordPress URL:", "wordpress_url", validator=lambda v, c: validate_wp(v, c, "url"))
         self.config["wordpress_username"] = ask_with_validation("WordPress Username:", "wordpress_username")

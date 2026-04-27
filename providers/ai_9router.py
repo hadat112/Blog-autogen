@@ -3,11 +3,11 @@ import json
 from .base_ai import BaseAI
 
 class NineRouterAI(BaseAI):
-    def __init__(self, api_key, text_model, image_model):
+    def __init__(self, api_key, text_model, image_model, base_url="https://api.9router.ai/v1"):
         self.api_key = api_key
         self.text_model = text_model
         self.image_model = image_model
-        self.base_url = "https://api.9router.ai/v1"
+        self.base_url = base_url.rstrip('/')
 
     def generate_story(self, prompt: str) -> dict:
         url = f"{self.base_url}/chat/completions"
