@@ -21,12 +21,12 @@ class ConfigManager:
             yaml.dump(self.config, f)
 
     def run_onboarding(self, update=False):
-        def ask_with_validation(prompt, key, validator=None, is_select=False, choices=None):
+        def ask_with_validation(prompt, key, validator=None, is_select=False, choices=None, default_val_override=None):
             if not update and key in self.config and self.config[key]:
                 return self.config[key]
             
             while True:
-                default_val = self.config.get(key, "")
+                default_val = default_val_override or self.config.get(key, "")
                 if is_select:
                     if default_val not in choices:
                         default_val = choices[0]
@@ -133,7 +133,8 @@ class ConfigManager:
 
         self.config["ninerouter_base_url"] = ask_with_validation(
             "9router Base URL:", 
-            "ninerouter_base_url"
+            "ninerouter_base_url",
+            default_val_override="http://localhost:20128/v1"
         )
         
         self.config["ninerouter_api_key"] = ask_with_validation(

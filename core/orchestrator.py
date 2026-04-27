@@ -21,7 +21,7 @@ class Orchestrator:
             api_key=config.get("ninerouter_api_key"),
             text_model=config.get("ninerouter_text_model"),
             image_model=config.get("ninerouter_image_model"),
-            base_url=config.get("ninerouter_base_url", "https://api.9router.ai/v1")
+            base_url=config.get("ninerouter_base_url", "http://localhost:20128/v1")
         )
         self.sheets = GoogleSheetsProvider(
             credentials_json=config.get("google_creds_path"),
