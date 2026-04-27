@@ -1,39 +1,86 @@
-# Story Auto-Generator
+# Blog Auto-Generator CLI
 
-An autonomous tool to generate stories with AI (text and images), publish them to WordPress, log to Google Sheets, and notify via Telegram.
+Một công cụ mạnh mẽ giúp tự động hóa quy trình sản xuất nội dung bằng AI: từ việc lên ý tưởng, viết truyện, tạo ảnh minh họa cho đến việc đăng bài lên WordPress và quản lý báo cáo.
 
-## Features
-- **AI-Powered**: Uses 9router API for text (GPT-4o/Claude 3.5) and image generation.
-- **WordPress Integration**: Automatically publishes stories with featured images.
-- **Google Sheets Logging**: Keeps a record of all generated stories and their status.
-- **Telegram Notifications**: Sends instant alerts for successful posts or errors.
-- **Concurrent Processing**: Multi-threaded execution for high efficiency.
+## 🚀 Tính năng chính
 
-## Installation
+- **AI Automation (9router):** 
+    - Tự động tạo tiêu đề và nội dung truyện dựa trên prompt.
+    - Tạo caption Facebook kịch tính, ngắt quãng để thu hút người dùng click vào link.
+    - Tự động thiết kế prompt cho ảnh và tạo ảnh minh họa chất lượng cao.
+- **Quản lý đăng bài:**
+    - Tích hợp WordPress REST API để đăng bài tự động.
+    - Hỗ trợ Upload Media (ảnh) trực tiếp lên thư viện WordPress.
+- **Hệ thống báo cáo & Thông báo:**
+    - Tự động ghi log chi tiết vào Google Sheets (Title, Content, URL, Status...).
+    - Bắn thông báo kết quả qua Telegram Bot ngay sau mỗi task.
+- **Hiệu năng cao:**
+    - Hỗ trợ đa luồng (Multithreading) giúp xử lý hàng loạt truyện cùng lúc.
+    - Tham số `--limit` và `--threads` linh hoạt.
+- **Giao diện thân thiện:**
+    - Interactive CLI (Onboarding) giúp cấu hình dễ dàng bằng phím mũi tên và Enter.
 
-1. Clone the repository.
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Prepare a `prompts.txt` file with one story prompt per line.
+## 🛠 Kiến trúc hệ thống (Modular Design)
 
-## Usage
+Hệ thống được thiết kế theo hướng module hóa để dễ dàng mở rộng:
 
-Run the tool for the first time to start the onboarding process:
+- **`core/`**: Điều phối luồng xử lý (Orchestrator) và quản lý cấu hình.
+- **`providers/`**: Các dịch vụ bên ngoài (AI 9router, Google Sheets, Image Storage).
+- **`publishers/`**: Các nền tảng đăng bài (WordPress hiện tại, Facebook chuẩn bị sẵn).
+- **`utils/`**: Các công cụ hỗ trợ (Telegram Notify, Helpers).
+
+## 📦 Cài đặt
+
+Yêu cầu: **Python 3.9+**
+
+1. Clone thư mục dự án.
+2. Cài đặt công cụ và các phụ thuộc:
 ```bash
-python3 main.py
+pip install -e .
 ```
 
-### Options
-- `--limit N`: Limit processing to the first N prompts.
-- `--threads N`: Set the number of concurrent threads (default: 5).
-- `--update`: Re-run the onboarding process to update configuration.
+## ⚙️ Cấu hình (Onboarding)
 
-## Project Structure
-- `main.py`: Entry point.
-- `core/`: Orchestration and configuration management.
-- `providers/`: AI, Google Sheets, and Storage interfaces.
-- `publishers/`: WordPress REST API integration.
-- `utils/`: Helper functions.
-- `tests/`: Comprehensive test suite.
+Lần đầu chạy tool, hệ thống sẽ yêu cầu bạn nhập các thông tin cấu hình:
+- **AI:** API Key 9router và chọn Model.
+- **WordPress:** URL website, Username và Application Password.
+- **Google Sheets:** ID bảng tính và đường dẫn file JSON Credentials.
+- **Telegram:** Token Bot và Chat ID.
+
+Để cập nhật lại cấu hình sau này:
+```bash
+blog-autogen --update
+```
+
+## 📖 Hướng dẫn sử dụng
+
+Chuẩn bị danh sách chủ đề hoặc prompt vào file `prompts.txt` (mỗi dòng một prompt).
+
+**Chạy tool với cấu hình mặc định:**
+```bash
+blog-autogen
+```
+
+**Chạy 10 bài với 5 luồng song song:**
+```bash
+blog-autogen --limit 10 --threads 5
+```
+
+## 🧪 Phát triển & Kiểm thử
+
+Dành cho nhà phát triển muốn đóng góp hoặc chạy test:
+
+```bash
+# Cài đặt các thư viện dev
+pip install -e ".[dev]"
+
+# Chạy toàn bộ test
+pytest
+```
+
+## 📝 Cột trong Google Sheets
+Sau khi chạy xong, dữ liệu sẽ được điền vào Google Sheets với các cột:
+`title`, `content`, `caption`, `image_url`, `wordpress_url`, `date_added`, `status`.
+
+---
+*Phát triển bởi Gemini CLI Agent.*

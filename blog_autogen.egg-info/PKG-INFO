@@ -1,0 +1,47 @@
+Metadata-Version: 2.1
+Name: blog-autogen
+Version: 1.0.0
+Summary: AI-powered blog and story automation tool
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Provides-Extra: dev
+
+# Story Auto-Generator
+
+An autonomous tool to generate stories with AI (text and images), publish them to WordPress, log to Google Sheets, and notify via Telegram.
+
+## Features
+- **AI-Powered**: Uses 9router API for text (GPT-4o/Claude 3.5) and image generation.
+- **WordPress Integration**: Automatically publishes stories with featured images.
+- **Google Sheets Logging**: Keeps a record of all generated stories and their status.
+- **Telegram Notifications**: Sends instant alerts for successful posts or errors.
+- **Concurrent Processing**: Multi-threaded execution for high efficiency.
+
+## Installation
+
+1. Clone the repository.
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Prepare a `prompts.txt` file with one story prompt per line.
+
+## Usage
+
+Run the tool for the first time to start the onboarding process:
+```bash
+python3 main.py
+```
+
+### Options
+- `--limit N`: Limit processing to the first N prompts.
+- `--threads N`: Set the number of concurrent threads (default: 5).
+- `--update`: Re-run the onboarding process to update configuration.
+
+## Project Structure
+- `main.py`: Entry point.
+- `core/`: Orchestration and configuration management.
+- `providers/`: AI, Google Sheets, and Storage interfaces.
+- `publishers/`: WordPress REST API integration.
+- `utils/`: Helper functions.
+- `tests/`: Comprehensive test suite.

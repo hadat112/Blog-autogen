@@ -6,6 +6,8 @@ gspread
 google-auth
 python-telegram-bot
 tqdm
+
+[dev]
 pytest
 pytest-mock
 responses
