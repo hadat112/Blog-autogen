@@ -49,7 +49,12 @@ def main():
     # 4. Run the tool
     prompts_file = "prompts.txt"
     if not os.path.exists(prompts_file):
-        print(f"Error: Prompts file '{prompts_file}' not found.")
+        # Try to find it in the script's directory
+        base_path = os.path.dirname(os.path.abspath(__file__))
+        prompts_file = os.path.join(base_path, "prompts.txt")
+        
+    if not os.path.exists(prompts_file):
+        print(f"Error: Prompts file 'prompts.txt' not found in current directory or tool directory.")
         sys.exit(1)
 
     print(f"Processing stories from {prompts_file}...")
