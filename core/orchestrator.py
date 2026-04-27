@@ -128,7 +128,7 @@ class Orchestrator:
     def run(self, prompts_file):
         if not os.path.exists(prompts_file):
             logging.error(f"Prompts file not found: {prompts_file}")
-            return
+            return []
             
         with open(prompts_file, "r") as f:
             prompts = [line.strip() for line in f if line.strip()]
@@ -136,9 +136,8 @@ class Orchestrator:
         if self.limit:
             prompts = prompts[:self.limit]
             
-        results = []
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
             # Using tqdm for progress bar
-            list(tqdm(executor.map(self.process_prompt, prompts), total=len(prompts), desc="Processing stories"))
+            results = list(tqdm(executor.map(self.process_prompt, prompts), total=len(prompts), desc="Processing stories"))
             
         return results
