@@ -137,8 +137,16 @@ class Orchestrator:
         if self.limit:
             prompts = prompts[:self.limit]
             
+        results = []
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-            # Using tqdm for progress bar
-            results = list(tqdm(executor.map(self.process_prompt, prompts), total=len(prompts), desc="Processing stories"))
+            try:
+                # Using tqdm for progress bar
+                # Use executor.submit to have more control over futures if needed
+                # but map is okay if we wrap the whole thing
+                results = list(tqdm(executor.map(self.process_prompt, prompts), total=len(prompts), desc="Processing stories"))
+            except KeyboardInterrupt:
+                print("\nStopping orchestrator... Cancelling pending tasks.")
+                executor.shutdown(wait=False, cancel_futures=True)
+                raise # Re-raise to be caught in main.py
             
         return results
