@@ -21,26 +21,121 @@ class ConfigManager:
             yaml.dump(self.config, f)
 
     def run_onboarding(self, update=False):
-        def ask_with_default(prompt, key, is_select=False, choices=None):
-            if not update and key in self.config:
+        def ask_with_validation(prompt, key, validator=None, is_select=False, choices=None):
+            if not update and key in self.config and self.config[key]:
                 return self.config[key]
             
-            default_val = self.config.get(key, "")
-            if is_select:
-                return questionary.select(prompt, choices=choices, default=default_val).ask()
-            else:
-                return questionary.text(prompt, default=default_val).ask()
+            while True:
+                default_val = self.config.get(key, "")
+                if is_select:
+                    if default_val not in choices:
+                        default_val = choices[0]
+                    value = questionary.select(prompt, choices=choices, default=default_val).ask()
+                else:
+                    value = questionary.text(prompt, default=default_val).ask()
+                
+                if not value:
+                    print(f"Value for {key} cannot be empty.")
+                    continue
 
-        self.config["ninerouter_api_key"] = ask_with_default("9router API Key:", "ninerouter_api_key")
-        self.config["ninerouter_text_model"] = ask_with_default("9router Model (Text):", "ninerouter_text_model")
-        self.config["ninerouter_image_model"] = ask_with_default("9router Model (Image):", "ninerouter_image_model")
-        self.config["wordpress_url"] = ask_with_default("WordPress URL:", "wordpress_url")
-        self.config["wordpress_username"] = ask_with_default("WordPress Username:", "wordpress_username")
-        self.config["wordpress_password"] = ask_with_default("WordPress Application Password:", "wordpress_password")
-        self.config["google_sheets_id"] = ask_with_default("Google Sheets ID:", "google_sheets_id")
-        self.config["google_creds_path"] = ask_with_default("Google Credentials JSON Path:", "google_creds_path")
-        self.config["telegram_bot_token"] = ask_with_default("Telegram Bot Token:", "telegram_bot_token")
-        self.config["telegram_chat_id"] = ask_with_default("Telegram Chat ID:", "telegram_chat_id")
-        self.config["image_mode"] = ask_with_default("Image Mode:", "image_mode", is_select=True, choices=["Local", "Direct"])
+                if validator:
+                    print(f"Validating {key}...")
+                    success, message = validator(value, self.config)
+                    if success:
+                        print(f"✅ {message}")
+                        return value
+                    else:
+                        print(f"❌ Validation failed: {message}")
+                        action = questionary.select(
+                            "What would you like to do?",
+                            choices=["Retry", "Skip (use this value anyway)", "Cancel"]
+                        ).ask()
+                        if action == "Retry":
+                            continue
+                        elif action == "Skip (use this value anyway)":
+                            return value
+                        else:
+                            import sys
+                            sys.exit(0)
+                return value
+
+        # Validators
+        def validate_9router_key(val, config):
+            try:
+                import requests
+                headers = {"Authorization": f"Bearer {val}"}
+                # Use a lightweight endpoint to check key
+                resp = requests.get("https://api.9router.ai/v1/models", headers=headers, timeout=10)
+                if resp.status_code == 200:
+                    return True, "9router API Key is valid."
+                return False, f"API returned {resp.status_code}: {resp.text}"
+            except Exception as e:
+                return False, str(e)
+
+        def validate_wp(val, config, type="url"):
+            # Simple check since we need multiple fields to test fully
+            if type == "url" and not val.startswith("http"):
+                return False, "URL must start with http:// or https://"
+            return True, "Format looks okay."
+
+        def validate_wp_full(config):
+            try:
+                import requests
+                from requests.auth import HTTPBasicAuth
+                url = f"{config['wordpress_url'].rstrip('/')}/wp-json/wp/v2/users/me"
+                resp = requests.get(
+                    url, 
+                    auth=HTTPBasicAuth(config['wordpress_username'], config['wordpress_password']),
+                    timeout=10
+                )
+                if resp.status_code == 200:
+                    return True, "WordPress credentials are valid."
+                return False, f"WordPress returned {resp.status_code}: {resp.text}"
+            except Exception as e:
+                return False, str(e)
+
+        def validate_telegram(config):
+            try:
+                import requests
+                token = config['telegram_bot_token']
+                chat_id = config['telegram_chat_id']
+                url = f"https://api.telegram.org/bot{token}/getMe"
+                resp = requests.get(url, timeout=10)
+                if resp.status_code == 200:
+                    # Optional: test send message
+                    return True, f"Telegram Bot '{resp.json()['result']['username']}' is valid."
+                return False, f"Telegram returned {resp.status_code}: {resp.text}"
+            except Exception as e:
+                return False, str(e)
+
+        self.config["ninerouter_api_key"] = ask_with_validation("9router API Key:", "ninerouter_api_key", validator=validate_9router_key)
+        self.config["ninerouter_text_model"] = ask_with_validation("9router Model (Text):", "ninerouter_text_model")
+        self.config["ninerouter_image_model"] = ask_with_validation("9router Model (Image):", "ninerouter_image_model")
+        
+        self.config["wordpress_url"] = ask_with_validation("WordPress URL:", "wordpress_url", validator=lambda v, c: validate_wp(v, c, "url"))
+        self.config["wordpress_username"] = ask_with_validation("WordPress Username:", "wordpress_username")
+        self.config["wordpress_password"] = ask_with_validation("WordPress Application Password:", "wordpress_password")
+        
+        print("Testing WordPress connection...")
+        success, msg = validate_wp_full(self.config)
+        if not success:
+            print(f"⚠️ WordPress connection failed: {msg}")
+            if not questionary.confirm("Continue anyway?").ask():
+                return self.run_onboarding(update=True) # Restart or let them fix
+
+        self.config["google_sheets_id"] = ask_with_validation("Google Sheets ID:", "google_sheets_id")
+        self.config["google_creds_path"] = ask_with_validation("Google Credentials JSON Path:", "google_creds_path")
+        
+        self.config["telegram_bot_token"] = ask_with_validation("Telegram Bot Token:", "telegram_bot_token")
+        self.config["telegram_chat_id"] = ask_with_validation("Telegram Chat ID:", "telegram_chat_id")
+        
+        print("Testing Telegram connection...")
+        success, msg = validate_telegram(self.config)
+        if not success:
+            print(f"⚠️ Telegram connection failed: {msg}")
+            if not questionary.confirm("Continue anyway?").ask():
+                return self.run_onboarding(update=True)
+
+        self.config["image_mode"] = ask_with_validation("Image Mode:", "image_mode", is_select=True, choices=["Local", "Direct"])
         
         self.save_config()
