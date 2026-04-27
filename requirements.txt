@@ -1,0 +1,11 @@
+requests
+httpx
+pyyaml
+questionary
+gspread
+google-auth
+python-telegram-bot
+tqdm
+pytest
+pytest-mock
+responses
