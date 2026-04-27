@@ -1,21 +1,28 @@
 @echo off
 echo === Blog-autogen Setup for Windows ===
 
-:: Check if python is installed
+:: 1. Check and Install Python via winget
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo Error: Python is not installed or not in PATH.
+    echo Python not found. Attempting to install via winget...
+    winget install -e --id Python.Python.3.11
+    if %errorlevel% neq 0 (
+        echo Could not install Python automatically. Please download from https://www.python.org/downloads/
+        pause
+        exit /b 1
+    )
+    echo Python installed. Please RESTART your terminal and run this script again.
     pause
-    exit /b 1
+    exit /b 0
 )
 
-:: Create virtual environment if not exists
+:: 2. Create virtual environment
 if not exist "venv" (
     echo Creating virtual environment...
     python -m venv venv
 )
 
-:: Activate virtual environment and install
+:: 3. Activate and Install
 echo Installing dependencies and tool...
 call venv\Scripts\activate
 python -m pip install --upgrade pip
