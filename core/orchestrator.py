@@ -50,8 +50,12 @@ class Orchestrator:
         error_msg = ""
         wp_url = ""
         
+        # Use first 20 chars of prompt for identification in logs
+        task_id = f"[{prompt[:20]}...]"
+        
         try:
             # 1. AI Text Generation
+            logging.info(f"{task_id} Generating story and caption via AI...")
             story_data = self.ai.generate_story(prompt)
             title = story_data.get("title")
             content = story_data.get("content")
@@ -59,6 +63,7 @@ class Orchestrator:
             image_prompt = story_data.get("image_prompt")
             
             # 2. AI Image Generation
+            logging.info(f"{task_id} Generating image via AI...")
             image_url = self.ai.generate_image(image_prompt)
             
             # 3. Storage (Optional download)
@@ -66,30 +71,31 @@ class Orchestrator:
             temp_path = None
             if self.image_mode == "local":
                 try:
+                    logging.info(f"{task_id} Downloading image locally...")
                     temp_path = self.storage.download_image(image_url)
                     image_to_publish = temp_path
                 except Exception as e:
-                    logging.error(f"Failed to download image: {e}")
-                    # Fallback to URL if download fails? Or fail the task?
-                    # For now, let's just log and continue with URL if possible, 
-                    # but usually WP needs local file for media upload if not using remote URL.
+                    logging.error(f"{task_id} Failed to download image: {e}")
                     pass
             
             # 4. WordPress Publishing
+            logging.info(f"{task_id} Publishing to WordPress...")
             try:
                 wp_url = self.wp.publish(title, content, image_to_publish)
+                logging.info(f"{task_id} ✅ Published: {wp_url}")
             finally:
                 if temp_path:
                     self.storage.cleanup(temp_path)
             
             # 5. Sheets Logging
-            # Expected columns: title, content, caption, image_url, wordpress_url, date_added, status.
+            logging.info(f"{task_id} Logging to Google Sheets...")
             date_added = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.sheets.append_row([
                 title, content, caption, image_url, wp_url, date_added, status
             ])
             
             # 6. Telegram Notification
+            logging.info(f"{task_id} Sending Telegram notification...")
             msg = f"✅ <b>Story Published!</b>\n\nTitle: {title}\nURL: {wp_url}"
             send_telegram_msg(
                 self.config.get("telegram_bot_token"),
