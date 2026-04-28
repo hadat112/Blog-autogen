@@ -27,20 +27,38 @@ class NineRouterAI(BaseAI):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
             ],
-            "response_format": {"type": "json_object"}
+            "response_format": {"type": "json_object"},
+            "stream": False
         }
         
         response = requests.post(url, headers=headers, json=data)
         response.raise_for_status()
-        result = response.json()
         
-        content_str = result['choices'][0]['message']['content']
         try:
+            result = response.json()
+        except Exception:
+            raise ValueError(f"AI API returned non-JSON response: {response.text}")
+        
+        try:
+            content_str = result['choices'][0]['message']['content']
+            if not content_str:
+                raise ValueError("AI returned empty content.")
             return json.loads(content_str)
+        except (KeyError, IndexError) as e:
+            raise ValueError(f"Unexpected AI response structure: {result}")
         except json.JSONDecodeError:
-            # Fallback if AI didn't return valid JSON despite the instruction
-            # (Though with response_format: json_object it should)
-            raise ValueError(f"Failed to parse AI response as JSON: {content_str}")
+            # Try to see if the content_str itself is the story (not wrapped in JSON)
+            # or if it has some markdown wrapping like ```json ... ```
+            import re
+            cleaned_content = content_str.strip()
+            json_match = re.search(r'```json\s*(.*?)\s*```', cleaned_content, re.DOTALL)
+            if json_match:
+                try:
+                    return json.loads(json_match.group(1))
+                except:
+                    pass
+            
+            raise ValueError(f"Failed to parse AI response as JSON. Raw content: {content_str}")
 
     def generate_image(self, image_prompt: str) -> str:
         url = f"{self.base_url}/images/generations"
@@ -60,6 +78,9 @@ class NineRouterAI(BaseAI):
         }
         
         response = requests.post(url, headers=headers, json=data)
+        if response.status_code != 200:
+            import logging
+            logging.error(f"AI Image API Error: {response.status_code} - {response.text}")
         response.raise_for_status()
         result = response.json()
         
