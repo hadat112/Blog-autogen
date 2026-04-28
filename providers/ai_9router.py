@@ -10,7 +10,7 @@ class NineRouterAI(BaseAI):
         self.base_url = base_url.rstrip('/')
 
     def generate_story(self, prompt: str) -> dict:
-        url = f"{self.base_url}/responses"
+        url = f"{self.base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -34,33 +34,13 @@ class NineRouterAI(BaseAI):
         response.raise_for_status()
         result = response.json()
         
-        # Try to find the content in various common paths
-        content_str = None
-        if 'choices' in result and len(result['choices']) > 0:
-            choice = result['choices'][0]
-            if 'message' in choice:
-                content_str = choice['message'].get('content')
-            else:
-                content_str = choice.get('text')
-        elif 'response' in result:
-            content_str = result['response']
-        elif 'content' in result:
-            content_str = result['content']
-        
-        if content_str:
-            if isinstance(content_str, dict):
-                return content_str
-            try:
-                return json.loads(content_str)
-            except (json.JSONDecodeError, TypeError):
-                # If it's not a JSON string, check if it's already what we want
-                pass
-        
-        # If no content_str found but result itself looks like the desired object
-        if isinstance(result, dict) and all(k in result for k in ['title', 'content', 'caption']):
-            return result
-            
-        raise ValueError(f"Unexpected AI response structure: {result}")
+        content_str = result['choices'][0]['message']['content']
+        try:
+            return json.loads(content_str)
+        except json.JSONDecodeError:
+            # Fallback if AI didn't return valid JSON despite the instruction
+            # (Though with response_format: json_object it should)
+            raise ValueError(f"Failed to parse AI response as JSON: {content_str}")
 
     def generate_image(self, image_prompt: str) -> str:
         url = f"{self.base_url}/images/generations"
