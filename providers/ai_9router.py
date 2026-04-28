@@ -10,7 +10,7 @@ class NineRouterAI(BaseAI):
         self.base_url = base_url.rstrip('/')
 
     def generate_story(self, prompt: str) -> dict:
-        url = f"{self.base_url}/chat/completions"
+        url = f"{self.base_url}/responses"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
