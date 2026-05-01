@@ -9,7 +9,9 @@ def main():
     parser = argparse.ArgumentParser(description="Story Auto-Generator CLI")
     parser.add_argument("--limit", type=int, default=None, help="Limit the number of stories to generate")
     parser.add_argument("--threads", type=int, default=5, help="Number of concurrent threads (default: 5)")
+    parser.add_argument("--language", type=str, default="vi", help="Story language code (e.g. vi, en, es)")
     parser.add_argument("--update", action="store_true", help="Update existing configuration")
+    parser.add_argument("--debug", action="store_true", help="Save raw AI response to json files")
     args = parser.parse_args()
 
     # Configure logging
@@ -43,7 +45,9 @@ def main():
     orchestrator = Orchestrator(
         config=config,
         num_threads=args.threads,
-        limit=args.limit
+        limit=args.limit,
+        language=args.language,
+        debug=args.debug
     )
 
     # 4. Run the tool
