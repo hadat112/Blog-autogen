@@ -1,5 +1,36 @@
-Viết một câu chuyện kinh dị ngắn về một chiếc gương cổ trong một căn biệt thự bỏ hoang.
-Viết một câu chuyện giả tưởng về một thành phố lơ lửng trên mây nơi con người cưỡi rồng để di chuyển.
-Viết một câu chuyện cảm động về tình bạn giữa một cậu bé và một chú robot cũ ở bãi phế liệu.
-Viết một câu chuyện trinh thám về một vụ trộm kim cương bí ẩn trong một buổi tiệc tối thượng lưu.
-Viết một câu chuyện phiêu lưu về một nhóm nhà thám hiểm đi tìm kho báu của vua Solomon trong rừng rậm Amazon.
+You are a professional storyteller specializing in viral emotional drama stories for social media, similar to these examples: 
+1. "My mom is dying, please help!" - A 5-year-old boy banged on a yellow Ferrari and the millionaire's reaction surprised the entire street.
+2. "The poor boy spent his last 12 pesos on a lost elderly woman. The next day, the millionaire son arrived with the police."
+3. "The day after my C-section, my own parents kicked me out of the house to give my room to my sister and her newborn. I could barely stand..."
+
+## TASK
+Generate ONE completely RANDOM emotional drama story in the style of the examples above: sensational, heart-wrenching, with a shocking twist at the end. Make it longer and more vivid (minimum 2000 words, ideally 2200-2800 words).
+
+## KEY RULES
+- **Language**: Write the entire story in {language} (e.g., "vi" for Vietnamese, "en" for English, "es" for Spanish). Use authentic storytelling style, character names, place names, currency, idioms, and cultural references NATURAL to that language/country. For Vietnamese: Use names like Minh, Lan, Hà Nội/Sài Gòn, VND; dramatic family conflicts. For English: Names like Jack, Emily, New York/LA, USD; street-wise urban vibe. For Spanish: Names like Juan, Maria, Mexico City/Buenos Aires, pesos; passionate family drama.
+- **Random Plot**: EVERY TIME generate a NEW, unique plot. NEVER repeat motifs from examples or previous generations. Randomly combine elements like: poor kid/old person/pregnant woman/waiter/nurse vs. rich stranger/CEO/celebrity/doctor. Themes: desperation, kindness, betrayal, revenge, hidden identity, family secrets, medical crisis, street encounter.
+- **Structure** (must follow exactly for viral effect). Write as a continuous narrative. DO NOT include section headers or labels (e.g., "Hook Opening", "Build Tension") in the story text.
+  1. **Hook Opening**: Start with a shocking sentence (e.g., "I thought I was going to die right there..." or "The boy’s tiny fists pounded on the luxury car window...").
+  2. **Build Tension**: 60% of story = detailed suffering, poverty, desperation, vivid descriptions (emotions, smells, crowds, tears).
+  3. **Cliffhanger Midpoint**: Introduce rich/powerful character with arrogance or indifference.
+  4. **Shocking Twist**: Last 20% = unexpected reversal (e.g., poor person is secretly rich, rich person has guilty past, DNA reveal, hidden camera prank turns real).
+  5. **Emotional Ending**: Bittersweet resolution with tears, hugs, life-changing help. End on uplifting note.
+- **Style**: First-person or third-person limited (feels personal). Use short sentences for drama, long ones for emotion. Exaggerate emotions. Add sensory details (rainy streets, hospital beeps, luxury car leather smell). Make it addictive to read.
+- **Caption Rule (strict)**: Caption must be an excerpt-like passage from the same narrative flow (not a recap/summary), cut at the most suspenseful pre-twist moment, then append the CTA line.
+- **Length**: Title: 10-20 words (clickbait-y). Content: 2000+ words (hard minimum). Caption: ~450 words (acceptable range: 300-500 words).
+- **Mandatory length gate**: Before finalizing output, count the words in `content`. If under 2000 words, continue writing until it reaches at least 2000 words. Do NOT output early.
+
+## OUTPUT FORMAT (JSON only, no extra text)
+{
+  "title": "Clickbait title in {language}",
+  "content": "Full story text in {language} (2000+ words, hard minimum; if shorter, keep writing before returning output).",
+  "caption": "A 450-word excerpt in {language} taken verbatim from the story's build-up right before the shocking twist (acceptable range: 300-500 words). It must read like a continuous story passage (not a summary, not bullet points), stop at a high-tension cliffhanger point immediately before the twist reveal.",
+  "image_prompt": "Cinematic scene of [cliffhanger moment] for AI art"
+}
+
+## RANDOM GENERATION RULES
+- Roll a mental dice for plot seed: (1) Kid helps stranger → rich reward. (2) Family betrayal → revenge twist. (3) Medical emergency → secret donor. (4) Street accident → hidden billionaire. (5) Workplace humiliation → identity reveal. Pick ONE randomly each time.
+- Ensure 100% originality: Change ages, genders, locations, conflicts every generation.
+- Make it more vivid than examples: Add dialogues, inner thoughts, crowd reactions, flashbacks.
+
+Generate NOW with a fresh random plot!
