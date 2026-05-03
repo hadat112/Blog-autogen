@@ -164,7 +164,15 @@ class ConfigManager:
         self.config["google_creds_path"] = ask_with_validation("Google Credentials JSON Path:", "google_creds_path")
         
         self.config["telegram_bot_token"] = ask_with_validation("Telegram Bot Token:", "telegram_bot_token")
+        print("Please send a message to your bot on Telegram, then provide the Chat ID below.")
         self.config["telegram_chat_id"] = ask_with_validation("Telegram Chat ID:", "telegram_chat_id")
+        self.config["telegram_commands"] = {
+            "enabled": questionary.select(
+                "Enable Telegram /run command listener?",
+                choices=["Enabled", "Disabled"],
+                default="Enabled" if self.config.get("telegram_commands", {}).get("enabled", True) else "Disabled",
+            ).ask() == "Enabled"
+        }
 
         print("Testing Telegram connection...")
         success, msg = validate_telegram(self.config)
@@ -193,5 +201,54 @@ class ConfigManager:
             default_val_override=default_image_toggle,
         )
         self.config["enable_image_generation"] = image_toggle_choice == "Enabled"
+
+        scheduler_enabled = questionary.select(
+            "Enable scheduler?",
+            choices=["Enabled", "Disabled"],
+            default="Enabled" if self.config.get("scheduler", {}).get("enabled", False) else "Disabled",
+        ).ask() == "Enabled"
+
+        scheduler_jobs = []
+        if scheduler_enabled:
+            schedule_mode = questionary.select(
+                "Schedule mode:",
+                choices=["Fixed", "RandomWindow"],
+                default="Fixed",
+            ).ask()
+            schedule_time = ask_with_validation("Schedule time (HH:MM):", "schedule_time", default_val_override="08:00")
+            schedule_limit_raw = ask_with_validation("Schedule --limit:", "schedule_limit", default_val_override="1")
+            schedule_limit = int(schedule_limit_raw) if str(schedule_limit_raw).isdigit() else 1
+            schedule_with_image = questionary.select(
+                "Schedule run with image?",
+                choices=["Enabled", "Disabled"],
+                default="Enabled",
+            ).ask() == "Enabled"
+
+            job = {
+                "name": "daily-job",
+                "enabled": True,
+                "mode": "fixed" if schedule_mode == "Fixed" else "random_window",
+                "run_options": {
+                    "limit": schedule_limit,
+                    "threads": 5,
+                    "language": "uk",
+                    "debug": False,
+                    "update": False,
+                    "with_image": schedule_with_image,
+                    "no_image": not schedule_with_image,
+                },
+            }
+            if job["mode"] == "fixed":
+                job["time"] = schedule_time
+            else:
+                job["base_time"] = schedule_time
+                job["jitter_min"] = 5
+                job["jitter_max"] = 10
+            scheduler_jobs.append(job)
+
+        self.config["scheduler"] = {
+            "enabled": scheduler_enabled,
+            "jobs": scheduler_jobs,
+        }
 
         self.save_config()

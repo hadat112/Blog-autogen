@@ -2,6 +2,8 @@ import pytest
 from unittest.mock import MagicMock, patch
 from providers.google_sheets import GoogleSheetsProvider
 from utils.helpers import send_telegram_msg
+from core.telegram_commands import handle_telegram_message
+from core.run_options import RunOptions
 
 def test_google_sheets_append_row():
     with patch("gspread.service_account") as mock_sa:
@@ -24,16 +26,27 @@ def test_send_telegram_msg():
         mock_response = MagicMock()
         mock_response.json.return_value = {"ok": True}
         mock_post.return_value = mock_response
-        
+
         token = "fake_token"
         chat_id = "fake_chat_id"
         message = "Hello World"
-        
+
         send_telegram_msg(token, chat_id, message)
-        
+
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         mock_post.assert_called_once()
         args, kwargs = mock_post.call_args
         assert args[0] == url
         assert kwargs["json"]["chat_id"] == chat_id
         assert kwargs["json"]["text"] == message
+
+
+def test_telegram_run_command_to_runner_pipeline():
+    runner = MagicMock()
+    cfg = {"enable_image_generation": False}
+
+    msg = handle_telegram_message("/run --limit 1 --with-image", cfg, runner)
+
+    assert "queued" in msg.lower()
+    opts = runner.submit_manual_run.call_args.kwargs["options"]
+    assert isinstance(opts, RunOptions)
