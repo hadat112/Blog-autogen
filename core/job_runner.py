@@ -18,10 +18,10 @@ class JobRunner:
         self.jobs[job_id] = {
             "job_id": job_id,
             "status": "queued",
-            "step_index": 0,
-            "step_name": "queued",
+            "step_index": None,
+            "step_name": None,
             "step_progress": 0,
-            "detail": "",
+            "detail": "queued",
         }
         self.queue.put({"type": "manual", "job_id": job_id, "options": options})
         return job_id
