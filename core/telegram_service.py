@@ -1,4 +1,5 @@
 import asyncio
+import threading
 from typing import Optional
 
 from core.telegram_commands import handle_telegram_message, parse_run_options_from_message
@@ -79,7 +80,13 @@ class TelegramService:
             await message.reply_text(f"Error: {e}")
             return
 
-        job_id = self.job_runner.submit_manual_run(options=options)
+        job_id = self.job_runner.submit_manual_run(options=options, enqueue=False)
+
+        def _run_now():
+            self.job_runner._execute_once(options=options, job_id=job_id)
+
+        threading.Thread(target=_run_now, daemon=True).start()
+
         progress_msg = await message.reply_text("Run accepted. Starting...")
         await self._poll_and_edit_progress(progress_msg, job_id)
 

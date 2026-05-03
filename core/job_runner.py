@@ -13,7 +13,7 @@ class JobRunner:
         self._run_lock = Lock()
         self.jobs = {}
 
-    def submit_manual_run(self, options):
+    def submit_manual_run(self, options, enqueue: bool = True):
         job_id = str(uuid4())
         self.jobs[job_id] = {
             "job_id": job_id,
@@ -23,7 +23,8 @@ class JobRunner:
             "step_progress": 0,
             "detail": "queued",
         }
-        self.queue.put({"type": "manual", "job_id": job_id, "options": options})
+        if enqueue:
+            self.queue.put({"type": "manual", "job_id": job_id, "options": options})
         return job_id
 
     def get_job_status(self, job_id: str):
