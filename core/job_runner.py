@@ -32,8 +32,37 @@ class JobRunner:
     def submit_scheduled_run(self, job_name: str, options):
         self.queue.put({"type": "scheduled", "job_name": job_name, "options": options})
 
-    def _execute_once(self, options):
+    def _update_job_progress(self, job_id: str, *, status=None, step_index=None, step_name=None, step_progress=None, detail=None):
+        state = self.jobs.get(job_id)
+        if not state:
+            return
+        if status is not None:
+            state["status"] = status
+        if step_index is not None:
+            state["step_index"] = step_index
+        if step_name is not None:
+            state["step_name"] = step_name
+        if step_progress is not None:
+            state["step_progress"] = step_progress
+        if detail is not None:
+            state["detail"] = detail
+
+    def _execute_once(self, options, job_id=None):
         with self._run_lock:
+            if job_id:
+                self._update_job_progress(job_id, status="running", detail="started")
+
+            def _progress_callback(step_index, step_name, step_progress, detail=""):
+                if job_id:
+                    self._update_job_progress(
+                        job_id,
+                        status="running",
+                        step_index=step_index,
+                        step_name=step_name,
+                        step_progress=step_progress,
+                        detail=detail,
+                    )
+
             language = normalize_language(options.language)
             enable_image = options.resolve_enable_image(self.config.get("enable_image_generation", True))
             orchestrator = Orchestrator(
@@ -43,5 +72,13 @@ class JobRunner:
                 language=language,
                 debug=options.debug,
                 enable_image_generation=enable_image,
+                progress_callback=_progress_callback,
             )
-            orchestrator.run("prompts.txt")
+            try:
+                orchestrator.run("prompts.txt")
+                if job_id:
+                    self._update_job_progress(job_id, status="success", step_progress=100, detail="done")
+            except Exception as e:
+                if job_id:
+                    self._update_job_progress(job_id, status="error", detail=str(e))
+                raise

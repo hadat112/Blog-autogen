@@ -38,3 +38,31 @@ def test_worker_executes_orchestrator_with_resolved_image_toggle(mock_orch_cls):
     runner._execute_once(options=opts)
 
     assert mock_orch_cls.call_args.kwargs["enable_image_generation"] is True
+
+
+@patch("core.job_runner.Orchestrator")
+def test_execute_once_updates_running_and_success_states(mock_orch_cls):
+    runner = JobRunner(config={"enable_image_generation": True})
+    opts = RunOptions(limit=1, threads=1, language="en", debug=False, update=False, with_image=False, no_image=False)
+    job_id = runner.submit_manual_run(options=opts)
+
+    progress_cb = None
+
+    def _capture(**kwargs):
+        nonlocal progress_cb
+        progress_cb = kwargs["progress_callback"]
+
+        class _O:
+            def run(self, _):
+                progress_cb(step_index=1, step_name="Generate story text", step_progress=20, detail="working")
+                progress_cb(step_index=1, step_name="Generate story text", step_progress=100, detail="done")
+                return []
+
+        return _O()
+
+    mock_orch_cls.side_effect = _capture
+
+    runner._execute_once(options=opts, job_id=job_id)
+    state = runner.get_job_status(job_id)
+    assert state["status"] == "success"
+    assert state["step_progress"] == 100

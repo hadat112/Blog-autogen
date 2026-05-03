@@ -14,7 +14,7 @@ from publishers.facebook_page import FacebookPagePublisher
 from utils.helpers import send_telegram_msg
 
 class Orchestrator:
-    def __init__(self, config, num_threads=5, limit=None, language="uk", debug=False, enable_image_generation=True):
+    def __init__(self, config, num_threads=5, limit=None, language="uk", debug=False, enable_image_generation=True, progress_callback=None):
         self.config = config
         self.num_threads = num_threads
         self.limit = limit
