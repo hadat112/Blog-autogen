@@ -21,6 +21,7 @@ class Orchestrator:
         self.language = language
         self.debug = debug
         self.enable_image_generation = bool(enable_image_generation)
+        self.progress_callback = progress_callback
         
         # Initialize providers
         self.ai = NineRouterAI(
@@ -108,6 +109,19 @@ class Orchestrator:
             
         return f"{excerpt}...\n\n{cta}"
 
+    def _emit_progress(self, step_index, step_name, step_progress, detail=""):
+        if self.progress_callback:
+            self.progress_callback(
+                step_index=step_index,
+                step_name=step_name,
+                step_progress=step_progress,
+                detail=detail,
+            )
+
+    def _emit_step_ticks(self, step_index, step_name, detail="working"):
+        for p in (0, 20, 40, 60, 80, 100):
+            self._emit_progress(step_index, step_name, p, detail)
+
     def process_prompt(self, prompt):
         status = "Success"
         error_msg = ""
@@ -127,6 +141,7 @@ class Orchestrator:
 
         try:
             # 1. AI Text Generation
+            self._emit_step_ticks(1, "Generate story text", "working")
             print(f"\n{task_id} Step 1: Generating story via AI...")
             try:
                 story_data = self.ai.generate_story(prompt)
@@ -155,6 +170,7 @@ class Orchestrator:
 
 
             # 2. AI Image Generation
+            self._emit_step_ticks(2, "Generate image", "working")
             if not self.enable_image_generation:
                 image_error = "Image generation disabled"
                 print(f"{task_id} Info: Image generation disabled")
@@ -183,6 +199,7 @@ class Orchestrator:
                 print(f"{task_id} Warning: No image_prompt from AI")
 
             # 3. WordPress Publishing
+            self._emit_step_ticks(3, "Publish to WordPress", "working")
             print(f"{task_id} Step 3: Publishing to WordPress...")
             try:
                 image_to_publish = image_url
@@ -205,6 +222,7 @@ class Orchestrator:
                 print(f"{task_id} Warning: WordPress publishing failed: {error_msg[:100]}")
 
             # 4. Sheets Logging
+            self._emit_step_ticks(4, "Log to Google Sheets", "working")
             print(f"{task_id} Step 4: Logging to Google Sheets...")
             date_added = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             final_status = status if status == "Success" else f"{status}: {error_msg}"
@@ -217,6 +235,7 @@ class Orchestrator:
             print(f"{task_id} Sheets Success.")
 
             # 5. Facebook Page Publishing
+            self._emit_step_ticks(5, "Publish to Facebook", "working")
             print(f"{task_id} Step 5: Publishing to Facebook Page...")
             has_fb_config = bool(self.config.get("facebook_page_id") and self.config.get("facebook_page_access_token"))
             if has_fb_config:

@@ -66,3 +66,28 @@ def test_execute_once_updates_running_and_success_states(mock_orch_cls):
     state = runner.get_job_status(job_id)
     assert state["status"] == "success"
     assert state["step_progress"] == 100
+
+
+@patch("core.job_runner.Orchestrator")
+def test_execute_once_reports_step_local_progress_ticks(mock_orch_cls):
+    runner = JobRunner(config={"enable_image_generation": True})
+    opts = RunOptions(limit=1, threads=1, language="en", debug=False, update=False, with_image=False, no_image=False)
+    job_id = runner.submit_manual_run(options=opts)
+
+    def _factory(**kwargs):
+        cb = kwargs["progress_callback"]
+
+        class _O:
+            def run(self, _):
+                for p in (0, 20, 40, 60, 80, 100):
+                    cb(step_index=1, step_name="Generate story text", step_progress=p, detail="tick")
+                return []
+
+        return _O()
+
+    mock_orch_cls.side_effect = _factory
+
+    runner._execute_once(options=opts, job_id=job_id)
+    state = runner.get_job_status(job_id)
+    assert state["step_name"] == "Generate story text"
+    assert state["step_progress"] == 100
