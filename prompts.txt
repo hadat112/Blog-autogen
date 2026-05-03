@@ -24,8 +24,8 @@ Generate ONE completely RANDOM emotional drama story in the style of the example
 {
   "title": "Clickbait title in {language}",
   "content": "Full story text in {language} (2000+ words, hard minimum; if shorter, keep writing before returning output).",
-  "caption": "A 450-word excerpt in {language} taken verbatim from the story's build-up right before the shocking twist (acceptable range: 300-500 words). It must read like a continuous story passage (not a summary, not bullet points), stop at a high-tension cliffhanger point immediately before the twist reveal, and end with this exact CTA line: Click the link in the comments below to read the full story  👇👇👇👇!",
-  "image_prompt": "Cinematic scene of [cliffhanger moment] for AI art"
+  "caption": "A 450-word excerpt in {language} taken verbatim from the story's build-up right before the shocking twist (acceptable range: 300-500 words). It must read like a continuous story passage (not a summary, not bullet points), stop at a high-tension cliffhanger point immediately before the twist reveal, and end with this exact CTA line: Click the link in the comments below to read the full story 👇👇👇👇!(in {language})",
+  "image_prompt": "Cinematic, emotionally intense cliffhanger scene from the story, bright natural lighting, vivid colors, high clarity, clean composition, realistic facial expressions, uplifting visual tone, safe-for-work, no graphic violence, no gore, no sexual content."
 }
 
 ## RANDOM GENERATION RULES
