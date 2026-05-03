@@ -14,12 +14,13 @@ from publishers.facebook_page import FacebookPagePublisher
 from utils.helpers import send_telegram_msg
 
 class Orchestrator:
-    def __init__(self, config, num_threads=5, limit=None, language="uk", debug=False):
+    def __init__(self, config, num_threads=5, limit=None, language="uk", debug=False, enable_image_generation=True):
         self.config = config
         self.num_threads = num_threads
         self.limit = limit
         self.language = language
         self.debug = debug
+        self.enable_image_generation = bool(enable_image_generation)
         
         # Initialize providers
         self.ai = NineRouterAI(
@@ -150,20 +151,32 @@ class Orchestrator:
                 print(f"{task_id} Info: AI caption too short, auto-generating excerpt from content...")
                 caption = self.create_teaser_caption(content)
 
-            cta_en = "Click the link in the comments below to read the full story!"
-            if cta_en not in caption and self.language == "en":
-                caption = caption.rstrip() + f"\n\n{cta_en}"
-
             print(f"{task_id} AI Success: Title='{title[:30]}...' (Length: {len(content)} chars)")
 
+
             # 2. AI Image Generation
-            if image_prompt and str(image_prompt).strip():
+            if not self.enable_image_generation:
+                image_error = "Image generation disabled"
+                print(f"{task_id} Info: Image generation disabled")
+            elif image_prompt and str(image_prompt).strip():
                 print(f"{task_id} Step 2: Generating image via AI...")
                 try:
                     image_url = self.ai.generate_image(image_prompt)
+                    if self.debug:
+                        self.save_debug_file({
+                            "status": "success",
+                            "image_prompt": image_prompt,
+                            "image_url": image_url,
+                        }, prefix="image")
                     print(f"{task_id} Image Success: {image_url[:50]}...")
                 except Exception as e:
                     image_error = str(e)
+                    if self.debug:
+                        self.save_debug_file({
+                            "status": "error",
+                            "image_prompt": image_prompt,
+                            "error": image_error,
+                        }, prefix="image_fail")
                     print(f"{task_id} Warning: Image generation failed: {image_error[:100]}")
             else:
                 image_error = "Missing image_prompt"
@@ -216,7 +229,7 @@ class Orchestrator:
                     else:
                         fb_post_id = self.fb.publish_text(caption)
 
-                    comment_msg = "Read full details at the following link"
+                    comment_msg = "скажи «так», якщо хочеш продовжити читання історії 👇"
                     if wp_url:
                         comment_msg = f"Read full details at the following link: {wp_url}"
 

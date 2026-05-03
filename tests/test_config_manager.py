@@ -50,7 +50,7 @@ def test_run_onboarding(tmp_path, mocker):
         "v23.0",                      # Facebook Graph version
     ]
 
-    mock_select.return_value.ask.side_effect = ["text_model_val", "image_model_val", "Local"]
+    mock_select.return_value.ask.side_effect = ["text_model_val", "image_model_val", "Local", "Enabled"]
     mock_confirm.return_value.ask.return_value = True
 
     resp = mocker.MagicMock()
@@ -78,6 +78,7 @@ def test_run_onboarding(tmp_path, mocker):
     assert manager.config["facebook_page_access_token"] == "EAAB_TOKEN"
     assert manager.config["facebook_graph_version"] == "v23.0"
     assert manager.config["image_mode"] == "Local"
+    assert manager.config["enable_image_generation"] is True
 
 
 def test_run_onboarding_no_update(tmp_path, mocker):
@@ -106,7 +107,7 @@ def test_run_onboarding_no_update(tmp_path, mocker):
         "EAAB_TOKEN",                 # facebook_page_access_token
         "v23.0",                      # facebook_graph_version
     ]
-    mock_select.return_value.ask.side_effect = ["text_model_val", "image_model_val", "Local"]
+    mock_select.return_value.ask.side_effect = ["text_model_val", "image_model_val", "Local", "Enabled"]
     mock_confirm.return_value.ask.return_value = True
 
     resp = mocker.MagicMock()

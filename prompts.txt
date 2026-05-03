@@ -16,7 +16,7 @@ Generate ONE completely RANDOM emotional drama story in the style of the example
   4. **Shocking Twist**: Last 20% = unexpected reversal (e.g., poor person is secretly rich, rich person has guilty past, DNA reveal, hidden camera prank turns real).
   5. **Emotional Ending**: Bittersweet resolution with tears, hugs, life-changing help. End on uplifting note.
 - **Style**: First-person or third-person limited (feels personal). Use short sentences for drama, long ones for emotion. Exaggerate emotions. Add sensory details (rainy streets, hospital beeps, luxury car leather smell). Make it addictive to read.
-- **Caption Rule (strict)**: Caption must be an excerpt-like passage from the same narrative flow (not a recap/summary), cut at the most suspenseful pre-twist moment, then append the CTA line.
+- **Caption Rule (strict)**: Caption must be an excerpt-like passage from the same narrative flow (not a recap/summary), cut at the most suspenseful pre-twist moment, then append this exact CTA line at the end: "Click the link in the comments below to read the full story!".
 - **Length**: Title: 10-20 words (clickbait-y). Content: 2000+ words (hard minimum). Caption: ~450 words (acceptable range: 300-500 words).
 - **Mandatory length gate**: Before finalizing output, count the words in `content`. If under 2000 words, continue writing until it reaches at least 2000 words. Do NOT output early.
 
@@ -24,7 +24,7 @@ Generate ONE completely RANDOM emotional drama story in the style of the example
 {
   "title": "Clickbait title in {language}",
   "content": "Full story text in {language} (2000+ words, hard minimum; if shorter, keep writing before returning output).",
-  "caption": "A 450-word excerpt in {language} taken verbatim from the story's build-up right before the shocking twist (acceptable range: 300-500 words). It must read like a continuous story passage (not a summary, not bullet points), stop at a high-tension cliffhanger point immediately before the twist reveal.",
+  "caption": "A 450-word excerpt in {language} taken verbatim from the story's build-up right before the shocking twist (acceptable range: 300-500 words). It must read like a continuous story passage (not a summary, not bullet points), stop at a high-tension cliffhanger point immediately before the twist reveal, and end with this exact CTA line: Click the link in the comments below to read the full story  👇👇👇👇!",
   "image_prompt": "Cinematic scene of [cliffhanger moment] for AI art"
 }
 

@@ -27,6 +27,8 @@ def main():
     parser.add_argument("--language", type=str, default="Ukraina", help="Story language (Ukraina/Vietnamese/English)")
     parser.add_argument("--update", action="store_true", help="Update existing configuration")
     parser.add_argument("--debug", action="store_true", help="Save raw AI response to json files")
+    parser.add_argument("--no-image", action="store_true", help="Disable AI image generation")
+    parser.add_argument("--with-image", action="store_true", help="Force-enable AI image generation")
     args = parser.parse_args()
 
     try:
@@ -63,12 +65,25 @@ def main():
         print("Error: Configuration is empty. Please run with --update to set up.")
         sys.exit(1)
 
+    if args.no_image and args.with_image:
+        print("Error: --no-image and --with-image cannot be used together.")
+        sys.exit(1)
+
+    config_enable_image = config.get("enable_image_generation", True)
+    if args.no_image:
+        effective_enable_image_generation = False
+    elif args.with_image:
+        effective_enable_image_generation = True
+    else:
+        effective_enable_image_generation = bool(config_enable_image)
+
     orchestrator = Orchestrator(
         config=config,
         num_threads=args.threads,
         limit=args.limit,
         language=language,
-        debug=args.debug
+        debug=args.debug,
+        enable_image_generation=effective_enable_image_generation,
     )
 
     # 4. Run the tool

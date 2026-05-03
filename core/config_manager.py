@@ -183,4 +183,15 @@ class ConfigManager:
 
         self.config["image_mode"] = ask_with_validation("Image Mode:", "image_mode", is_select=True, choices=["Local", "Direct"])
 
+        current_image_toggle = self.config.get("enable_image_generation", True)
+        default_image_toggle = "Enabled" if current_image_toggle else "Disabled"
+        image_toggle_choice = ask_with_validation(
+            "Enable AI image generation?",
+            "enable_image_generation_choice",
+            is_select=True,
+            choices=["Enabled", "Disabled"],
+            default_val_override=default_image_toggle,
+        )
+        self.config["enable_image_generation"] = image_toggle_choice == "Enabled"
+
         self.save_config()

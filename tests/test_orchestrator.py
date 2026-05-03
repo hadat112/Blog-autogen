@@ -53,6 +53,7 @@ def test_orchestrator_init(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai,
     )
     mock_storage.assert_called_once()
     assert orch.image_mode == "direct"
+    assert orch.enable_image_generation is True
 
 @patch("core.orchestrator.send_telegram_msg")
 @patch("core.orchestrator.NineRouterAI")
@@ -119,15 +120,110 @@ def test_process_prompt_failure(mock_storage, mock_fb, mock_wp, mock_sheets, moc
 def test_orchestrator_run(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_executor, mock_exists, mock_config):
     mock_exists.return_value = True
     orch = Orchestrator(mock_config)
-    
+
     # Mock prompts file content
     m = mock_open(read_data="prompt1\nprompt2\n")
     with patch("builtins.open", m):
         orch.run("prompts.txt")
-    
+
     # Verify ThreadPoolExecutor was used
     mock_executor.assert_called_once_with(max_workers=5)
     executor_instance = mock_executor.return_value.__enter__.return_value
     # In my implementation, I use list(tqdm(executor.map(...)))
     # So map should be called
     executor_instance.map.assert_called_once()
+
+@patch("core.orchestrator.send_telegram_msg")
+@patch("core.orchestrator.NineRouterAI")
+@patch("core.orchestrator.GoogleSheetsProvider")
+@patch("core.orchestrator.WordPressPublisher")
+@patch("core.orchestrator.FacebookPagePublisher")
+@patch("core.orchestrator.StorageProvider")
+def test_process_prompt_skips_image_when_disabled(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_telegram, mock_config):
+    orch = Orchestrator(mock_config, enable_image_generation=False)
+
+    orch.ai.generate_story.return_value = {
+        "title": "Test Title",
+        "content": "Test Content",
+        "caption": "Test Caption",
+        "image_prompt": "Test Image Prompt"
+    }
+    orch.wp.publish.return_value = "https://wp.url/story"
+
+    result = orch.process_prompt("Test Prompt")
+
+    assert result["status"] == "success"
+    orch.ai.generate_image.assert_not_called()
+
+@patch("core.orchestrator.send_telegram_msg")
+@patch("core.orchestrator.NineRouterAI")
+@patch("core.orchestrator.GoogleSheetsProvider")
+@patch("core.orchestrator.WordPressPublisher")
+@patch("core.orchestrator.FacebookPagePublisher")
+@patch("core.orchestrator.StorageProvider")
+def test_process_prompt_generates_image_when_enabled(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_telegram, mock_config):
+    orch = Orchestrator(mock_config, enable_image_generation=True)
+
+    orch.ai.generate_story.return_value = {
+        "title": "Test Title",
+        "content": "Test Content",
+        "caption": "Test Caption",
+        "image_prompt": "Test Image Prompt"
+    }
+    orch.ai.generate_image.return_value = "https://image.url"
+    orch.wp.publish.return_value = "https://wp.url/story"
+
+    result = orch.process_prompt("Test Prompt")
+
+    assert result["status"] == "success"
+    orch.ai.generate_image.assert_called_once_with("Test Image Prompt")
+
+
+@patch("core.orchestrator.send_telegram_msg")
+@patch("core.orchestrator.NineRouterAI")
+@patch("core.orchestrator.GoogleSheetsProvider")
+@patch("core.orchestrator.WordPressPublisher")
+@patch("core.orchestrator.FacebookPagePublisher")
+@patch("core.orchestrator.StorageProvider")
+def test_debug_saves_image_response_on_success(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_telegram, mock_config):
+    orch = Orchestrator(mock_config, debug=True, enable_image_generation=True)
+
+    orch.ai.generate_story.return_value = {
+        "title": "Test Title",
+        "content": "Test Content",
+        "caption": "Test Caption",
+        "image_prompt": "Test Image Prompt"
+    }
+    orch.ai.generate_image.return_value = "https://image.url"
+    orch.wp.publish.return_value = "https://wp.url/story"
+
+    with patch.object(orch, "save_debug_file") as mock_save_debug:
+        result = orch.process_prompt("Test Prompt")
+
+    assert result["status"] == "success"
+    assert any(call.kwargs.get("prefix") == "image" for call in mock_save_debug.call_args_list)
+
+
+@patch("core.orchestrator.send_telegram_msg")
+@patch("core.orchestrator.NineRouterAI")
+@patch("core.orchestrator.GoogleSheetsProvider")
+@patch("core.orchestrator.WordPressPublisher")
+@patch("core.orchestrator.FacebookPagePublisher")
+@patch("core.orchestrator.StorageProvider")
+def test_debug_saves_image_response_on_failure(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_telegram, mock_config):
+    orch = Orchestrator(mock_config, debug=True, enable_image_generation=True)
+
+    orch.ai.generate_story.return_value = {
+        "title": "Test Title",
+        "content": "Test Content",
+        "caption": "Test Caption",
+        "image_prompt": "Test Image Prompt"
+    }
+    orch.ai.generate_image.side_effect = Exception("image failed")
+    orch.wp.publish.return_value = "https://wp.url/story"
+
+    with patch.object(orch, "save_debug_file") as mock_save_debug:
+        result = orch.process_prompt("Test Prompt")
+
+    assert result["status"] == "success"
+    assert any(call.kwargs.get("prefix") == "image_fail" for call in mock_save_debug.call_args_list)
