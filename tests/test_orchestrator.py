@@ -9,6 +9,7 @@ def mock_config():
         "ninerouter_api_key": "test_key",
         "ninerouter_text_model": "text_model",
         "ninerouter_image_model": "image_model",
+        "ninerouter_base_url": "http://localhost:20128/v1",
         "wordpress_url": "https://test.wp",
         "wordpress_username": "user",
         "wordpress_password": "pass",
@@ -16,20 +17,25 @@ def mock_config():
         "google_creds_path": "creds.json",
         "telegram_bot_token": "bot_token",
         "telegram_chat_id": "chat_id",
+        "facebook_page_id": "123",
+        "facebook_page_access_token": "EAAB_TOKEN",
+        "facebook_graph_version": "v23.0",
         "image_mode": "Direct"
     }
 
 @patch("core.orchestrator.NineRouterAI")
 @patch("core.orchestrator.GoogleSheetsProvider")
 @patch("core.orchestrator.WordPressPublisher")
+@patch("core.orchestrator.FacebookPagePublisher")
 @patch("core.orchestrator.StorageProvider")
-def test_orchestrator_init(mock_storage, mock_wp, mock_sheets, mock_ai, mock_config):
+def test_orchestrator_init(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_config):
     orch = Orchestrator(mock_config)
     
     mock_ai.assert_called_once_with(
         api_key="test_key",
         text_model="text_model",
-        image_model="image_model"
+        image_model="image_model",
+        base_url="http://localhost:20128/v1"
     )
     mock_sheets.assert_called_once_with(
         credentials_json="creds.json",
@@ -40,6 +46,11 @@ def test_orchestrator_init(mock_storage, mock_wp, mock_sheets, mock_ai, mock_con
         username="user",
         app_password="pass"
     )
+    mock_fb.assert_called_once_with(
+        page_id="123",
+        access_token="EAAB_TOKEN",
+        graph_version="v23.0"
+    )
     mock_storage.assert_called_once()
     assert orch.image_mode == "direct"
 
@@ -47,8 +58,9 @@ def test_orchestrator_init(mock_storage, mock_wp, mock_sheets, mock_ai, mock_con
 @patch("core.orchestrator.NineRouterAI")
 @patch("core.orchestrator.GoogleSheetsProvider")
 @patch("core.orchestrator.WordPressPublisher")
+@patch("core.orchestrator.FacebookPagePublisher")
 @patch("core.orchestrator.StorageProvider")
-def test_process_prompt_success(mock_storage, mock_wp, mock_sheets, mock_ai, mock_telegram, mock_config):
+def test_process_prompt_success(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_telegram, mock_config):
     orch = Orchestrator(mock_config)
     
     # Mock AI responses
@@ -71,14 +83,20 @@ def test_process_prompt_success(mock_storage, mock_wp, mock_sheets, mock_ai, moc
     orch.ai.generate_image.assert_called_once_with("Test Image Prompt")
     orch.wp.publish.assert_called_once_with("Test Title", "Test Content", "https://image.url")
     orch.sheets.append_row.assert_called_once()
+    orch.fb.publish_photo_caption.assert_called_once()
+    orch.fb.comment_on_post.assert_called_once_with(
+        orch.fb.publish_photo_caption.return_value,
+        "Read full details at the following link: https://wp.url/story"
+    )
     mock_telegram.assert_called_once()
 
 @patch("core.orchestrator.send_telegram_msg")
 @patch("core.orchestrator.NineRouterAI")
 @patch("core.orchestrator.GoogleSheetsProvider")
 @patch("core.orchestrator.WordPressPublisher")
+@patch("core.orchestrator.FacebookPagePublisher")
 @patch("core.orchestrator.StorageProvider")
-def test_process_prompt_failure(mock_storage, mock_wp, mock_sheets, mock_ai, mock_telegram, mock_config):
+def test_process_prompt_failure(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_telegram, mock_config):
     orch = Orchestrator(mock_config)
     
     orch.ai.generate_story.side_effect = Exception("AI Error")
@@ -96,8 +114,9 @@ def test_process_prompt_failure(mock_storage, mock_wp, mock_sheets, mock_ai, moc
 @patch("core.orchestrator.NineRouterAI")
 @patch("core.orchestrator.GoogleSheetsProvider")
 @patch("core.orchestrator.WordPressPublisher")
+@patch("core.orchestrator.FacebookPagePublisher")
 @patch("core.orchestrator.StorageProvider")
-def test_orchestrator_run(mock_storage, mock_wp, mock_sheets, mock_ai, mock_executor, mock_exists, mock_config):
+def test_orchestrator_run(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_executor, mock_exists, mock_config):
     mock_exists.return_value = True
     orch = Orchestrator(mock_config)
     

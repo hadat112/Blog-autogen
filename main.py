@@ -5,14 +5,35 @@ import logging
 from core.config_manager import ConfigManager
 from core.orchestrator import Orchestrator
 
+
+def normalize_language(language: str) -> str:
+    lang = (language or "").strip().lower()
+    aliases = {
+        "uk": "uk",
+        "ukrainian": "uk",
+        "ukraina": "uk",
+        "en": "en",
+        "english": "en",
+    }
+    if lang in aliases:
+        return aliases[lang]
+    raise ValueError("Unsupported language. Use Ukraina/Ukrainian, Vietnamese, or English.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Story Auto-Generator CLI")
     parser.add_argument("--limit", type=int, default=None, help="Limit the number of stories to generate")
     parser.add_argument("--threads", type=int, default=5, help="Number of concurrent threads (default: 5)")
-    parser.add_argument("--language", type=str, default="vi", help="Story language code (e.g. vi, en, es)")
+    parser.add_argument("--language", type=str, default="Ukraina", help="Story language (Ukraina/Vietnamese/English)")
     parser.add_argument("--update", action="store_true", help="Update existing configuration")
     parser.add_argument("--debug", action="store_true", help="Save raw AI response to json files")
     args = parser.parse_args()
+
+    try:
+        language = normalize_language(args.language)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
     # Configure logging
     logging.basicConfig(
@@ -46,7 +67,7 @@ def main():
         config=config,
         num_threads=args.threads,
         limit=args.limit,
-        language=args.language,
+        language=language,
         debug=args.debug
     )
 

@@ -1,7 +1,6 @@
-import os
 import yaml
-import pytest
 from core.config_manager import ConfigManager
+
 
 def test_load_config(tmp_path):
     config_file = tmp_path / "config.yaml"
@@ -11,44 +10,60 @@ def test_load_config(tmp_path):
     }
     with open(config_file, "w") as f:
         yaml.dump(data, f)
-    
+
     manager = ConfigManager(config_path=str(config_file))
     assert manager.config == data
+
 
 def test_save_config(tmp_path):
     config_file = tmp_path / "config.yaml"
     manager = ConfigManager(config_path=str(config_file))
     manager.config = {"key": "value"}
     manager.save_config()
-    
+
     with open(config_file, "r") as f:
         saved_data = yaml.safe_load(f)
     assert saved_data == {"key": "value"}
 
+
 def test_run_onboarding(tmp_path, mocker):
     config_file = tmp_path / "config.yaml"
     manager = ConfigManager(config_path=str(config_file))
-    
+
     mock_ask = mocker.patch("questionary.text")
     mock_select = mocker.patch("questionary.select")
-    
-    # Mocking questionary responses
+    mock_confirm = mocker.patch("questionary.confirm")
+    mock_requests_get = mocker.patch("requests.get")
+
     mock_ask.return_value.ask.side_effect = [
-        "api_key_val", # 9router API Key
-        "text_model_val", # 9router Model (Text)
-        "image_model_val", # 9router Model (Image)
-        "https://wp.com", # WordPress URL
-        "wp_user", # Username
-        "wp_pass", # Application Password
-        "sheets_id", # Google Sheets ID
-        "creds.json", # Google Credentials JSON Path
-        "bot_token", # Telegram Bot Token
-        "chat_id", # Chat ID
+        "http://localhost:20128/v1",  # 9router base url
+        "api_key_val",                # 9router API Key
+        "https://wp.com",             # WordPress URL
+        "wp_user",                    # Username
+        "wp_pass",                    # Application Password
+        "sheets_id",                  # Google Sheets ID
+        "creds.json",                 # Google Credentials JSON Path
+        "bot_token",                  # Telegram Bot Token
+        "chat_id",                    # Chat ID
+        "123456789",                  # Facebook Page ID
+        "EAAB_TOKEN",                 # Facebook Page Access Token
+        "v23.0",                      # Facebook Graph version
     ]
-    mock_select.return_value.ask.return_value = "Local" # Image Mode
-    
+
+    mock_select.return_value.ask.side_effect = ["text_model_val", "image_model_val", "Local"]
+    mock_confirm.return_value.ask.return_value = True
+
+    resp = mocker.MagicMock()
+    resp.status_code = 200
+    resp.json.return_value = {
+        "data": [{"id": "text_model_val"}, {"id": "image_model_val"}],
+        "result": {"username": "bot"},
+    }
+    resp.text = "ok"
+    mock_requests_get.return_value = resp
+
     manager.run_onboarding()
-    
+
     assert manager.config["ninerouter_api_key"] == "api_key_val"
     assert manager.config["ninerouter_text_model"] == "text_model_val"
     assert manager.config["ninerouter_image_model"] == "image_model_val"
@@ -59,24 +74,51 @@ def test_run_onboarding(tmp_path, mocker):
     assert manager.config["google_creds_path"] == "creds.json"
     assert manager.config["telegram_bot_token"] == "bot_token"
     assert manager.config["telegram_chat_id"] == "chat_id"
+    assert manager.config["facebook_page_id"] == "123456789"
+    assert manager.config["facebook_page_access_token"] == "EAAB_TOKEN"
+    assert manager.config["facebook_graph_version"] == "v23.0"
     assert manager.config["image_mode"] == "Local"
+
 
 def test_run_onboarding_no_update(tmp_path, mocker):
     config_file = tmp_path / "config.yaml"
     initial_data = {"ninerouter_api_key": "existing_key"}
     with open(config_file, "w") as f:
         yaml.dump(initial_data, f)
-    
+
     manager = ConfigManager(config_path=str(config_file))
-    
+
     mock_ask = mocker.patch("questionary.text")
-    # Should only ask for keys NOT in config
-    # 10 keys total (9 text, 1 select). ninerouter_api_key is already there.
-    # So 8 text questions should be asked.
-    mock_ask.return_value.ask.side_effect = ["v"] * 9 
-    mocker.patch("questionary.select").return_value.ask.return_value = "Local"
-    
+    mock_select = mocker.patch("questionary.select")
+    mock_confirm = mocker.patch("questionary.confirm")
+    mock_requests_get = mocker.patch("requests.get")
+
+    mock_ask.return_value.ask.side_effect = [
+        "http://localhost:20128/v1",  # ninerouter_base_url
+        "https://wp.com",             # wordpress_url
+        "wp_user",                    # wordpress_username
+        "wp_pass",                    # wordpress_password
+        "sheets_id",                  # google_sheets_id
+        "creds.json",                 # google_creds_path
+        "bot_token",                  # telegram_bot_token
+        "chat_id",                    # telegram_chat_id
+        "123456789",                  # facebook_page_id
+        "EAAB_TOKEN",                 # facebook_page_access_token
+        "v23.0",                      # facebook_graph_version
+    ]
+    mock_select.return_value.ask.side_effect = ["text_model_val", "image_model_val", "Local"]
+    mock_confirm.return_value.ask.return_value = True
+
+    resp = mocker.MagicMock()
+    resp.status_code = 200
+    resp.json.return_value = {
+        "data": [{"id": "text_model_val"}, {"id": "image_model_val"}],
+        "result": {"username": "bot"},
+    }
+    resp.text = "ok"
+    mock_requests_get.return_value = resp
+
     manager.run_onboarding(update=False)
-    
+
     assert manager.config["ninerouter_api_key"] == "existing_key"
-    assert mock_ask.call_count == 9 # total text questions is 10, minus 1 already existing = 9
+    assert mock_ask.call_count == 11

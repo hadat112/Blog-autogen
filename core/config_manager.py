@@ -165,7 +165,7 @@ class ConfigManager:
         
         self.config["telegram_bot_token"] = ask_with_validation("Telegram Bot Token:", "telegram_bot_token")
         self.config["telegram_chat_id"] = ask_with_validation("Telegram Chat ID:", "telegram_chat_id")
-        
+
         print("Testing Telegram connection...")
         success, msg = validate_telegram(self.config)
         if not success:
@@ -173,6 +173,14 @@ class ConfigManager:
             if not questionary.confirm("Continue anyway?").ask():
                 return self.run_onboarding(update=True)
 
+        self.config["facebook_page_id"] = ask_with_validation("Facebook Page ID:", "facebook_page_id")
+        self.config["facebook_page_access_token"] = ask_with_validation("Facebook Page Access Token:", "facebook_page_access_token")
+        self.config["facebook_graph_version"] = ask_with_validation(
+            "Facebook Graph API Version:",
+            "facebook_graph_version",
+            default_val_override="v23.0"
+        )
+
         self.config["image_mode"] = ask_with_validation("Image Mode:", "image_mode", is_select=True, choices=["Local", "Direct"])
-        
+
         self.save_config()
