@@ -48,6 +48,8 @@ Lần đầu chạy tool bằng lệnh `blog-autogen`, hệ thống sẽ yêu c�
 ```bash
 blog-autogen --update
 ```
+`--update` sẽ mở menu chọn theo nhóm cấu hình (9router/WordPress/Google Sheets/Telegram/Facebook/Image/Disabled steps/Scheduler), không chạy lại toàn bộ onboarding. Trong từng nhóm, mặc định sẽ giữ giá trị hiện tại (Keep current) và chỉ hỏi nhập lại khi bạn chọn Change. Sau mỗi lần lưu nhóm sẽ có bước kiểm tra nhanh và bạn có thể chọn tiếp tục cập nhật nhóm khác hoặc kết thúc.
+
 
 ## 📖 Hướng dẫn sử dụng
 

@@ -29,7 +29,7 @@ def test_normalize_language_rejects_unknown_language():
 def test_main_cli_with_image_overrides_config_false(mock_exists, mock_config_cls, mock_orch_cls, monkeypatch):
     mock_exists.return_value = True
     mock_config = mock_config_cls.return_value
-    mock_config.config = {"enable_image_generation": False}
+    mock_config.config = {"disabled_steps": ["ai_image_generation"]}
     mock_orch_cls.return_value.run.return_value = []
 
     monkeypatch.setattr("sys.argv", ["main.py", "--with-image"])
@@ -37,7 +37,7 @@ def test_main_cli_with_image_overrides_config_false(mock_exists, mock_config_cls
     from main import main
     main()
 
-    assert mock_orch_cls.call_args.kwargs["enable_image_generation"] is True
+    assert mock_orch_cls.call_args.kwargs["disabled_steps"] == []
 
 
 @patch("main.Orchestrator")
@@ -46,7 +46,7 @@ def test_main_cli_with_image_overrides_config_false(mock_exists, mock_config_cls
 def test_main_cli_no_image_overrides_config_true(mock_exists, mock_config_cls, mock_orch_cls, monkeypatch):
     mock_exists.return_value = True
     mock_config = mock_config_cls.return_value
-    mock_config.config = {"enable_image_generation": True}
+    mock_config.config = {"disabled_steps": []}
     mock_orch_cls.return_value.run.return_value = []
 
     monkeypatch.setattr("sys.argv", ["main.py", "--no-image"])
@@ -54,7 +54,7 @@ def test_main_cli_no_image_overrides_config_true(mock_exists, mock_config_cls, m
     from main import main
     main()
 
-    assert mock_orch_cls.call_args.kwargs["enable_image_generation"] is False
+    assert mock_orch_cls.call_args.kwargs["disabled_steps"] == ["ai_image_generation"]
 
 
 @patch("main.ConfigManager")
@@ -62,7 +62,7 @@ def test_main_cli_no_image_overrides_config_true(mock_exists, mock_config_cls, m
 def test_main_cli_conflicting_image_flags_exits(mock_exists, mock_config_cls, monkeypatch):
     mock_exists.return_value = True
     mock_config = mock_config_cls.return_value
-    mock_config.config = {"enable_image_generation": True}
+    mock_config.config = {"disabled_steps": []}
 
     monkeypatch.setattr("sys.argv", ["main.py", "--no-image", "--with-image"])
 
@@ -79,7 +79,7 @@ def test_main_cli_conflicting_image_flags_exits(mock_exists, mock_config_cls, mo
 @patch("main.os.path.exists")
 def test_main_uses_shared_run_options_parser(mock_exists, mock_config_cls, mock_orch_cls, mock_parse):
     mock_exists.return_value = True
-    mock_config_cls.return_value.config = {"enable_image_generation": True}
+    mock_config_cls.return_value.config = {"disabled_steps": []}
     mock_parse.return_value = RunOptions(
         limit=2,
         threads=5,
@@ -101,6 +101,102 @@ def test_main_uses_shared_run_options_parser(mock_exists, mock_config_cls, mock_
 @patch("main.Orchestrator")
 @patch("main.ConfigManager")
 @patch("main.os.path.exists")
+def test_main_update_mode_exits_after_saving_config(mock_exists, mock_config_cls, mock_orch_cls, mock_parse):
+    mock_exists.return_value = True
+    mock_config_cls.return_value.config = {"disabled_steps": []}
+    mock_parse.return_value = RunOptions(
+        limit=1,
+        threads=5,
+        language="en",
+        debug=False,
+        update=True,
+        with_image=False,
+        no_image=False,
+    )
+
+    from main import main
+    main()
+
+    mock_config_cls.return_value.run_onboarding.assert_called_once_with(update=True)
+    mock_orch_cls.assert_not_called()
+
+
+def test_resolve_disabled_steps_prefers_new_config_key():
+    from main import _resolve_disabled_steps
+
+    options = RunOptions(limit=None, threads=1, language="en", debug=False, with_image=False, no_image=False)
+    resolved = _resolve_disabled_steps(options, {"disabled_steps": ["ai_image_generation", "telegram_notify"]})
+    assert resolved == ["ai_image_generation", "telegram_notify"]
+
+
+def test_resolve_disabled_steps_legacy_enable_image_false():
+    from main import _resolve_disabled_steps
+
+    options = RunOptions(limit=None, threads=1, language="en", debug=False, with_image=False, no_image=False)
+    resolved = _resolve_disabled_steps(options, {"enable_image_generation": False})
+    assert resolved == ["ai_image_generation"]
+
+
+def test_resolve_disabled_steps_legacy_enable_image_true():
+    from main import _resolve_disabled_steps
+
+    options = RunOptions(limit=None, threads=1, language="en", debug=False, with_image=False, no_image=False)
+    resolved = _resolve_disabled_steps(options, {"enable_image_generation": True})
+    assert resolved == []
+
+
+def test_resolve_disabled_steps_no_image_adds_image_step():
+    from main import _resolve_disabled_steps
+
+    options = RunOptions(limit=None, threads=1, language="en", debug=False, with_image=False, no_image=True)
+    resolved = _resolve_disabled_steps(options, {"disabled_steps": []})
+    assert resolved == ["ai_image_generation"]
+
+
+def test_resolve_disabled_steps_with_image_removes_image_step():
+    from main import _resolve_disabled_steps
+
+    options = RunOptions(limit=None, threads=1, language="en", debug=False, with_image=True, no_image=False)
+    resolved = _resolve_disabled_steps(options, {"disabled_steps": ["ai_image_generation", "telegram_notify"]})
+    assert resolved == ["telegram_notify"]
+
+
+def test_resolve_disabled_steps_conflicting_flags_raise_error():
+    from main import _resolve_disabled_steps
+
+    options = RunOptions(limit=None, threads=1, language="en", debug=False, with_image=True, no_image=True)
+    with pytest.raises(ValueError):
+        _resolve_disabled_steps(options, {"disabled_steps": []})
+
+
+@patch("main.parse_run_tokens")
+@patch("main.Orchestrator")
+@patch("main.ConfigManager")
+@patch("main.os.path.exists")
+def test_main_legacy_config_false_maps_to_disabled_steps(mock_exists, mock_config_cls, mock_orch_cls, mock_parse):
+    mock_exists.return_value = True
+    mock_config_cls.return_value.config = {"enable_image_generation": False}
+    mock_parse.return_value = RunOptions(
+        limit=1,
+        threads=1,
+        language="en",
+        debug=False,
+        update=False,
+        with_image=False,
+        no_image=False,
+    )
+    mock_orch_cls.return_value.run.return_value = []
+
+    from main import main
+    main()
+
+    assert mock_orch_cls.call_args.kwargs["disabled_steps"] == ["ai_image_generation"]
+
+
+@patch("main.parse_run_tokens")
+@patch("main.Orchestrator")
+@patch("main.ConfigManager")
+@patch("main.os.path.exists")
 def test_main_listener_mode_skips_orchestrator_run(
     mock_exists,
     mock_config_cls,
@@ -110,7 +206,7 @@ def test_main_listener_mode_skips_orchestrator_run(
 ):
     mock_exists.return_value = True
     mock_config_cls.return_value.config = {
-        "enable_image_generation": True,
+        "disabled_steps": [],
         "telegram_commands": {"enabled": True},
         "scheduler": {"enabled": False, "jobs": []},
     }
@@ -149,7 +245,7 @@ def test_main_listener_mode_uses_scheduler_enable(
 ):
     mock_exists.return_value = True
     mock_config_cls.return_value.config = {
-        "enable_image_generation": True,
+        "disabled_steps": [],
         "telegram_commands": {"enabled": False},
         "scheduler": {"enabled": True, "jobs": []},
     }
@@ -188,7 +284,7 @@ def test_main_cli_flags_do_not_enter_listener_mode(
 ):
     mock_exists.return_value = True
     mock_config_cls.return_value.config = {
-        "enable_image_generation": True,
+        "disabled_steps": [],
         "telegram_commands": {"enabled": True},
         "scheduler": {"enabled": True, "jobs": []},
     }
@@ -209,6 +305,7 @@ def test_main_cli_flags_do_not_enter_listener_mode(
         main()
 
     mock_orch_cls.return_value.run.assert_called_once()
+    assert mock_orch_cls.call_args.kwargs["disabled_steps"] == ["ai_image_generation"]
     mock_loop.assert_not_called()
 
 
@@ -277,7 +374,7 @@ def test_main_starts_listener_mode_without_prompts_file(
 ):
     mock_exists.side_effect = lambda p: p == "config.yaml"
     mock_config_cls.return_value.config = {
-        "enable_image_generation": True,
+        "disabled_steps": [],
         "telegram_commands": {"enabled": True},
         "scheduler": {"enabled": False, "jobs": []},
     }

@@ -53,7 +53,7 @@ def test_orchestrator_init(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai,
     )
     mock_storage.assert_called_once()
     assert orch.image_mode == "direct"
-    assert orch.enable_image_generation is True
+    assert orch.disabled_steps == set()
 
 @patch("core.orchestrator.send_telegram_msg")
 @patch("core.orchestrator.NineRouterAI")
@@ -140,7 +140,7 @@ def test_orchestrator_run(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, 
 @patch("core.orchestrator.FacebookPagePublisher")
 @patch("core.orchestrator.StorageProvider")
 def test_process_prompt_skips_image_when_disabled(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_telegram, mock_config):
-    orch = Orchestrator(mock_config, enable_image_generation=False)
+    orch = Orchestrator(mock_config, disabled_steps=["ai_image_generation"])
 
     orch.ai.generate_story.return_value = {
         "title": "Test Title",
@@ -162,7 +162,7 @@ def test_process_prompt_skips_image_when_disabled(mock_storage, mock_fb, mock_wp
 @patch("core.orchestrator.FacebookPagePublisher")
 @patch("core.orchestrator.StorageProvider")
 def test_process_prompt_generates_image_when_enabled(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_telegram, mock_config):
-    orch = Orchestrator(mock_config, enable_image_generation=True)
+    orch = Orchestrator(mock_config, disabled_steps=[])
 
     orch.ai.generate_story.return_value = {
         "title": "Test Title",
@@ -186,7 +186,7 @@ def test_process_prompt_generates_image_when_enabled(mock_storage, mock_fb, mock
 @patch("core.orchestrator.FacebookPagePublisher")
 @patch("core.orchestrator.StorageProvider")
 def test_debug_saves_image_response_on_success(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_telegram, mock_config):
-    orch = Orchestrator(mock_config, debug=True, enable_image_generation=True)
+    orch = Orchestrator(mock_config, debug=True, disabled_steps=[])
 
     orch.ai.generate_story.return_value = {
         "title": "Test Title",
@@ -211,7 +211,7 @@ def test_debug_saves_image_response_on_success(mock_storage, mock_fb, mock_wp, m
 @patch("core.orchestrator.FacebookPagePublisher")
 @patch("core.orchestrator.StorageProvider")
 def test_debug_saves_image_response_on_failure(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_telegram, mock_config):
-    orch = Orchestrator(mock_config, debug=True, enable_image_generation=True)
+    orch = Orchestrator(mock_config, debug=True, disabled_steps=[])
 
     orch.ai.generate_story.return_value = {
         "title": "Test Title",

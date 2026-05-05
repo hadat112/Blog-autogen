@@ -14,13 +14,17 @@ from publishers.facebook_page import FacebookPagePublisher
 from utils.helpers import send_telegram_msg
 
 class Orchestrator:
-    def __init__(self, config, num_threads=5, limit=None, language="uk", debug=False, enable_image_generation=True, progress_callback=None):
+    def __init__(self, config, num_threads=5, limit=None, language="uk", debug=False, disabled_steps=None, progress_callback=None):
         self.config = config
         self.num_threads = num_threads
         self.limit = limit
         self.language = language
         self.debug = debug
-        self.enable_image_generation = bool(enable_image_generation)
+        self.disabled_steps = {
+            step.strip()
+            for step in (disabled_steps or [])
+            if isinstance(step, str) and step.strip()
+        }
         self.progress_callback = progress_callback
         
         # Initialize providers
@@ -142,6 +146,9 @@ class Orchestrator:
         try:
             # 1. AI Text Generation
             self._emit_step_ticks(1, "Generate story text", "working")
+            if "ai_text_generation" in self.disabled_steps:
+                raise ValueError("Step disabled: ai_text_generation")
+
             print(f"\n{task_id} Step 1: Generating story via AI...")
             try:
                 story_data = self.ai.generate_story(prompt)
@@ -171,7 +178,7 @@ class Orchestrator:
 
             # 2. AI Image Generation
             self._emit_step_ticks(2, "Generate image", "working")
-            if not self.enable_image_generation:
+            if "ai_image_generation" in self.disabled_steps:
                 image_error = "Image generation disabled"
                 print(f"{task_id} Info: Image generation disabled")
             elif image_prompt and str(image_prompt).strip():
@@ -201,25 +208,28 @@ class Orchestrator:
             # 3. WordPress Publishing
             self._emit_step_ticks(3, "Publish to WordPress", "working")
             print(f"{task_id} Step 3: Publishing to WordPress...")
-            try:
-                image_to_publish = image_url
-                temp_path = None
-                if self.image_mode == "local" and image_url:
-                    try:
-                        temp_path = self.storage.download_image(image_url)
-                        image_to_publish = temp_path
-                    except Exception:
-                        image_to_publish = image_url
+            if "wordpress_publish" in self.disabled_steps:
+                print(f"{task_id} Info: WordPress publish disabled")
+            else:
+                try:
+                    image_to_publish = image_url
+                    temp_path = None
+                    if self.image_mode == "local" and image_url:
+                        try:
+                            temp_path = self.storage.download_image(image_url)
+                            image_to_publish = temp_path
+                        except Exception:
+                            image_to_publish = image_url
 
-                wp_url = self.wp.publish(title, content, image_to_publish)
-                print(f"{task_id} WP Success: {wp_url}")
+                    wp_url = self.wp.publish(title, content, image_to_publish)
+                    print(f"{task_id} WP Success: {wp_url}")
 
-                if temp_path:
-                    self.storage.cleanup(temp_path)
-            except Exception as e:
-                status = "Partial Success (WP Error)"
-                error_msg = str(e)
-                print(f"{task_id} Warning: WordPress publishing failed: {error_msg[:100]}")
+                    if temp_path:
+                        self.storage.cleanup(temp_path)
+                except Exception as e:
+                    status = "Partial Success (WP Error)"
+                    error_msg = str(e)
+                    print(f"{task_id} Warning: WordPress publishing failed: {error_msg[:100]}")
 
             # 4. Sheets Logging
             self._emit_step_ticks(4, "Log to Google Sheets", "working")
@@ -229,16 +239,22 @@ class Orchestrator:
             if image_error and status == "Success":
                 final_status = f"Success (No image: {image_error})"
 
-            self.sheets.append_row([
-                title, content, caption, image_url, wp_url, date_added, final_status
-            ])
-            print(f"{task_id} Sheets Success.")
+            if "google_sheets_log" in self.disabled_steps:
+                print(f"{task_id} Info: Google Sheets log disabled")
+            else:
+                self.sheets.append_row([
+                    title, content, caption, image_url, wp_url, date_added, final_status
+                ])
+                print(f"{task_id} Sheets Success.")
 
             # 5. Facebook Page Publishing
             self._emit_step_ticks(5, "Publish to Facebook", "working")
             print(f"{task_id} Step 5: Publishing to Facebook Page...")
             has_fb_config = bool(self.config.get("facebook_page_id") and self.config.get("facebook_page_access_token"))
-            if has_fb_config:
+            if "facebook_publish" in self.disabled_steps:
+                fb_post_error = "Facebook publish disabled"
+                fb_comment_state = "skipped"
+            elif has_fb_config:
                 try:
                     if image_url:
                         try:
@@ -252,12 +268,15 @@ class Orchestrator:
                     if wp_url:
                         comment_msg = f"Read full details at the following link: {wp_url}"
 
-                    try:
-                        self.fb.comment_on_post(fb_post_id, comment_msg)
-                        fb_comment_state = "success"
-                    except Exception as e:
-                        fb_comment_state = "error"
-                        fb_comment_error = str(e)
+                    if "facebook_comment" in self.disabled_steps:
+                        fb_comment_state = "skipped"
+                    else:
+                        try:
+                            self.fb.comment_on_post(fb_post_id, comment_msg)
+                            fb_comment_state = "success"
+                        except Exception as e:
+                            fb_comment_state = "error"
+                            fb_comment_error = str(e)
                 except Exception as e:
                     fb_post_error = str(e)
                     fb_comment_state = "skipped"
@@ -267,36 +286,41 @@ class Orchestrator:
 
             # 6. Telegram Notification
             print(f"{task_id} Step 6: Telegram Notification...")
-            try:
-                step_lines = []
-                step_lines.append("✅ AI text")
-                step_lines.append("✅ AI image" if not image_error else f"❌ AI image: {image_error[:80]}")
-                step_lines.append("✅ WordPress" if wp_url else f"❌ WordPress: {error_msg[:80] or 'Failed to publish'}")
-                step_lines.append("✅ Google Sheets")
-                step_lines.append("✅ Facebook post" if fb_post_id else f"❌ Facebook post: {fb_post_error[:80] or 'Failed'}")
+            if "telegram_notify" not in self.disabled_steps:
+                try:
+                    step_lines = []
+                    step_lines.append("✅ AI text")
+                    step_lines.append("✅ AI image" if not image_error else f"❌ AI image: {image_error[:80]}")
+                    step_lines.append("✅ WordPress" if wp_url else f"❌ WordPress: {error_msg[:80] or 'Failed to publish'}")
+                    step_lines.append("✅ Google Sheets" if "google_sheets_log" not in self.disabled_steps else "⚪ Google Sheets disabled")
+                    step_lines.append("✅ Facebook post" if fb_post_id else f"❌ Facebook post: {fb_post_error[:80] or 'Failed'}")
 
-                if fb_comment_state == "success":
-                    step_lines.append("✅ FB comment wp_url")
-                elif fb_comment_state == "error":
-                    step_lines.append(f"❌ FB comment: {fb_comment_error[:80]}")
-                else:
-                    step_lines.append("⚪ FB comment skipped (no wp_url)")
+                    if fb_comment_state == "success":
+                        step_lines.append("✅ FB comment wp_url")
+                    elif fb_comment_state == "error":
+                        step_lines.append(f"❌ FB comment: {fb_comment_error[:80]}")
+                    elif "facebook_comment" in self.disabled_steps:
+                        step_lines.append("⚪ FB comment disabled")
+                    else:
+                        step_lines.append("⚪ FB comment skipped (no wp_url)")
 
-                msg = (
-                    "✅ <b>Story Processed!</b>\n\n"
-                    f"Title: {title}\n"
-                    + "\n".join(step_lines)
-                    + f"\n\nWP: {wp_url or 'N/A'}"
-                    + f"\nFB Post ID: {fb_post_id or 'N/A'}"
-                )
+                    msg = (
+                        "✅ <b>Story Processed!</b>\n\n"
+                        f"Title: {title}\n"
+                        + "\n".join(step_lines)
+                        + f"\n\nWP: {wp_url or 'N/A'}"
+                        + f"\nFB Post ID: {fb_post_id or 'N/A'}"
+                    )
 
-                send_telegram_msg(
-                    self.config.get("telegram_bot_token"),
-                    self.config.get("telegram_chat_id"),
-                    msg
-                )
-            except Exception:
-                pass
+                    send_telegram_msg(
+                        self.config.get("telegram_bot_token"),
+                        self.config.get("telegram_chat_id"),
+                        msg
+                    )
+                except Exception:
+                    pass
+            else:
+                print(f"{task_id} Info: Telegram notify disabled")
 
             return {"status": "success", "title": title, "url": wp_url}
 

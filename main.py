@@ -14,6 +14,9 @@ from core.telegram_service import TelegramService
 from core.language import normalize_language
 
 
+IMAGE_STEP_ID = "ai_image_generation"
+
+
 DEFAULT_PID_FILE = Path(".blog-agent.pid")
 
 
@@ -96,6 +99,44 @@ def run_listener_loop(config: dict, job_runner: JobRunner):
             scheduler_service.tick()
         time.sleep(2)
 
+def _normalize_disabled_steps(value):
+    if not isinstance(value, list):
+        return []
+    normalized = []
+    seen = set()
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        step = item.strip()
+        if not step or step in seen:
+            continue
+        seen.add(step)
+        normalized.append(step)
+    return normalized
+
+
+def _effective_disabled_steps_from_config(config: dict) -> list[str]:
+    if "disabled_steps" in config:
+        return _normalize_disabled_steps(config.get("disabled_steps"))
+    if bool(config.get("enable_image_generation", True)):
+        return []
+    return [IMAGE_STEP_ID]
+
+
+def _resolve_disabled_steps(options, config: dict) -> list[str]:
+    disabled_steps = _effective_disabled_steps_from_config(config)
+
+    if options.with_image and options.no_image:
+        raise ValueError("--with-image and --no-image cannot be used together")
+
+    if options.no_image and IMAGE_STEP_ID not in disabled_steps:
+        disabled_steps.append(IMAGE_STEP_ID)
+    if options.with_image:
+        disabled_steps = [step for step in disabled_steps if step != IMAGE_STEP_ID]
+
+    return disabled_steps
+
+
 def main():
     raw_tokens = sys.argv[1:]
 
@@ -172,6 +213,8 @@ def main():
         print("Starting onboarding/update process...")
         config_manager.run_onboarding(update=options.update)
         print("Configuration saved.")
+        if options.update:
+            return
 
     config = config_manager.config
     if not config:
@@ -191,9 +234,7 @@ def main():
         return
 
     try:
-        effective_enable_image_generation = options.resolve_enable_image(
-            config.get("enable_image_generation", True)
-        )
+        effective_disabled_steps = _resolve_disabled_steps(options, config)
     except ValueError as e:
         print(f"Error: {e}")
         sys.exit(1)
@@ -204,7 +245,7 @@ def main():
         limit=options.limit,
         language=language,
         debug=options.debug,
-        enable_image_generation=effective_enable_image_generation,
+        disabled_steps=effective_disabled_steps,
     )
 
     prompts_file = "prompts.txt"

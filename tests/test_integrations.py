@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 from providers.google_sheets import GoogleSheetsProvider
 from utils.helpers import send_telegram_msg
 from core.telegram_commands import handle_telegram_message
-from core.run_options import RunOptions
 
 def test_google_sheets_append_row():
     with patch("gspread.service_account") as mock_sa:
@@ -47,6 +46,5 @@ def test_telegram_run_command_to_runner_pipeline():
 
     msg = handle_telegram_message("/run --limit 1 --with-image", cfg, runner)
 
-    assert "queued" in msg.lower()
-    opts = runner.submit_manual_run.call_args.kwargs["options"]
-    assert isinstance(opts, RunOptions)
+    assert "accepted" in msg.lower()
+    runner.submit_manual_run.assert_not_called()

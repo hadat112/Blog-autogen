@@ -8,7 +8,10 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 
 
 def _load_raw_content(filename: str) -> str:
-    payload = json.loads((ROOT_DIR / "debug" / filename).read_text(encoding="utf-8"))
+    path = ROOT_DIR / "debug" / filename
+    if not path.exists():
+        pytest.skip(f"Missing debug fixture: {filename}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
     if "raw_content" in payload:
         return payload["raw_content"]
     return json.dumps(payload, ensure_ascii=False)
