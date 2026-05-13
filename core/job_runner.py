@@ -6,6 +6,47 @@ from core.orchestrator import Orchestrator
 from core.language import normalize_language
 
 
+IMAGE_STEP_ID = "ai_image_generation"
+
+
+def _normalize_disabled_steps(value):
+    if not isinstance(value, list):
+        return []
+    normalized = []
+    seen = set()
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        step = item.strip()
+        if not step or step in seen:
+            continue
+        seen.add(step)
+        normalized.append(step)
+    return normalized
+
+
+def _effective_disabled_steps_from_config(config: dict) -> list[str]:
+    if "disabled_steps" in config:
+        return _normalize_disabled_steps(config.get("disabled_steps"))
+    if bool(config.get("enable_image_generation", True)):
+        return []
+    return [IMAGE_STEP_ID]
+
+
+def _resolve_disabled_steps(options, config: dict) -> list[str]:
+    disabled_steps = _effective_disabled_steps_from_config(config)
+
+    if options.with_image and options.no_image:
+        raise ValueError("--with-image and --no-image cannot be used together")
+
+    if options.no_image and IMAGE_STEP_ID not in disabled_steps:
+        disabled_steps.append(IMAGE_STEP_ID)
+    if options.with_image:
+        disabled_steps = [step for step in disabled_steps if step != IMAGE_STEP_ID]
+
+    return disabled_steps
+
+
 class JobRunner:
     def __init__(self, config: dict):
         self.config = config
@@ -65,14 +106,14 @@ class JobRunner:
                     )
 
             language = normalize_language(options.language)
-            enable_image = options.resolve_enable_image(self.config.get("enable_image_generation", True))
+            disabled_steps = _resolve_disabled_steps(options, self.config)
             orchestrator = Orchestrator(
                 config=self.config,
                 num_threads=options.threads,
                 limit=options.limit,
                 language=language,
                 debug=options.debug,
-                enable_image_generation=enable_image,
+                disabled_steps=disabled_steps,
                 progress_callback=_progress_callback,
             )
             try:

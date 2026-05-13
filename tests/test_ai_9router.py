@@ -2,7 +2,20 @@ import responses
 import json
 from pathlib import Path
 import pytest
-from providers.ai_9router import NineRouterAI, _parse_story_json
+from providers.ai_9router import (
+    NineRouterAI,
+    _parse_story_json,
+    CINEMATIC_NATURALISM_STYLE_PROMPT,
+)
+
+EXPECTED_STYLE_PROMPT = (
+    "Naturalistic high-key daylight lighting, vivid and clean color palette, neutral white balance, "
+    "realistic skin tones with zero color tint, sharp clarity, 8k professional photography, "
+    "shot on full-frame sensor for authentic color reproduction, no moody color grading, "
+    "no teal-orange look, no heavy shadows, no dramatic dark tone."
+)
+
+assert CINEMATIC_NATURALISM_STYLE_PROMPT == EXPECTED_STYLE_PROMPT
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
@@ -159,7 +172,7 @@ Thanks!"""
 
 
 @responses.activate
-def test_generate_image():
+def test_generate_image_appends_cinematic_style_prompt():
     api_key = "test_key"
     text_model = "gpt-4o"
     image_model = "dall-e-3"
@@ -181,3 +194,34 @@ def test_generate_image():
     image_url = ai.generate_image("A beautiful sunset")
 
     assert image_url == "https://image.url/test.png"
+
+    request_payload = json.loads(responses.calls[0].request.body.decode("utf-8"))
+    assert request_payload["prompt"] == f"A beautiful sunset\n\n{CINEMATIC_NATURALISM_STYLE_PROMPT}"
+
+
+@responses.activate
+def test_generate_image_uses_style_prompt_when_base_prompt_empty():
+    api_key = "test_key"
+    text_model = "gpt-4o"
+    image_model = "dall-e-3"
+    ai = NineRouterAI(api_key, text_model, image_model, base_url="https://api.9router.ai/v1")
+
+    mock_response = {
+        "data": [{
+            "url": "https://image.url/test.png"
+        }]
+    }
+
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/images/generations",
+        json=mock_response,
+        status=200
+    )
+
+    image_url = ai.generate_image("   ")
+
+    assert image_url == "https://image.url/test.png"
+
+    request_payload = json.loads(responses.calls[0].request.body.decode("utf-8"))
+    assert request_payload["prompt"] == CINEMATIC_NATURALISM_STYLE_PROMPT

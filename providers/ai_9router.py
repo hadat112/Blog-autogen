@@ -7,6 +7,19 @@ from .base_ai import BaseAI
 
 
 REQUIRED_STORY_KEYS = ("title", "content", "caption", "image_prompt")
+CINEMATIC_NATURALISM_STYLE_PROMPT = (
+    "Naturalistic high-key daylight lighting, vivid and clean color palette, neutral white balance, "
+    "realistic skin tones with zero color tint, sharp clarity, 8k professional photography, "
+    "shot on full-frame sensor for authentic color reproduction, no moody color grading, "
+    "no teal-orange look, no heavy shadows, no dramatic dark tone."
+)
+
+
+def _build_styled_image_prompt(image_prompt: str) -> str:
+    base_prompt = (image_prompt or "").strip()
+    if base_prompt:
+        return f"{base_prompt}\n\n{CINEMATIC_NATURALISM_STYLE_PROMPT}"
+    return CINEMATIC_NATURALISM_STYLE_PROMPT
 
 
 def _escape_newlines_inside_json_strings(text: str) -> str:
@@ -238,9 +251,10 @@ class NineRouterAI(BaseAI):
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
+        final_prompt = _build_styled_image_prompt(image_prompt)
         data = {
             "model": self.image_model,
-            "prompt": image_prompt,
+            "prompt": final_prompt,
             "n": 1,
             "size": "auto",
             "quality": "auto",

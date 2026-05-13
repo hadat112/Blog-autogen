@@ -30,14 +30,15 @@ def test_submit_manual_run_returns_job_id_and_tracks_queued_state():
 
 
 @patch("core.job_runner.Orchestrator")
-def test_worker_executes_orchestrator_with_resolved_image_toggle(mock_orch_cls):
+def test_worker_executes_orchestrator_with_resolved_disabled_steps(mock_orch_cls):
     config = {"enable_image_generation": False}
     runner = JobRunner(config=config)
     opts = RunOptions(limit=1, threads=1, language="en", debug=False, update=False, with_image=True, no_image=False)
 
     runner._execute_once(options=opts)
 
-    assert mock_orch_cls.call_args.kwargs["enable_image_generation"] is True
+    assert "ai_image_generation" not in mock_orch_cls.call_args.kwargs["disabled_steps"]
+    assert "enable_image_generation" not in mock_orch_cls.call_args.kwargs
 
 
 @patch("core.job_runner.Orchestrator")
