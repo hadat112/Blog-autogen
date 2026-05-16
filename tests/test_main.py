@@ -1095,7 +1095,30 @@ def test_main_crawl_url_extracts_article_and_publishes_without_prompt_file(mock_
     from main import main
     main()
 
-    mock_extract.assert_called_once_with("https://source.test/article", mock_orch_cls.return_value.ai)
+    mock_extract.assert_called_once_with("https://source.test/article", mock_orch_cls.return_value.ai, language="Ukrainian")
     mock_orch_cls.return_value.process_article_data.assert_called_once_with(article)
     mock_orch_cls.return_value.run.assert_not_called()
 
+
+
+@patch("main.extract_article_from_url")
+@patch("main.Orchestrator")
+@patch("main.ConfigManager")
+@patch("main.os.path.exists")
+def test_main_crawl_url_passes_lang_alias_to_article_extractor(mock_exists, mock_config_cls, mock_orch_cls, mock_extract, monkeypatch):
+    mock_exists.side_effect = lambda p: p == "config.yaml"
+    mock_config_cls.return_value.config = {"disabled_steps": []}
+    article = {
+        "title": "Crawled Title",
+        "content": "Crawled content",
+        "caption": "Crawled caption",
+        "image_url": "",
+        "source_url": "https://source.test/article",
+    }
+    mock_extract.return_value = article
+    monkeypatch.setattr("sys.argv", ["main.py", "--crawl", "https://source.test/article", "--lang", "Vietnamese"])
+
+    from main import main
+    main()
+
+    mock_extract.assert_called_once_with("https://source.test/article", mock_orch_cls.return_value.ai, language="Vietnamese")

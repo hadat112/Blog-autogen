@@ -124,6 +124,16 @@ def _effective_disabled_steps_from_config(config: dict) -> list[str]:
     return [IMAGE_STEP_ID]
 
 
+def _language_name_from_code(language_code: str) -> str:
+    if language_code == "uk":
+        return "Ukrainian"
+    if language_code == "en":
+        return "English"
+    if language_code == "vi":
+        return "Vietnamese"
+    return language_code
+
+
 def _resolve_disabled_steps(options, config: dict) -> list[str]:
     disabled_steps = _effective_disabled_steps_from_config(config)
 
@@ -251,7 +261,7 @@ def main():
 
     if options.crawl_url:
         print(f"Crawling article from {options.crawl_url}...")
-        article_data = extract_article_from_url(options.crawl_url, orchestrator.ai)
+        article_data = extract_article_from_url(options.crawl_url, orchestrator.ai, language=_language_name_from_code(language))
         orchestrator.process_article_data(article_data)
         return
 

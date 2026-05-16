@@ -63,7 +63,7 @@ def clean_article_html(html: str, base_url: str) -> str:
     return "\n".join(parser.parts).strip()
 
 
-def extract_article_from_url(article_url: str, ai_client) -> dict:
+def extract_article_from_url(article_url: str, ai_client, language: str = "Ukrainian") -> dict:
     response = requests.get(
         article_url,
         headers={
@@ -76,6 +76,6 @@ def extract_article_from_url(article_url: str, ai_client) -> dict:
     response.raise_for_status()
 
     clean_html = clean_article_html(response.text, response.url)
-    article = ai_client.extract_article(clean_html, response.url)
+    article = ai_client.extract_article(clean_html, response.url, language=language)
     article["source_url"] = response.url
     return article

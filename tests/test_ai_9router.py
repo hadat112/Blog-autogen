@@ -261,3 +261,30 @@ def test_extract_article_returns_title_content_caption_and_image_url():
     assert request_payload["model"] == "gpt-4o"
     assert "image_url" in request_payload["messages"][0]["content"]
 
+
+
+@responses.activate
+def test_extract_article_prompt_includes_output_language():
+    ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1")
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json={
+            "choices": [{
+                "message": {
+                    "content": json.dumps({
+                        "title": "Tiêu đề",
+                        "content": "Nội dung",
+                        "caption": "Chú thích",
+                        "image_url": ""
+                    })
+                }
+            }]
+        },
+        status=200,
+    )
+
+    ai.extract_article("<article>Body</article>", "https://example.com/article", language="Vietnamese")
+
+    request_payload = json.loads(responses.calls[0].request.body.decode("utf-8"))
+    assert "Write title, content, and caption in Vietnamese." in request_payload["messages"][0]["content"]

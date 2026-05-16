@@ -6,6 +6,8 @@ def normalize_language(language: str) -> str:
         "ukraina": "uk",
         "en": "en",
         "english": "en",
+        "vi": "vi",
+        "vietnamese": "vi",
     }
     if lang in aliases:
         return aliases[lang]
