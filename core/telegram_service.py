@@ -12,7 +12,8 @@ class TelegramService:
         "How to use this bot:\n"
         "- /run --limit 1\n"
         "- /run --limit 1 --no-image\n"
-        "- /run --limit 3 --language vi\n\n"
+        "- /run --limit 3 --language vi\n"
+        "- /crawl https://example.com/article --lang ukraina --debug\n\n"
         "Note: bot only accepts commands from configured telegram_chat_id."
     )
 
@@ -124,10 +125,12 @@ class TelegramService:
             await app.bot.set_my_commands([
                 BotCommand("start", "How to use this bot"),
                 BotCommand("run", "Run pipeline manually"),
+                BotCommand("crawl", "Crawl article and publish"),
             ])
 
         token = self.config.get("telegram_bot_token")
         app = ApplicationBuilder().token(token).post_init(_post_init).build()
         app.add_handler(CommandHandler("start", self._on_start))
         app.add_handler(CommandHandler("run", self._on_run))
+        app.add_handler(CommandHandler("crawl", self._on_run))
         app.run_polling(drop_pending_updates=True)

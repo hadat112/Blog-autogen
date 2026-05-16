@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from core.orchestrator import Orchestrator
 from core.language import normalize_language
+from core.article_crawler import extract_article_from_url
 
 
 IMAGE_STEP_ID = "ai_image_generation"
@@ -45,6 +46,16 @@ def _resolve_disabled_steps(options, config: dict) -> list[str]:
         disabled_steps = [step for step in disabled_steps if step != IMAGE_STEP_ID]
 
     return disabled_steps
+
+
+def _language_name_from_code(language_code: str) -> str:
+    if language_code == "uk":
+        return "Ukrainian"
+    if language_code == "en":
+        return "English"
+    if language_code == "vi":
+        return "Vietnamese"
+    return language_code
 
 
 class JobRunner:
@@ -117,7 +128,11 @@ class JobRunner:
                 progress_callback=_progress_callback,
             )
             try:
-                orchestrator.run("prompts.txt")
+                if options.crawl_url:
+                    article_data = extract_article_from_url(options.crawl_url, orchestrator.ai, language=_language_name_from_code(language))
+                    orchestrator.process_article_data(article_data)
+                else:
+                    orchestrator.run("prompts.txt")
                 if job_id:
                     self._update_job_progress(job_id, status="success", step_progress=100, detail="done")
             except Exception as e:
