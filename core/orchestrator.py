@@ -105,13 +105,21 @@ class Orchestrator:
             print(f"Failed to save debug file: {e}")
             return None
 
-    def create_teaser_caption(self, content):
-        """Creates a word-for-word excerpt from the first ~400 words of content."""
+    def caption_cta(self, language=None):
+        lang = (language or self.language or "").strip().lower()
+        if lang in {"uk", "ukrainian", "ukraina"}:
+            return "Читайте продовження за посиланням у коментарях нижче!"
+        if lang in {"vi", "vietnamese"}:
+            return "Đọc tiếp ở phần bình luận bên dưới!"
+        return "Click the link in the comments below to read the full story!"
+
+    def create_teaser_caption(self, content, language=None):
         words = content.split()
-        excerpt = " ".join(words[:400])
-        cta = "Click the link in the comments below to read the full story!"
-            
-        return f"{excerpt}...\n\n{cta}"
+        start = 0
+        if len(words) > 650:
+            start = max(0, min(len(words) - 450, int(len(words) * 0.45)))
+        excerpt = " ".join(words[start:start + 450])
+        return f"{excerpt}...\n\n{self.caption_cta(language)}"
 
     def _emit_progress(self, step_index, step_name, step_progress, detail=""):
         if self.progress_callback:
@@ -143,7 +151,7 @@ class Orchestrator:
         if not title or not content:
             raise ValueError("Article payload must include title and content")
 
-        if auto_caption and len(caption) < 200:
+        if auto_caption and len(caption.split()) < 300:
             print(f"{task_id} Info: Caption too short, auto-generating excerpt from content...")
             caption = self.create_teaser_caption(content)
 
@@ -267,7 +275,7 @@ class Orchestrator:
                 df = self.save_debug_file(article_data, prefix="crawl")
                 if df:
                     print(f"{task_id} Debug: Crawled article response saved to {df}")
-            return self._publish_article_payload(article_data, task_id, starting_step_index=3, auto_caption=False)
+            return self._publish_article_payload(article_data, task_id, starting_step_index=3, auto_caption=True)
         except Exception as e:
             print(f"\n{task_id} ❌ CRITICAL ERROR: {e}")
             date_added = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

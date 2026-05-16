@@ -293,9 +293,11 @@ class NineRouterAI(BaseAI):
             "Extract a publish-ready article from the cleaned HTML below. "
             "Return ONLY a JSON object with keys: title, content, caption, image_url. "
             "title must be plain text. content must be the full article body suitable for WordPress. "
-            "caption must be a social-media teaser excerpt, not a summary. "
+            "caption must be 300-500 words, cut from the article content itself, read like a continuous excerpt, "
+            "end at a suspenseful cliffhanger before the resolution, and append a localized call-to-action meaning "
+            "read more in the comments below. Do not summarize the article in caption. "
             "image_url must be the best absolute article image URL, or an empty string if none exists. "
-            f"Write title, content, and caption in {language}.\n\n"
+            f"Write title, content, caption, and the caption CTA entirely in {language}.\n\n"
             f"URL: {article_url}\n\nCLEAN_HTML:\n{clean_html}"
         )
         data = {

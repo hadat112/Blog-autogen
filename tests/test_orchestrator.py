@@ -252,7 +252,10 @@ def test_process_article_data_starts_at_publishing_steps(mock_storage, mock_fb, 
     orch.ai.generate_image.assert_not_called()
     orch.wp.publish.assert_called_once_with("Crawled Title", "Crawled content with enough words for publishing", "https://source.test/image.jpg")
     orch.sheets.append_row.assert_called_once()
-    orch.fb.publish_photo_caption.assert_called_once_with("Crawled caption", "https://source.test/image.jpg")
+    fb_caption = orch.fb.publish_photo_caption.call_args.args[0]
+    assert fb_caption.startswith("Crawled content with enough words for publishing")
+    assert fb_caption.endswith("Читайте продовження за посиланням у коментарях нижче!")
+    orch.fb.publish_photo_caption.assert_called_once_with(fb_caption, "https://source.test/image.jpg")
     orch.fb.comment_on_post.assert_called_once_with(
         orch.fb.publish_photo_caption.return_value,
         "Read full details at the following link: https://wp.url/article",
@@ -284,3 +287,19 @@ def test_process_article_data_debug_saves_crawled_article_response(mock_storage,
     assert result["status"] == "success"
     mock_save_debug.assert_called_once_with(article, prefix="crawl")
 
+
+
+@patch("core.orchestrator.NineRouterAI")
+@patch("core.orchestrator.GoogleSheetsProvider")
+@patch("core.orchestrator.WordPressPublisher")
+@patch("core.orchestrator.FacebookPagePublisher")
+@patch("core.orchestrator.StorageProvider")
+def test_create_teaser_caption_uses_vietnamese_cta(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_config):
+    orch = Orchestrator(mock_config, language="vi")
+    content = " ".join(f"word{i}" for i in range(700))
+
+    caption = orch.create_teaser_caption(content)
+
+    assert caption.endswith("Đọc tiếp ở phần bình luận bên dưới!")
+    assert len(caption.split()) >= 400
+    assert "word315" in caption

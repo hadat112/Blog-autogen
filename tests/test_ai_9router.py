@@ -287,4 +287,8 @@ def test_extract_article_prompt_includes_output_language():
     ai.extract_article("<article>Body</article>", "https://example.com/article", language="Vietnamese")
 
     request_payload = json.loads(responses.calls[0].request.body.decode("utf-8"))
-    assert "Write title, content, and caption in Vietnamese." in request_payload["messages"][0]["content"]
+    prompt = request_payload["messages"][0]["content"]
+    assert "caption must be 300-500 words" in prompt
+    assert "cut from the article content itself" in prompt
+    assert "read more in the comments below" in prompt
+    assert "Write title, content, caption, and the caption CTA entirely in Vietnamese." in prompt
