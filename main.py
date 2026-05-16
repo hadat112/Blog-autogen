@@ -12,6 +12,7 @@ from core.job_runner import JobRunner
 from core.scheduler_service import SchedulerService
 from core.telegram_service import TelegramService
 from core.language import normalize_language
+from core.article_crawler import extract_article_from_url
 
 
 IMAGE_STEP_ID = "ai_image_generation"
@@ -247,6 +248,12 @@ def main():
         debug=options.debug,
         disabled_steps=effective_disabled_steps,
     )
+
+    if options.crawl_url:
+        print(f"Crawling article from {options.crawl_url}...")
+        article_data = extract_article_from_url(options.crawl_url, orchestrator.ai)
+        orchestrator.process_article_data(article_data)
+        return
 
     prompts_file = "prompts.txt"
     if not os.path.exists(prompts_file):

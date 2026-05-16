@@ -1072,3 +1072,30 @@ def test_main_help_flag_still_works_for_run_mode(mock_exists, mock_config_cls, m
         main()
 
     mock_parse.assert_called_once()
+
+
+@patch("main.extract_article_from_url")
+@patch("main.Orchestrator")
+@patch("main.ConfigManager")
+@patch("main.os.path.exists")
+def test_main_crawl_url_extracts_article_and_publishes_without_prompt_file(mock_exists, mock_config_cls, mock_orch_cls, mock_extract, monkeypatch):
+    mock_exists.side_effect = lambda p: p == "config.yaml"
+    mock_config_cls.return_value.config = {"disabled_steps": []}
+    article = {
+        "title": "Crawled Title",
+        "content": "Crawled content",
+        "caption": "Crawled caption",
+        "image_url": "https://source.test/image.jpg",
+        "source_url": "https://source.test/article",
+    }
+    mock_extract.return_value = article
+    mock_orch_cls.return_value.process_article_data.return_value = {"status": "success", "title": "Crawled Title", "url": "https://wp.url/article"}
+    monkeypatch.setattr("sys.argv", ["main.py", "--crawl", "https://source.test/article"])
+
+    from main import main
+    main()
+
+    mock_extract.assert_called_once_with("https://source.test/article", mock_orch_cls.return_value.ai)
+    mock_orch_cls.return_value.process_article_data.assert_called_once_with(article)
+    mock_orch_cls.return_value.run.assert_not_called()
+

@@ -225,3 +225,39 @@ def test_generate_image_uses_style_prompt_when_base_prompt_empty():
 
     request_payload = json.loads(responses.calls[0].request.body.decode("utf-8"))
     assert request_payload["prompt"] == CINEMATIC_NATURALISM_STYLE_PROMPT
+
+
+@responses.activate
+def test_extract_article_returns_title_content_caption_and_image_url():
+    ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1")
+    mock_response = {
+        "choices": [{
+            "message": {
+                "content": json.dumps({
+                    "title": "Article Title",
+                    "content": "Article body",
+                    "caption": "Article caption",
+                    "image_url": "https://example.com/image.jpg"
+                })
+            }
+        }]
+    }
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json=mock_response,
+        status=200,
+    )
+
+    article = ai.extract_article("<article><h1>Article Title</h1><p>Body</p></article>", "https://example.com/article")
+
+    assert article == {
+        "title": "Article Title",
+        "content": "Article body",
+        "caption": "Article caption",
+        "image_url": "https://example.com/image.jpg",
+    }
+    request_payload = json.loads(responses.calls[0].request.body.decode("utf-8"))
+    assert request_payload["model"] == "gpt-4o"
+    assert "image_url" in request_payload["messages"][0]["content"]
+

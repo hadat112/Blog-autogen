@@ -30,3 +30,9 @@ def test_parse_tokens_supports_update_flag():
     opts = parse_run_tokens(["--update", "--limit", "1"])
     assert opts.update is True
     assert opts.limit == 1
+
+
+def test_parse_tokens_supports_crawl_article_url():
+    opts = parse_run_tokens(["--crawl", "https://example.com/article"])
+    assert opts.crawl_url == "https://example.com/article"
+

@@ -227,3 +227,35 @@ def test_debug_saves_image_response_on_failure(mock_storage, mock_fb, mock_wp, m
 
     assert result["status"] == "success"
     assert any(call.kwargs.get("prefix") == "image_fail" for call in mock_save_debug.call_args_list)
+
+
+@patch("core.orchestrator.send_telegram_msg")
+@patch("core.orchestrator.NineRouterAI")
+@patch("core.orchestrator.GoogleSheetsProvider")
+@patch("core.orchestrator.WordPressPublisher")
+@patch("core.orchestrator.FacebookPagePublisher")
+@patch("core.orchestrator.StorageProvider")
+def test_process_article_data_starts_at_publishing_steps(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_telegram, mock_config):
+    orch = Orchestrator(mock_config)
+    orch.wp.publish.return_value = "https://wp.url/article"
+
+    result = orch.process_article_data({
+        "title": "Crawled Title",
+        "content": "Crawled content with enough words for publishing",
+        "caption": "Crawled caption",
+        "image_url": "https://source.test/image.jpg",
+        "source_url": "https://source.test/article",
+    })
+
+    assert result == {"status": "success", "title": "Crawled Title", "url": "https://wp.url/article"}
+    orch.ai.generate_story.assert_not_called()
+    orch.ai.generate_image.assert_not_called()
+    orch.wp.publish.assert_called_once_with("Crawled Title", "Crawled content with enough words for publishing", "https://source.test/image.jpg")
+    orch.sheets.append_row.assert_called_once()
+    orch.fb.publish_photo_caption.assert_called_once_with("Crawled caption", "https://source.test/image.jpg")
+    orch.fb.comment_on_post.assert_called_once_with(
+        orch.fb.publish_photo_caption.return_value,
+        "Read full details at the following link: https://wp.url/article",
+    )
+    mock_telegram.assert_called_once()
+

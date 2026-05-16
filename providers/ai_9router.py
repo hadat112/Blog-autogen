@@ -7,6 +7,7 @@ from .base_ai import BaseAI
 
 
 REQUIRED_STORY_KEYS = ("title", "content", "caption", "image_prompt")
+REQUIRED_ARTICLE_KEYS = ("title", "content", "caption", "image_url")
 CINEMATIC_NATURALISM_STYLE_PROMPT = (
     "Naturalistic high-key daylight lighting, vivid and clean color palette, neutral white balance, "
     "realistic skin tones with zero color tint, sharp clarity, 8k professional photography, "
@@ -46,6 +47,43 @@ def _escape_newlines_inside_json_strings(text: str) -> str:
             escaped = False
 
     return ''.join(result)
+
+
+def _has_required_article_keys(value) -> bool:
+    return isinstance(value, dict) and all(k in value for k in REQUIRED_ARTICLE_KEYS)
+
+
+def _parse_article_json(content_str: str) -> dict:
+    last_error = None
+
+    try:
+        parsed = _parse_json_candidate(content_str)
+        if _has_required_article_keys(parsed):
+            return parsed
+    except Exception as e:
+        last_error = e
+
+    fenced = re.search(r'```(?:json)?\s*(.*?)\s*```', content_str, re.DOTALL | re.IGNORECASE)
+    if fenced:
+        try:
+            parsed = _parse_json_candidate(fenced.group(1))
+            if _has_required_article_keys(parsed):
+                return parsed
+        except Exception as e:
+            last_error = e
+
+    sliced = _extract_first_balanced_json_object(content_str)
+    if sliced:
+        try:
+            parsed = _parse_json_candidate(sliced)
+            if _has_required_article_keys(parsed):
+                return parsed
+        except Exception as e:
+            last_error = e
+
+    if last_error:
+        raise last_error
+    raise ValueError("Failed to parse article JSON from model output.")
 
 
 def _has_required_story_keys(value) -> bool:
@@ -244,6 +282,41 @@ class NineRouterAI(BaseAI):
             raise ValueError(f"Unexpected AI response structure: {result}")
         except Exception:
             raise ValueError(f"Failed to parse AI response as JSON. Raw content: {content_str}")
+
+    def extract_article(self, clean_html: str, article_url: str) -> dict:
+        url = f"{self.base_url}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        prompt = (
+            "Extract a publish-ready article from the cleaned HTML below. "
+            "Return ONLY a JSON object with keys: title, content, caption, image_url. "
+            "title must be plain text. content must be the full article body suitable for WordPress. "
+            "caption must be a social-media teaser excerpt, not a summary. "
+            "image_url must be the best absolute article image URL, or an empty string if none exists.\n\n"
+            f"URL: {article_url}\n\nCLEAN_HTML:\n{clean_html}"
+        )
+        data = {
+            "model": self.text_model,
+            "messages": [{"role": "user", "content": prompt}],
+            "response_format": {"type": "json_object"},
+            "stream": False
+        }
+
+        response = requests.post(url, headers=headers, json=data)
+        response.raise_for_status()
+
+        try:
+            result = response.json()
+            content_str = result['choices'][0]['message']['content']
+            if not content_str:
+                raise ValueError("AI returned empty content.")
+            return _parse_article_json(content_str)
+        except (KeyError, IndexError):
+            raise ValueError(f"Unexpected AI response structure: {result}")
+        except Exception:
+            raise ValueError(f"Failed to parse AI article response as JSON. Raw content: {content_str}")
 
     def generate_image(self, image_prompt: str) -> str:
         url = f"{self.base_url}/images/generations"
