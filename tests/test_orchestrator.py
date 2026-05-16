@@ -259,3 +259,28 @@ def test_process_article_data_starts_at_publishing_steps(mock_storage, mock_fb, 
     )
     mock_telegram.assert_called_once()
 
+
+
+@patch("core.orchestrator.send_telegram_msg")
+@patch("core.orchestrator.NineRouterAI")
+@patch("core.orchestrator.GoogleSheetsProvider")
+@patch("core.orchestrator.WordPressPublisher")
+@patch("core.orchestrator.FacebookPagePublisher")
+@patch("core.orchestrator.StorageProvider")
+def test_process_article_data_debug_saves_crawled_article_response(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_telegram, mock_config):
+    orch = Orchestrator(mock_config, debug=True)
+    orch.wp.publish.return_value = "https://wp.url/article"
+    article = {
+        "title": "Crawled Title",
+        "content": "Crawled content",
+        "caption": "Crawled caption",
+        "image_url": "https://source.test/image.jpg",
+        "source_url": "https://source.test/article",
+    }
+
+    with patch.object(orch, "save_debug_file") as mock_save_debug:
+        result = orch.process_article_data(article)
+
+    assert result["status"] == "success"
+    mock_save_debug.assert_called_once_with(article, prefix="crawl")
+

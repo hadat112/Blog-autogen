@@ -263,6 +263,10 @@ class Orchestrator:
     def process_article_data(self, article_data):
         task_id = f"[{(article_data.get('source_url') or article_data.get('title') or 'crawl')[:15]}...]"
         try:
+            if self.debug:
+                df = self.save_debug_file(article_data, prefix="crawl")
+                if df:
+                    print(f"{task_id} Debug: Crawled article response saved to {df}")
             return self._publish_article_payload(article_data, task_id, starting_step_index=3, auto_caption=False)
         except Exception as e:
             print(f"\n{task_id} ❌ CRITICAL ERROR: {e}")
