@@ -41,6 +41,22 @@ def test_worker_executes_orchestrator_with_resolved_disabled_steps(mock_orch_cls
     assert "enable_image_generation" not in mock_orch_cls.call_args.kwargs
 
 
+@patch("core.job_runner.extract_article_from_url")
+@patch("core.job_runner.Orchestrator")
+def test_execute_once_crawl_extracts_article_and_skips_prompt_run(mock_orch_cls, mock_extract):
+    runner = JobRunner(config={"enable_image_generation": True})
+    opts = RunOptions(limit=1, threads=1, language="en", debug=True, update=False, with_image=False, no_image=False, crawl_url="https://example.com/article")
+    article = {"title": "Title", "content": "Content", "caption": "Caption", "image_url": "https://example.com/image.jpg"}
+    mock_extract.return_value = article
+
+    runner._execute_once(options=opts)
+
+    orchestrator = mock_orch_cls.return_value
+    mock_extract.assert_called_once_with("https://example.com/article", orchestrator.ai, language="English")
+    orchestrator.process_article_data.assert_called_once_with(article)
+    orchestrator.run.assert_not_called()
+
+
 @patch("core.job_runner.Orchestrator")
 def test_execute_once_updates_running_and_success_states(mock_orch_cls):
     runner = JobRunner(config={"enable_image_generation": True})

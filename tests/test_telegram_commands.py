@@ -34,6 +34,19 @@ def test_parse_run_options_from_message_parses_cli_flags():
     assert submitted.debug is True
 
 
+def test_parse_run_options_from_message_supports_crawl_command():
+    from core.telegram_commands import parse_run_options_from_message
+
+    submitted = parse_run_options_from_message(
+        text="/crawl https://example.com/article --lang ukraina --debug",
+        config={"enable_image_generation": True},
+    )
+
+    assert submitted.crawl_url == "https://example.com/article"
+    assert submitted.language == "ukraina"
+    assert submitted.debug is True
+
+
 def test_handle_run_command_returns_parse_error_on_conflict():
     runner = MagicMock()
 

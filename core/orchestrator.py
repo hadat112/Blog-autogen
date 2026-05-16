@@ -105,13 +105,21 @@ class Orchestrator:
             print(f"Failed to save debug file: {e}")
             return None
 
-    def create_teaser_caption(self, content):
-        """Creates a word-for-word excerpt from the first ~400 words of content."""
+    def caption_cta(self, language=None):
+        lang = (language or self.language or "").strip().lower()
+        if lang in {"uk", "ukrainian", "ukraina"}:
+            return "Читайте продовження за посиланням у коментарях нижче!"
+        if lang in {"vi", "vietnamese"}:
+            return "Đọc tiếp ở phần bình luận bên dưới!"
+        return "Click the link in the comments below to read the full story!"
+
+    def create_teaser_caption(self, content, language=None):
         words = content.split()
-        excerpt = " ".join(words[:400])
-        cta = "Click the link in the comments below to read the full story!"
-            
-        return f"{excerpt}...\n\n{cta}"
+        start = 0
+        if len(words) > 650:
+            start = max(0, min(len(words) - 450, int(len(words) * 0.45)))
+        excerpt = " ".join(words[start:start + 450])
+        return f"{excerpt}...\n\n{self.caption_cta(language)}"
 
     def _emit_progress(self, step_index, step_name, step_progress, detail=""):
         if self.progress_callback:
@@ -126,25 +134,170 @@ class Orchestrator:
         for p in (0, 20, 40, 60, 80, 100):
             self._emit_progress(step_index, step_name, p, detail)
 
-    def process_prompt(self, prompt):
+    def _publish_article_payload(self, article_data, task_id, starting_step_index=3, auto_caption=True, status_note=None, notification_prefix_lines=None):
         status = "Success"
         error_msg = ""
         wp_url = ""
-        image_url = ""
-        image_error = ""
         fb_post_id = ""
         fb_post_error = ""
         fb_comment_error = ""
         fb_comment_state = "skipped"
 
-        title = ""
-        content = ""
-        caption = ""
+        title = (article_data.get("title") or "").strip()
+        content = (article_data.get("content") or "").strip()
+        caption = (article_data.get("caption") or "").strip()
+        image_url = (article_data.get("image_url") or "").strip()
 
-        task_id = f"[{prompt[:15]}...]"
+        if not title or not content:
+            raise ValueError("Article payload must include title and content")
 
+        if auto_caption and len(caption.split()) < 300:
+            print(f"{task_id} Info: Caption too short, auto-generating excerpt from content...")
+            caption = self.create_teaser_caption(content)
+
+        self._emit_step_ticks(starting_step_index, "Publish to WordPress", "working")
+        print(f"{task_id} Step {starting_step_index}: Publishing to WordPress...")
+        if "wordpress_publish" in self.disabled_steps:
+            print(f"{task_id} Info: WordPress publish disabled")
+        else:
+            try:
+                image_to_publish = image_url
+                temp_path = None
+                if self.image_mode == "local" and image_url:
+                    try:
+                        temp_path = self.storage.download_image(image_url)
+                        image_to_publish = temp_path
+                    except Exception:
+                        image_to_publish = image_url
+
+                wp_url = self.wp.publish(title, content, image_to_publish)
+                print(f"{task_id} WP Success: {wp_url}")
+
+                if temp_path:
+                    self.storage.cleanup(temp_path)
+            except Exception as e:
+                status = "Partial Success (WP Error)"
+                error_msg = str(e)
+                print(f"{task_id} Warning: WordPress publishing failed: {error_msg[:100]}")
+
+        self._emit_step_ticks(starting_step_index + 1, "Log to Google Sheets", "working")
+        print(f"{task_id} Step {starting_step_index + 1}: Logging to Google Sheets...")
+        date_added = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        final_status = status if status == "Success" else f"{status}: {error_msg}"
+        if status_note and status == "Success":
+            final_status = status_note
+
+        if "google_sheets_log" in self.disabled_steps:
+            print(f"{task_id} Info: Google Sheets log disabled")
+        else:
+            self.sheets.append_row([
+                title, content, caption, image_url, wp_url, date_added, final_status
+            ])
+            print(f"{task_id} Sheets Success.")
+
+        self._emit_step_ticks(starting_step_index + 2, "Publish to Facebook", "working")
+        print(f"{task_id} Step {starting_step_index + 2}: Publishing to Facebook Page...")
+        has_fb_config = bool(self.config.get("facebook_page_id") and self.config.get("facebook_page_access_token"))
+        if "facebook_publish" in self.disabled_steps:
+            fb_post_error = "Facebook publish disabled"
+            fb_comment_state = "skipped"
+        elif has_fb_config:
+            try:
+                if image_url:
+                    try:
+                        fb_post_id = self.fb.publish_photo_caption(caption, image_url)
+                    except Exception:
+                        fb_post_id = self.fb.publish_text(caption)
+                else:
+                    fb_post_id = self.fb.publish_text(caption)
+
+                comment_msg = "скажи «так», якщо хочеш продовжити читання історії 👇"
+                if wp_url:
+                    comment_msg = f"Read full details at the following link: {wp_url}"
+
+                if "facebook_comment" in self.disabled_steps:
+                    fb_comment_state = "skipped"
+                else:
+                    try:
+                        self.fb.comment_on_post(fb_post_id, comment_msg)
+                        fb_comment_state = "success"
+                    except Exception as e:
+                        fb_comment_state = "error"
+                        fb_comment_error = str(e)
+            except Exception as e:
+                fb_post_error = str(e)
+                fb_comment_state = "skipped"
+        else:
+            fb_post_error = "Missing Facebook config"
+            fb_comment_state = "skipped"
+
+        print(f"{task_id} Step {starting_step_index + 3}: Telegram Notification...")
+        if "telegram_notify" not in self.disabled_steps:
+            try:
+                step_lines = list(notification_prefix_lines or [])
+                step_lines.append("✅ WordPress" if wp_url else f"❌ WordPress: {error_msg[:80] or 'Failed to publish'}")
+                step_lines.append("✅ Google Sheets" if "google_sheets_log" not in self.disabled_steps else "⚪ Google Sheets disabled")
+                step_lines.append("✅ Facebook post" if fb_post_id else f"❌ Facebook post: {fb_post_error[:80] or 'Failed'}")
+
+                if fb_comment_state == "success":
+                    step_lines.append("✅ FB comment wp_url")
+                elif fb_comment_state == "error":
+                    step_lines.append(f"❌ FB comment: {fb_comment_error[:80]}")
+                elif "facebook_comment" in self.disabled_steps:
+                    step_lines.append("⚪ FB comment disabled")
+                else:
+                    step_lines.append("⚪ FB comment skipped (no wp_url)")
+
+                msg = (
+                    "✅ <b>Story Processed!</b>\n\n"
+                    f"Title: {title}\n"
+                    + "\n".join(step_lines)
+                    + f"\n\nWP: {wp_url or 'N/A'}"
+                    + f"\nFB Post ID: {fb_post_id or 'N/A'}"
+                )
+
+                send_telegram_msg(
+                    self.config.get("telegram_bot_token"),
+                    self.config.get("telegram_chat_id"),
+                    msg
+                )
+            except Exception:
+                pass
+        else:
+            print(f"{task_id} Info: Telegram notify disabled")
+
+        return {"status": "success", "title": title, "url": wp_url}
+
+    def process_article_data(self, article_data):
+        task_id = f"[{(article_data.get('source_url') or article_data.get('title') or 'crawl')[:15]}...]"
         try:
-            # 1. AI Text Generation
+            if self.debug:
+                df = self.save_debug_file(article_data, prefix="crawl")
+                if df:
+                    print(f"{task_id} Debug: Crawled article response saved to {df}")
+            return self._publish_article_payload(article_data, task_id, starting_step_index=3, auto_caption=True)
+        except Exception as e:
+            print(f"\n{task_id} ❌ CRITICAL ERROR: {e}")
+            date_added = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                self.sheets.append_row([
+                    article_data.get("source_url", "crawl")[:100], "ERROR", "", "", "", date_added, f"Critical Error: {str(e)}"
+                ])
+            except Exception:
+                pass
+            try:
+                send_telegram_msg(
+                    self.config.get("telegram_bot_token"),
+                    self.config.get("telegram_chat_id"),
+                    f"❌ <b>Story Failed</b>\n\nPrompt: {(article_data.get('source_url') or 'crawl')[:120]}\nError: {str(e)[:300]}"
+                )
+            except Exception:
+                pass
+            return {"status": "error", "error": str(e)}
+
+    def process_prompt(self, prompt):
+        task_id = f"[{prompt[:15]}...]"
+        try:
             self._emit_step_ticks(1, "Generate story text", "working")
             if "ai_text_generation" in self.disabled_steps:
                 raise ValueError("Step disabled: ai_text_generation")
@@ -169,15 +322,11 @@ class Orchestrator:
             caption = story_data.get("caption", "")
             image_prompt = story_data.get("image_prompt", "")
 
-            if len(caption) < 200:
-                print(f"{task_id} Info: AI caption too short, auto-generating excerpt from content...")
-                caption = self.create_teaser_caption(content)
-
             print(f"{task_id} AI Success: Title='{title[:30]}...' (Length: {len(content)} chars)")
 
-
-            # 2. AI Image Generation
             self._emit_step_ticks(2, "Generate image", "working")
+            image_url = ""
+            image_error = ""
             if "ai_image_generation" in self.disabled_steps:
                 image_error = "Image generation disabled"
                 print(f"{task_id} Info: Image generation disabled")
@@ -205,124 +354,25 @@ class Orchestrator:
                 image_error = "Missing image_prompt"
                 print(f"{task_id} Warning: No image_prompt from AI")
 
-            # 3. WordPress Publishing
-            self._emit_step_ticks(3, "Publish to WordPress", "working")
-            print(f"{task_id} Step 3: Publishing to WordPress...")
-            if "wordpress_publish" in self.disabled_steps:
-                print(f"{task_id} Info: WordPress publish disabled")
-            else:
-                try:
-                    image_to_publish = image_url
-                    temp_path = None
-                    if self.image_mode == "local" and image_url:
-                        try:
-                            temp_path = self.storage.download_image(image_url)
-                            image_to_publish = temp_path
-                        except Exception:
-                            image_to_publish = image_url
-
-                    wp_url = self.wp.publish(title, content, image_to_publish)
-                    print(f"{task_id} WP Success: {wp_url}")
-
-                    if temp_path:
-                        self.storage.cleanup(temp_path)
-                except Exception as e:
-                    status = "Partial Success (WP Error)"
-                    error_msg = str(e)
-                    print(f"{task_id} Warning: WordPress publishing failed: {error_msg[:100]}")
-
-            # 4. Sheets Logging
-            self._emit_step_ticks(4, "Log to Google Sheets", "working")
-            print(f"{task_id} Step 4: Logging to Google Sheets...")
-            date_added = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            final_status = status if status == "Success" else f"{status}: {error_msg}"
-            if image_error and status == "Success":
-                final_status = f"Success (No image: {image_error})"
-
-            if "google_sheets_log" in self.disabled_steps:
-                print(f"{task_id} Info: Google Sheets log disabled")
-            else:
-                self.sheets.append_row([
-                    title, content, caption, image_url, wp_url, date_added, final_status
-                ])
-                print(f"{task_id} Sheets Success.")
-
-            # 5. Facebook Page Publishing
-            self._emit_step_ticks(5, "Publish to Facebook", "working")
-            print(f"{task_id} Step 5: Publishing to Facebook Page...")
-            has_fb_config = bool(self.config.get("facebook_page_id") and self.config.get("facebook_page_access_token"))
-            if "facebook_publish" in self.disabled_steps:
-                fb_post_error = "Facebook publish disabled"
-                fb_comment_state = "skipped"
-            elif has_fb_config:
-                try:
-                    if image_url:
-                        try:
-                            fb_post_id = self.fb.publish_photo_caption(caption, image_url)
-                        except Exception:
-                            fb_post_id = self.fb.publish_text(caption)
-                    else:
-                        fb_post_id = self.fb.publish_text(caption)
-
-                    comment_msg = "скажи «так», якщо хочеш продовжити читання історії 👇"
-                    if wp_url:
-                        comment_msg = f"Read full details at the following link: {wp_url}"
-
-                    if "facebook_comment" in self.disabled_steps:
-                        fb_comment_state = "skipped"
-                    else:
-                        try:
-                            self.fb.comment_on_post(fb_post_id, comment_msg)
-                            fb_comment_state = "success"
-                        except Exception as e:
-                            fb_comment_state = "error"
-                            fb_comment_error = str(e)
-                except Exception as e:
-                    fb_post_error = str(e)
-                    fb_comment_state = "skipped"
-            else:
-                fb_post_error = "Missing Facebook config"
-                fb_comment_state = "skipped"
-
-            # 6. Telegram Notification
-            print(f"{task_id} Step 6: Telegram Notification...")
-            if "telegram_notify" not in self.disabled_steps:
-                try:
-                    step_lines = []
-                    step_lines.append("✅ AI text")
-                    step_lines.append("✅ AI image" if not image_error else f"❌ AI image: {image_error[:80]}")
-                    step_lines.append("✅ WordPress" if wp_url else f"❌ WordPress: {error_msg[:80] or 'Failed to publish'}")
-                    step_lines.append("✅ Google Sheets" if "google_sheets_log" not in self.disabled_steps else "⚪ Google Sheets disabled")
-                    step_lines.append("✅ Facebook post" if fb_post_id else f"❌ Facebook post: {fb_post_error[:80] or 'Failed'}")
-
-                    if fb_comment_state == "success":
-                        step_lines.append("✅ FB comment wp_url")
-                    elif fb_comment_state == "error":
-                        step_lines.append(f"❌ FB comment: {fb_comment_error[:80]}")
-                    elif "facebook_comment" in self.disabled_steps:
-                        step_lines.append("⚪ FB comment disabled")
-                    else:
-                        step_lines.append("⚪ FB comment skipped (no wp_url)")
-
-                    msg = (
-                        "✅ <b>Story Processed!</b>\n\n"
-                        f"Title: {title}\n"
-                        + "\n".join(step_lines)
-                        + f"\n\nWP: {wp_url or 'N/A'}"
-                        + f"\nFB Post ID: {fb_post_id or 'N/A'}"
-                    )
-
-                    send_telegram_msg(
-                        self.config.get("telegram_bot_token"),
-                        self.config.get("telegram_chat_id"),
-                        msg
-                    )
-                except Exception:
-                    pass
-            else:
-                print(f"{task_id} Info: Telegram notify disabled")
-
-            return {"status": "success", "title": title, "url": wp_url}
+            article_data = {
+                "title": title,
+                "content": content,
+                "caption": caption,
+                "image_url": image_url,
+            }
+            status_note = f"Success (No image: {image_error})" if image_error else None
+            notification_prefix_lines = [
+                "✅ AI text",
+                "✅ AI image" if not image_error else f"❌ AI image: {image_error[:80]}",
+            ]
+            return self._publish_article_payload(
+                article_data,
+                task_id,
+                starting_step_index=3,
+                auto_caption=True,
+                status_note=status_note,
+                notification_prefix_lines=notification_prefix_lines,
+            )
 
         except Exception as e:
             print(f"\n{task_id} ❌ CRITICAL ERROR: {e}")

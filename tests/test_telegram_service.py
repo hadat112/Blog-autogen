@@ -55,15 +55,16 @@ def test_telegram_service_run_registers_handler_sets_commands_and_starts_polling
         ab.return_value = builder
         service.run()
 
-    assert app.add_handler.call_count == 2
+    assert app.add_handler.call_count == 3
     builder.token.return_value.post_init.assert_called_once()
     post_init_cb = builder.token.return_value.post_init.call_args.args[0]
     asyncio.run(post_init_cb(app))
     app.bot.set_my_commands.assert_called_once()
     command_args = app.bot.set_my_commands.call_args.args[0]
-    assert len(command_args) == 2
+    assert len(command_args) == 3
     assert command_args[0].command == "start"
     assert command_args[1].command == "run"
+    assert command_args[2].command == "crawl"
     app.run_polling.assert_called_once_with(drop_pending_updates=True)
 
 
@@ -133,5 +134,6 @@ def test_telegram_service_on_start_replies_with_usage_help():
     assert "/run --limit 1" in sent_text
     assert "/run --limit 1 --no-image" in sent_text
     assert "/run --limit 3 --language vi" in sent_text
+    assert "/crawl https://example.com/article --lang ukraina --debug" in sent_text
     assert "telegram_chat_id" in sent_text
     message.reply_text.assert_awaited_once()

@@ -12,6 +12,7 @@ class RunOptions:
     update: bool = False
     with_image: bool = False
     no_image: bool = False
+    crawl_url: Optional[str] = None
 
     def resolve_enable_image(self, default_from_config: bool) -> bool:
         if self.with_image and self.no_image:
@@ -27,11 +28,12 @@ def parse_run_tokens(tokens: list[str]) -> RunOptions:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--threads", type=int, default=5)
-    parser.add_argument("--language", type=str, default="Ukraina")
+    parser.add_argument("--language", "--lang", dest="language", type=str, default="Ukraina")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--update", action="store_true")
     parser.add_argument("--with-image", action="store_true")
     parser.add_argument("--no-image", action="store_true")
+    parser.add_argument("--crawl", dest="crawl_url", type=str, default=None)
 
     ns = parser.parse_args(tokens)
 
@@ -46,4 +48,5 @@ def parse_run_tokens(tokens: list[str]) -> RunOptions:
         update=ns.update,
         with_image=ns.with_image,
         no_image=ns.no_image,
+        crawl_url=ns.crawl_url,
     )
