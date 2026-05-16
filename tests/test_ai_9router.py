@@ -292,3 +292,16 @@ def test_extract_article_prompt_includes_output_language():
     assert "cut from the article content itself" in prompt
     assert "read more in the comments below" in prompt
     assert "Write title, content, caption, and the caption CTA entirely in Vietnamese." in prompt
+
+
+def test_parse_article_json_repairs_concatenated_string_segments():
+    from providers.ai_9router import _parse_article_json
+
+    raw = '{\n "title": "Article Title",\n "content": "First part " +\n "second part with suspense",\n "caption": "Short caption",\n "image_url": "https://example.com/image.jpg"\n}'
+
+    parsed = _parse_article_json(raw)
+
+    assert parsed["title"] == "Article Title"
+    assert parsed["content"] == "First part second part with suspense"
+    assert parsed["caption"] == "Short caption"
+    assert parsed["image_url"] == "https://example.com/image.jpg"

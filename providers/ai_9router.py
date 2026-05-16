@@ -49,6 +49,10 @@ def _escape_newlines_inside_json_strings(text: str) -> str:
     return ''.join(result)
 
 
+def _repair_concatenated_json_strings(text: str) -> str:
+    return re.sub(r'"\s*\+\s*"', '', text)
+
+
 def _has_required_article_keys(value) -> bool:
     return isinstance(value, dict) and all(k in value for k in REQUIRED_ARTICLE_KEYS)
 
@@ -192,11 +196,21 @@ def _extract_story_fields_with_regex(text: str):
 
 
 def _parse_json_candidate(candidate: str):
-    try:
-        return json.loads(candidate)
-    except json.JSONDecodeError:
-        repaired = _escape_newlines_inside_json_strings(candidate)
-        return json.loads(repaired)
+    candidates = [
+        candidate,
+        _escape_newlines_inside_json_strings(candidate),
+        _repair_concatenated_json_strings(candidate),
+        _escape_newlines_inside_json_strings(_repair_concatenated_json_strings(candidate)),
+    ]
+
+    last_error = None
+    for value in candidates:
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError as e:
+            last_error = e
+
+    raise last_error
 
 
 def _parse_story_json(content_str: str) -> dict:
