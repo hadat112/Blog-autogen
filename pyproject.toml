@@ -18,6 +18,9 @@ dependencies = [
     "python-telegram-bot",
     "tqdm",
     "sqlalchemy",
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
 ]
 
 [tool.setuptools]
