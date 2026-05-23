@@ -35,6 +35,10 @@ class PipelineResponse(PipelineBase):
     class Config:
         from_attributes = True
 
+class QuickRunInput(BaseModel):
+    prompts_file: Optional[str] = None
+    prompt: Optional[str] = None
+
 class JobBase(BaseModel):
     pipeline_id: str
     status: str

@@ -23,6 +23,7 @@ class Pipeline(Base):
     step_accounts = Column(JSON, nullable=False)
     schedule = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class Job(Base):
     __tablename__ = "jobs"
