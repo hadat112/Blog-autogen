@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Story Autogen Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="w-64 bg-slate-800 text-white p-4">
+            <h1 class="text-2xl font-bold mb-8">Story Autogen</h1>
+            <nav>
+                <ul class="space-y-4">
+                    <li class="p-2 bg-blue-600 rounded cursor-pointer">Dashboard</li>
+                    <li class="p-2 hover:bg-slate-700 rounded cursor-pointer">Accounts</li>
+                    <li class="p-2 hover:bg-slate-700 rounded cursor-pointer">Pipelines</li>
+                    <li class="p-2 hover:bg-slate-700 rounded cursor-pointer">Settings</li>
+                </ul>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 p-8 overflow-y-auto">
+            <header class="flex justify-between items-center mb-8">
+                <h2 class="text-3xl font-semibold">Real-time Dashboard</h2>
+                <button class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">+ New Pipeline</button>
+            </header>
+
+            <!-- Active Pipelines -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Card 1 -->
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold">Daily UK Stories</h3>
+                        <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">Running</span>
+                    </div>
+                    <p class="text-sm text-gray-500 mb-2">Language: UK</p>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+                        <div class="bg-blue-600 h-2.5 rounded-full" style="width: 45%"></div>
+                    </div>
+                    <p class="text-xs text-gray-600 italic">Step: Generating AI Image (Account: Midjourney-1)</p>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold">Crawl Tech News</h3>
+                        <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">Completed</span>
+                    </div>
+                    <p class="text-sm text-gray-500 mb-2">Language: VI</p>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+                        <div class="bg-green-600 h-2.5 rounded-full" style="width: 100%"></div>
+                    </div>
+                    <p class="text-xs text-gray-600 italic">Finished 2 hours ago. 5 stories published.</p>
+                </div>
+            </div>
+
+            <!-- Pipeline Log -->
+            <div class="mt-12">
+                <h3 class="text-xl font-bold mb-4">Recent Activity</h3>
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-50 border-b">
+                            <tr>
+                                <th class="p-4">Time</th>
+                                <th class="p-4">Pipeline</th>
+                                <th class="p-4">Event</th>
+                                <th class="p-4">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr>
+                                <td class="p-4 text-sm">14:20:05</td>
+                                <td class="p-4">Daily UK Stories</td>
+                                <td class="p-4">WP Post: "The Haunted Castle"</td>
+                                <td class="p-4"><span class="text-green-600 font-semibold">Success</span></td>
+                            </tr>
+                            <tr>
+                                <td class="p-4 text-sm">14:15:30</td>
+                                <td class="p-4">Daily UK Stories</td>
+                                <td class="p-4">AI Content Generation</td>
+                                <td class="p-4"><span class="text-green-600 font-semibold">Success</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

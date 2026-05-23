@@ -17,6 +17,7 @@ dependencies = [
     "google-auth",
     "python-telegram-bot",
     "tqdm",
+    "sqlalchemy",
 ]
 
 [tool.setuptools]

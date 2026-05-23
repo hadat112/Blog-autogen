@@ -14,8 +14,56 @@ from publishers.facebook_page import FacebookPagePublisher
 from utils.helpers import send_telegram_msg
 
 class Orchestrator:
-    def __init__(self, config, num_threads=5, limit=None, language="uk", debug=False, disabled_steps=None, progress_callback=None):
-        self.config = config
+    def __init__(self, 
+                 ai_config=None, 
+                 wp_config=None, 
+                 fb_config=None, 
+                 gs_config=None, 
+                 tg_config=None,
+                 config=None,
+                 num_threads=5, 
+                 limit=None, 
+                 language="uk", 
+                 debug=False, 
+                 disabled_steps=None, 
+                 progress_callback=None):
+        
+        # For backwards compatibility, if a single config object is passed
+        if config and not any([ai_config, wp_config, fb_config, gs_config, tg_config]):
+            ai_config = {
+                "api_key": config.get("ninerouter_api_key"),
+                "text_model": config.get("ninerouter_text_model"),
+                "image_model": config.get("ninerouter_image_model"),
+                "base_url": config.get("ninerouter_base_url", "http://localhost:20128/v1")
+            }
+            wp_config = {
+                "url": config.get("wordpress_url"),
+                "username": config.get("wordpress_username"),
+                "password": config.get("wordpress_password")
+            }
+            fb_config = {
+                "page_id": config.get("facebook_page_id"),
+                "access_token": config.get("facebook_page_access_token"),
+                "graph_version": config.get("facebook_graph_version", "v23.0")
+            }
+            gs_config = {
+                "credentials_json": config.get("google_creds_path"),
+                "sheet_id": config.get("google_sheets_id")
+            }
+            tg_config = {
+                "bot_token": config.get("telegram_bot_token"),
+                "chat_id": config.get("telegram_chat_id")
+            }
+            self.image_mode = config.get("image_mode", "Direct").lower()
+        else:
+            self.image_mode = "direct"
+
+        self.ai_config = ai_config
+        self.wp_config = wp_config
+        self.fb_config = fb_config
+        self.gs_config = gs_config
+        self.tg_config = tg_config
+        
         self.num_threads = num_threads
         self.limit = limit
         self.language = language
@@ -29,28 +77,30 @@ class Orchestrator:
         
         # Initialize providers
         self.ai = NineRouterAI(
-            api_key=config.get("ninerouter_api_key"),
-            text_model=config.get("ninerouter_text_model"),
-            image_model=config.get("ninerouter_image_model"),
-            base_url=config.get("ninerouter_base_url", "http://localhost:20128/v1")
-        )
-        self.sheets = GoogleSheetsProvider(
-            credentials_json=config.get("google_creds_path"),
-            sheet_id=config.get("google_sheets_id")
-        )
-        self.wp = WordPressPublisher(
-            url=config.get("wordpress_url"),
-            username=config.get("wordpress_username"),
-            app_password=config.get("wordpress_password")
-        )
-        self.storage = StorageProvider()
-        self.fb = FacebookPagePublisher(
-            page_id=config.get("facebook_page_id"),
-            access_token=config.get("facebook_page_access_token"),
-            graph_version=config.get("facebook_graph_version", "v23.0")
-        )
+            api_key=ai_config.get("api_key"),
+            text_model=ai_config.get("text_model"),
+            image_model=ai_config.get("image_model"),
+            base_url=ai_config.get("base_url", "http://localhost:20128/v1")
+        ) if ai_config else None
 
-        self.image_mode = config.get("image_mode", "Direct").lower()
+        self.sheets = GoogleSheetsProvider(
+            credentials_json=gs_config.get("credentials_json"),
+            sheet_id=gs_config.get("sheet_id")
+        ) if gs_config else None
+
+        self.wp = WordPressPublisher(
+            url=wp_config.get("url"),
+            username=wp_config.get("username"),
+            app_password=wp_config.get("password")
+        ) if wp_config else None
+
+        self.storage = StorageProvider()
+        
+        self.fb = FacebookPagePublisher(
+            page_id=fb_config.get("page_id"),
+            access_token=fb_config.get("access_token"),
+            graph_version=fb_config.get("graph_version", "v23.0")
+        ) if fb_config else None
 
         if self.debug:
             os.makedirs("debug", exist_ok=True)
@@ -157,8 +207,8 @@ class Orchestrator:
 
         self._emit_step_ticks(starting_step_index, "Publish to WordPress", "working")
         print(f"{task_id} Step {starting_step_index}: Publishing to WordPress...")
-        if "wordpress_publish" in self.disabled_steps:
-            print(f"{task_id} Info: WordPress publish disabled")
+        if "wordpress_publish" in self.disabled_steps or not self.wp:
+            print(f"{task_id} Info: WordPress publish disabled or not configured")
         else:
             try:
                 image_to_publish = image_url
@@ -187,8 +237,8 @@ class Orchestrator:
         if status_note and status == "Success":
             final_status = status_note
 
-        if "google_sheets_log" in self.disabled_steps:
-            print(f"{task_id} Info: Google Sheets log disabled")
+        if "google_sheets_log" in self.disabled_steps or not self.sheets:
+            print(f"{task_id} Info: Google Sheets log disabled or not configured")
         else:
             self.sheets.append_row([
                 title, content, caption, image_url, wp_url, date_added, final_status
@@ -197,11 +247,11 @@ class Orchestrator:
 
         self._emit_step_ticks(starting_step_index + 2, "Publish to Facebook", "working")
         print(f"{task_id} Step {starting_step_index + 2}: Publishing to Facebook Page...")
-        has_fb_config = bool(self.config.get("facebook_page_id") and self.config.get("facebook_page_access_token"))
+        has_fb_config = bool(self.fb_config and self.fb_config.get("page_id") and self.fb_config.get("access_token"))
         if "facebook_publish" in self.disabled_steps:
             fb_post_error = "Facebook publish disabled"
             fb_comment_state = "skipped"
-        elif has_fb_config:
+        elif has_fb_config and self.fb:
             try:
                 if image_url:
                     try:
@@ -228,15 +278,15 @@ class Orchestrator:
                 fb_post_error = str(e)
                 fb_comment_state = "skipped"
         else:
-            fb_post_error = "Missing Facebook config"
+            fb_post_error = "Missing Facebook config" if not has_fb_config else "Facebook provider not initialized"
             fb_comment_state = "skipped"
 
         print(f"{task_id} Step {starting_step_index + 3}: Telegram Notification...")
-        if "telegram_notify" not in self.disabled_steps:
+        if "telegram_notify" not in self.disabled_steps and self.tg_config:
             try:
                 step_lines = list(notification_prefix_lines or [])
                 step_lines.append("✅ WordPress" if wp_url else f"❌ WordPress: {error_msg[:80] or 'Failed to publish'}")
-                step_lines.append("✅ Google Sheets" if "google_sheets_log" not in self.disabled_steps else "⚪ Google Sheets disabled")
+                step_lines.append("✅ Google Sheets" if "google_sheets_log" not in self.disabled_steps and self.sheets else "⚪ Google Sheets disabled/missing")
                 step_lines.append("✅ Facebook post" if fb_post_id else f"❌ Facebook post: {fb_post_error[:80] or 'Failed'}")
 
                 if fb_comment_state == "success":
@@ -257,14 +307,14 @@ class Orchestrator:
                 )
 
                 send_telegram_msg(
-                    self.config.get("telegram_bot_token"),
-                    self.config.get("telegram_chat_id"),
+                    self.tg_config.get("bot_token"),
+                    self.tg_config.get("chat_id"),
                     msg
                 )
             except Exception:
                 pass
         else:
-            print(f"{task_id} Info: Telegram notify disabled")
+            print(f"{task_id} Info: Telegram notify disabled or missing config")
 
         return {"status": "success", "title": title, "url": wp_url}
 
@@ -286,11 +336,12 @@ class Orchestrator:
             except Exception:
                 pass
             try:
-                send_telegram_msg(
-                    self.config.get("telegram_bot_token"),
-                    self.config.get("telegram_chat_id"),
-                    f"❌ <b>Story Failed</b>\n\nPrompt: {(article_data.get('source_url') or 'crawl')[:120]}\nError: {str(e)[:300]}"
-                )
+                if self.tg_config:
+                    send_telegram_msg(
+                        self.tg_config.get("bot_token"),
+                        self.tg_config.get("chat_id"),
+                        f"❌ <b>Story Failed</b>\n\nPrompt: {(article_data.get('source_url') or 'crawl')[:120]}\nError: {str(e)[:300]}"
+                    )
             except Exception:
                 pass
             return {"status": "error", "error": str(e)}
@@ -385,11 +436,12 @@ class Orchestrator:
                 pass
 
             try:
-                send_telegram_msg(
-                    self.config.get("telegram_bot_token"),
-                    self.config.get("telegram_chat_id"),
-                    f"❌ <b>Story Failed</b>\n\nPrompt: {prompt[:120]}\nError: {str(e)[:300]}"
-                )
+                if self.tg_config:
+                    send_telegram_msg(
+                        self.tg_config.get("bot_token"),
+                        self.tg_config.get("chat_id"),
+                        f"❌ <b>Story Failed</b>\n\nPrompt: {prompt[:120]}\nError: {str(e)[:300]}"
+                    )
             except Exception:
                 pass
 
