@@ -23,9 +23,11 @@ dependencies = [
     "python-multipart",
 ]
 
+[tool.setuptools]
+py-modules = ["main"]
+
 [tool.setuptools.packages.find]
 include = ["adapters*", "application*", "apps*", "core*", "infrastructure*"]
-py-modules = ["main"]
 
 [project.scripts]
 blog-autogen = "main:main"

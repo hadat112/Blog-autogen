@@ -1,9 +1,130 @@
 @import "tailwindcss";
 
+:root {
+  /* Primitive Tokens (Modern Zinc & Violet Palette) */
+  --primitive-neutral-50: #fafafa;
+  --primitive-neutral-100: #f4f4f5;
+  --primitive-neutral-200: #e4e4e7;
+  --primitive-neutral-300: #d4d4d8;
+  --primitive-neutral-400: #a1a1aa;
+  --primitive-neutral-500: #71717a;
+  --primitive-neutral-600: #52525b;
+  --primitive-neutral-700: #3f3f46;
+  --primitive-neutral-800: #27272a;
+  --primitive-neutral-900: #18181b;
+  --primitive-neutral-950: #09090b;
+  
+  /* Primary Palette: Emerald (Green) */
+  --primitive-primary-50: #ecfdf5;
+  --primitive-primary-500: #10b981;
+  --primitive-primary-600: #059669;
+  --primitive-primary-700: #047857;
+
+  --primitive-success-500: #10b981;
+  --primitive-danger-500: #ef4444;
+  --primitive-warning-500: #f59e0b;
+  --primitive-info-500: #3b82f6;
+
+  /* Semantic Tokens (Light Mode) */
+  --color-bg-canvas: var(--primitive-neutral-50);
+  --color-bg-surface: #ffffff;
+  --color-bg-surface-subtle: var(--primitive-neutral-100);
+  --color-bg-accent: var(--primitive-primary-600);
+  --color-bg-accent-hover: var(--primitive-primary-700);
+
+  --color-text-primary: var(--primitive-neutral-900);
+  --color-text-secondary: var(--primitive-neutral-500);
+  --color-text-tertiary: var(--primitive-neutral-400);
+  --color-text-inverse: #ffffff;
+  
+  --color-text-success: var(--primitive-success-500);
+  --color-text-danger: var(--primitive-danger-500);
+  --color-text-warning: var(--primitive-warning-500);
+  --color-text-info: var(--primitive-info-500);
+
+  --color-border-subtle: var(--primitive-neutral-100);
+  --color-border-default: var(--primitive-neutral-200);
+  --color-border-strong: var(--primitive-neutral-300);
+  --color-border-focus: var(--primitive-primary-500);
+
+  /* Component Tokens */
+  --button-primary-bg: var(--color-bg-accent);
+  --button-primary-bg-hover: var(--color-bg-accent-hover);
+  --button-primary-text: var(--color-text-inverse);
+  
+  --input-bg: var(--color-bg-surface);
+  --input-text: var(--color-text-primary);
+  --input-placeholder: var(--color-text-tertiary);
+  --input-border: var(--color-border-default);
+  --input-border-focus: var(--color-border-focus);
+  
+  --card-bg: var(--color-bg-surface);
+  --card-border: var(--color-border-subtle);
+  --card-title: var(--color-text-primary);
+  --card-description: var(--color-text-secondary);
+}
+
+.dark {
+  /* Semantic Tokens for Dark Mode */
+  --color-bg-canvas: var(--primitive-neutral-950);
+  --color-bg-surface: var(--primitive-neutral-900);
+  --color-bg-surface-subtle: var(--primitive-neutral-800);
+  
+  --color-bg-accent: var(--primitive-primary-500);
+  --color-bg-accent-hover: var(--primitive-primary-600);
+
+  --color-text-primary: var(--primitive-neutral-50);
+  --color-text-secondary: var(--primitive-neutral-400);
+  --color-text-tertiary: var(--primitive-neutral-500);
+  --color-text-inverse: var(--primitive-neutral-950);
+  
+  --color-border-subtle: var(--primitive-neutral-800);
+  --color-border-default: var(--primitive-neutral-700);
+  --color-border-strong: var(--primitive-neutral-600);
+  --color-border-focus: var(--primitive-primary-500);
+}
+
+@theme {
+  /* Exposing Semantic Tokens to Tailwind utilities */
+  --color-canvas: var(--color-bg-canvas);
+  --color-surface: var(--color-bg-surface);
+  --color-surface-subtle: var(--color-bg-surface-subtle);
+  --color-accent: var(--color-bg-accent);
+  --color-accent-hover: var(--color-bg-accent-hover);
+
+  --color-content-primary: var(--color-text-primary);
+  --color-content-secondary: var(--color-text-secondary);
+  --color-content-tertiary: var(--color-text-tertiary);
+  --color-content-inverse: var(--color-text-inverse);
+  
+  --color-status-success: var(--color-text-success);
+  --color-status-danger: var(--color-text-danger);
+  --color-status-warning: var(--color-text-warning);
+  --color-status-info: var(--color-text-info);
+
+  --color-border-subtle: var(--color-border-subtle);
+  --color-border-default: var(--color-border-default);
+  --color-border-strong: var(--color-border-strong);
+  --color-border-focus: var(--color-border-focus);
+}
+
 @utility no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
   &::-webkit-scrollbar {
     display: none;
   }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
