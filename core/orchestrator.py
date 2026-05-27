@@ -14,20 +14,20 @@ from publishers.facebook_page import FacebookPagePublisher
 from utils.helpers import send_telegram_msg
 
 class Orchestrator:
-    def __init__(self, 
-                 ai_config=None, 
-                 wp_config=None, 
-                 fb_config=None, 
-                 gs_config=None, 
+    def __init__(self,
+                 ai_config=None,
+                 wp_config=None,
+                 fb_config=None,
+                 gs_config=None,
                  tg_config=None,
                  config=None,
-                 num_threads=5, 
-                 limit=None, 
-                 language="uk", 
-                 debug=False, 
-                 disabled_steps=None, 
+                 num_threads=5,
+                 limit=None,
+                 language="uk",
+                 debug=False,
+                 disabled_steps=None,
                  progress_callback=None):
-        
+
         # For backwards compatibility, if a single config object is passed
         if config and not any([ai_config, wp_config, fb_config, gs_config, tg_config]):
             ai_config = {
@@ -63,7 +63,7 @@ class Orchestrator:
         self.fb_config = fb_config
         self.gs_config = gs_config
         self.tg_config = tg_config
-        
+
         self.num_threads = num_threads
         self.limit = limit
         self.language = language
@@ -74,7 +74,7 @@ class Orchestrator:
             if isinstance(step, str) and step.strip()
         }
         self.progress_callback = progress_callback
-        
+
         # Initialize providers
         self.ai = NineRouterAI(
             api_key=ai_config.get("api_key"),
@@ -84,8 +84,8 @@ class Orchestrator:
         ) if ai_config else None
 
         self.sheets = GoogleSheetsProvider(
-            credentials_json=gs_config.get("credentials_json"),
-            sheet_id=gs_config.get("sheet_id")
+            credentials_json=gs_config.get("credentials_path") or gs_config.get("credentials_json") or "credentials.json",
+            sheet_id=gs_config.get("spreadsheet_id") or gs_config.get("sheet_id")
         ) if gs_config else None
 
         self.wp = WordPressPublisher(
@@ -95,7 +95,7 @@ class Orchestrator:
         ) if wp_config else None
 
         self.storage = StorageProvider()
-        
+
         self.fb = FacebookPagePublisher(
             page_id=fb_config.get("page_id"),
             access_token=fb_config.get("access_token"),
@@ -113,6 +113,14 @@ class Orchestrator:
             return "English"
         if lang == "vi":
             return "Vietnamese"
+        if lang == "hr":
+            return "Croatian"
+        if lang == "ro":
+            return "Romanian"
+        if lang == "it":
+            return "Italian"
+        if lang == "pl":
+            return "Polish"
         return self.language
 
     def prompt_language_hint(self):
@@ -146,7 +154,7 @@ class Orchestrator:
         filename = f"debug/{prefix}_{timestamp}.json"
         if isinstance(content, str):
             content = {"raw_content": content}
-        
+
         try:
             with open(filename, "w", encoding="utf-8") as f:
                 json.dump(content, f, ensure_ascii=False, indent=2)
@@ -171,20 +179,35 @@ class Orchestrator:
         excerpt = " ".join(words[start:start + 450])
         return f"{excerpt}...\n\n{self.caption_cta(language)}"
 
-    def _emit_progress(self, step_index, step_name, step_progress, detail=""):
+    def _emit_progress(self, step_index, step_name, step_progress, detail="", task_id=None):
         if self.progress_callback:
-            self.progress_callback(
-                step_index=step_index,
-                step_name=step_name,
-                step_progress=step_progress,
-                detail=detail,
-            )
+            # We add task_id to the callback call
+            try:
+                self.progress_callback(
+                    step_index=step_index,
+                    step_name=step_name,
+                    step_progress=step_progress,
+                    detail=detail,
+                    task_id=task_id
+                )
+            except TypeError:
+                # Fallback for old callback signature if needed
+                self.progress_callback(
+                    step_index=step_index,
+                    step_name=step_name,
+                    step_progress=step_progress,
+                    detail=detail
+                )
 
-    def _emit_step_ticks(self, step_index, step_name, detail="working"):
+    def _emit_step_ticks(self, step_index, step_name, detail="working", task_id=None):
         for p in (0, 20, 40, 60, 80, 100):
-            self._emit_progress(step_index, step_name, p, detail)
+            self._emit_progress(step_index, step_name, p, detail, task_id=task_id)
 
-    def _publish_article_payload(self, article_data, task_id, starting_step_index=3, auto_caption=True, status_note=None, notification_prefix_lines=None):
+    def _emit_log(self, message, step_index=0, step_name="Log", progress=0, task_id=None):
+        print(message)
+        self._emit_progress(step_index, step_name, progress, message, task_id=task_id)
+
+    def _publish_article_payload(self, article_data, log_task_id, starting_step_index=3, auto_caption=True, status_note=None, notification_prefix_lines=None, task_id=None):
         status = "Success"
         error_msg = ""
         wp_url = ""
@@ -202,13 +225,13 @@ class Orchestrator:
             raise ValueError("Article payload must include title and content")
 
         if auto_caption and len(caption.split()) < 300:
-            print(f"{task_id} Info: Caption too short, auto-generating excerpt from content...")
+            self._emit_log(f"{log_task_id} Info: Caption too short, auto-generating excerpt from content...", starting_step_index - 1, "Prepare assets", 100, task_id=task_id)
             caption = self.create_teaser_caption(content)
 
-        self._emit_step_ticks(starting_step_index, "Publish to WordPress", "working")
-        print(f"{task_id} Step {starting_step_index}: Publishing to WordPress...")
+        self._emit_step_ticks(starting_step_index, "Publish to WordPress", "working", task_id=task_id)
+        self._emit_log(f"{log_task_id} Step {starting_step_index}: Publishing to WordPress...", starting_step_index, "Publish to WordPress", 0, task_id=task_id)
         if "wordpress_publish" in self.disabled_steps or not self.wp:
-            print(f"{task_id} Info: WordPress publish disabled or not configured")
+            self._emit_log(f"{log_task_id} Info: WordPress publish disabled or not configured", starting_step_index, "Publish to WordPress", 100, task_id=task_id)
         else:
             try:
                 image_to_publish = image_url
@@ -220,33 +243,34 @@ class Orchestrator:
                     except Exception:
                         image_to_publish = image_url
 
-                wp_url = self.wp.publish(title, content, image_to_publish)
-                print(f"{task_id} WP Success: {wp_url}")
+                cat_id = self.wp_config.get("category_id")
+                wp_url = self.wp.publish(title, content, image_to_publish, category_id=cat_id)
+                self._emit_log(f"{log_task_id} WP Success: {wp_url}", starting_step_index, "Publish to WordPress", 100, task_id=task_id)
 
                 if temp_path:
                     self.storage.cleanup(temp_path)
             except Exception as e:
                 status = "Partial Success (WP Error)"
                 error_msg = str(e)
-                print(f"{task_id} Warning: WordPress publishing failed: {error_msg[:100]}")
+                self._emit_log(f"{log_task_id} Warning: WordPress publishing failed: {error_msg[:100]}", starting_step_index, "Publish to WordPress", 100, task_id=task_id)
 
-        self._emit_step_ticks(starting_step_index + 1, "Log to Google Sheets", "working")
-        print(f"{task_id} Step {starting_step_index + 1}: Logging to Google Sheets...")
+        self._emit_step_ticks(starting_step_index + 1, "Log to Google Sheets", "working", task_id=task_id)
+        self._emit_log(f"{log_task_id} Step {starting_step_index + 1}: Logging to Google Sheets...", starting_step_index + 1, "Log to Google Sheets", 0, task_id=task_id)
         date_added = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         final_status = status if status == "Success" else f"{status}: {error_msg}"
         if status_note and status == "Success":
             final_status = status_note
 
         if "google_sheets_log" in self.disabled_steps or not self.sheets:
-            print(f"{task_id} Info: Google Sheets log disabled or not configured")
+            self._emit_log(f"{log_task_id} Info: Google Sheets log disabled or not configured", starting_step_index + 1, "Log to Google Sheets", 100, task_id=task_id)
         else:
             self.sheets.append_row([
                 title, content, caption, image_url, wp_url, date_added, final_status
             ])
-            print(f"{task_id} Sheets Success.")
+            self._emit_log(f"{log_task_id} Sheets Success.", starting_step_index + 1, "Log to Google Sheets", 100, task_id=task_id)
 
-        self._emit_step_ticks(starting_step_index + 2, "Publish to Facebook", "working")
-        print(f"{task_id} Step {starting_step_index + 2}: Publishing to Facebook Page...")
+        self._emit_step_ticks(starting_step_index + 2, "Publish to Facebook", "working", task_id=task_id)
+        self._emit_log(f"{log_task_id} Step {starting_step_index + 2}: Publishing to Facebook Page...", starting_step_index + 2, "Publish to Facebook", 0, task_id=task_id)
         has_fb_config = bool(self.fb_config and self.fb_config.get("page_id") and self.fb_config.get("access_token"))
         if "facebook_publish" in self.disabled_steps:
             fb_post_error = "Facebook publish disabled"
@@ -261,9 +285,9 @@ class Orchestrator:
                 else:
                     fb_post_id = self.fb.publish_text(caption)
 
-                comment_msg = "скажи «так», якщо хочеш продовжити читання історії 👇"
+                comment_msg = "скажи «так», nếu muốn tiếp tục đọc câu chuyện này 👇"
                 if wp_url:
-                    comment_msg = f"Read full details at the following link: {wp_url}"
+                    comment_msg = f"Đọc chi tiết tại link sau: {wp_url}"
 
                 if "facebook_comment" in self.disabled_steps:
                     fb_comment_state = "skipped"
@@ -281,7 +305,7 @@ class Orchestrator:
             fb_post_error = "Missing Facebook config" if not has_fb_config else "Facebook provider not initialized"
             fb_comment_state = "skipped"
 
-        print(f"{task_id} Step {starting_step_index + 3}: Telegram Notification...")
+        self._emit_log(f"{log_task_id} Step {starting_step_index + 3}: Telegram Notification...", starting_step_index + 3, "Telegram Notification", 0, task_id=task_id)
         if "telegram_notify" not in self.disabled_steps and self.tg_config:
             try:
                 step_lines = list(notification_prefix_lines or [])
@@ -299,11 +323,11 @@ class Orchestrator:
                     step_lines.append("⚪ FB comment skipped (no wp_url)")
 
                 msg = (
-                    "✅ <b>Story Processed!</b>\n\n"
-                    f"Title: {title}\n"
+                    f"✅ <b>Story Processed [{self.prompt_language_name()}]</b>\n\n"
+                    f"📝 Title: {title}\n"
                     + "\n".join(step_lines)
-                    + f"\n\nWP: {wp_url or 'N/A'}"
-                    + f"\nFB Post ID: {fb_post_id or 'N/A'}"
+                    + f"\n\n🔗 WP Link: {wp_url or 'N/A'}"
+                    + f"\n📱 FB Post: {fb_post_id or 'N/A'}"
                 )
 
                 send_telegram_msg(
@@ -314,20 +338,20 @@ class Orchestrator:
             except Exception:
                 pass
         else:
-            print(f"{task_id} Info: Telegram notify disabled or missing config")
+            self._emit_log(f"{log_task_id} Info: Telegram notify disabled or missing config", starting_step_index + 3, "Telegram Notification", 100, task_id=task_id)
 
         return {"status": "success", "title": title, "url": wp_url}
 
-    def process_article_data(self, article_data):
-        task_id = f"[{(article_data.get('source_url') or article_data.get('title') or 'crawl')[:15]}...]"
+    def process_article_data(self, article_data, task_id=None):
+        log_task_id = f"[{(article_data.get('source_url') or article_data.get('title') or 'crawl')[:15]}...]"
         try:
             if self.debug:
                 df = self.save_debug_file(article_data, prefix="crawl")
                 if df:
-                    print(f"{task_id} Debug: Crawled article response saved to {df}")
-            return self._publish_article_payload(article_data, task_id, starting_step_index=3, auto_caption=True)
+                    print(f"{log_task_id} Debug: Crawled article response saved to {df}")
+            return self._publish_article_payload(article_data, log_task_id, starting_step_index=3, auto_caption=True, task_id=task_id)
         except Exception as e:
-            print(f"\n{task_id} ❌ CRITICAL ERROR: {e}")
+            print(f"\n{log_task_id} ❌ CRITICAL ERROR: {e}")
             date_added = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             try:
                 self.sheets.append_row([
@@ -346,26 +370,56 @@ class Orchestrator:
                 pass
             return {"status": "error", "error": str(e)}
 
-    def process_prompt(self, prompt):
-        task_id = f"[{prompt[:15]}...]"
+    def process_crawl(self, url, task_id=None):
+        log_task_id = f"[{url[:15]}...]"
         try:
-            self._emit_step_ticks(1, "Generate story text", "working")
+            self._emit_step_ticks(1, "Extract article from URL", "working", task_id=task_id)
+            self._emit_log(f"{log_task_id} Step 1: Extracting article from {url}...", 1, "Extract article from URL", 0, task_id=task_id)
+
+            from core.article_crawler import extract_article_from_url
+
+            def crawl_log(message):
+                self._emit_log(f"{log_task_id} {message}", 2, "AI Translate", 0, task_id=task_id)
+
+            article_data = extract_article_from_url(url, self.ai, language=self.prompt_language_name(), log_callback=crawl_log)
+
+            self._emit_log(f"{log_task_id} Extraction Success: Title='{article_data.get('title', '')[:30]}...'", 1, "Extract article from URL", 100, task_id=task_id)
+
+            # Step 2 in crawl is usually image generation or skip
+            self._emit_progress(2, "AI Translate", 100, f"{log_task_id} AI Translate Success", task_id=task_id)
+
+            return self._publish_article_payload(
+                article_data,
+                log_task_id,
+                starting_step_index=3,
+                auto_caption=True,
+                task_id=task_id
+            )
+        except Exception as e:
+            self._emit_log(f"{log_task_id} CRAWL ERROR: {e}", 0, "Error", 0, task_id=task_id)
+            self._emit_progress(0, "Error", 0, str(e), task_id=task_id)
+            raise e
+
+    def process_prompt(self, prompt, task_id=None):
+        log_task_id = f"[{prompt[:15]}...]"
+        try:
+            self._emit_step_ticks(1, "Generate story text", "working", task_id=task_id)
             if "ai_text_generation" in self.disabled_steps:
                 raise ValueError("Step disabled: ai_text_generation")
 
-            print(f"\n{task_id} Step 1: Generating story via AI...")
+            print(f"\n{log_task_id} Step 1: Generating story via AI...")
             try:
                 story_data = self.ai.generate_story(prompt)
                 df = self.save_debug_file(story_data)
                 if df:
-                    print(f"{task_id} Debug: AI response saved to {df}")
+                    print(f"{log_task_id} Debug: AI response saved to {df}")
             except Exception as e:
                 err_str = str(e)
                 if "Raw content:" in err_str:
                     raw_part = err_str.split("Raw content:")[1].strip()
                     df = self.save_debug_file(raw_part, prefix="fail")
                     if df:
-                        print(f"{task_id} Debug: Failed AI raw content saved to {df}")
+                        print(f"{log_task_id} Debug: Failed AI raw content saved to {df}")
                 raise e
 
             title = story_data.get("title", "")
@@ -373,16 +427,16 @@ class Orchestrator:
             caption = story_data.get("caption", "")
             image_prompt = story_data.get("image_prompt", "")
 
-            print(f"{task_id} AI Success: Title='{title[:30]}...' (Length: {len(content)} chars)")
+            print(f"{log_task_id} AI Success: Title='{title[:30]}...' (Length: {len(content)} chars)")
 
-            self._emit_step_ticks(2, "Generate image", "working")
+            self._emit_step_ticks(2, "Generate image", "working", task_id=task_id)
             image_url = ""
             image_error = ""
             if "ai_image_generation" in self.disabled_steps:
                 image_error = "Image generation disabled"
-                print(f"{task_id} Info: Image generation disabled")
+                print(f"{log_task_id} Info: Image generation disabled")
             elif image_prompt and str(image_prompt).strip():
-                print(f"{task_id} Step 2: Generating image via AI...")
+                print(f"{log_task_id} Step 2: Generating image via AI...")
                 try:
                     image_url = self.ai.generate_image(image_prompt)
                     if self.debug:
@@ -391,7 +445,7 @@ class Orchestrator:
                             "image_prompt": image_prompt,
                             "image_url": image_url,
                         }, prefix="image")
-                    print(f"{task_id} Image Success: {image_url[:50]}...")
+                    print(f"{log_task_id} Image Success: {image_url[:50]}...")
                 except Exception as e:
                     image_error = str(e)
                     if self.debug:
@@ -400,10 +454,10 @@ class Orchestrator:
                             "image_prompt": image_prompt,
                             "error": image_error,
                         }, prefix="image_fail")
-                    print(f"{task_id} Warning: Image generation failed: {image_error[:100]}")
+                    print(f"{log_task_id} Warning: Image generation failed: {image_error[:100]}")
             else:
                 image_error = "Missing image_prompt"
-                print(f"{task_id} Warning: No image_prompt from AI")
+                print(f"{log_task_id} Warning: No image_prompt from AI")
 
             article_data = {
                 "title": title,
@@ -418,15 +472,16 @@ class Orchestrator:
             ]
             return self._publish_article_payload(
                 article_data,
-                task_id,
+                log_task_id,
                 starting_step_index=3,
                 auto_caption=True,
                 status_note=status_note,
                 notification_prefix_lines=notification_prefix_lines,
+                task_id=task_id
             )
 
         except Exception as e:
-            print(f"\n{task_id} ❌ CRITICAL ERROR: {e}")
+            print(f"\n{log_task_id} ❌ CRITICAL ERROR: {e}")
             date_added = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             try:
                 self.sheets.append_row([
@@ -450,14 +505,21 @@ class Orchestrator:
     def run(self, prompts_file):
         if not os.path.exists(prompts_file):
             return []
-            
+
         prompts = self._read_prompts(prompts_file)
 
         if self.limit:
             prompts = prompts[:self.limit]
-            
+
         results = []
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-            results = list(tqdm(executor.map(self.process_prompt, prompts), total=len(prompts), desc="Processing stories"))
-            
+            # When running multiple stories, we create a unique task_id for each story thread
+            import uuid
+            futures = []
+            for prompt in prompts:
+                task_id = str(uuid.uuid4())
+                futures.append(executor.submit(self.process_prompt, prompt, task_id=task_id))
+
+            results = [f.result() for f in tqdm(futures, total=len(futures), desc="Processing stories")]
+
         return results

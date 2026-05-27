@@ -13,7 +13,7 @@ class WordPressPublisher(BasePublisher):
     def upload_media(self, image_source: str) -> int:
         """Uploads an image to WP media library and returns the media ID."""
         url = f"{self.url}/wp-json/wp/v2/media"
-        
+
         if image_source.startswith(('http://', 'https://')):
             # Download first
             temp_path = "temp_image_for_wp.png"
@@ -35,7 +35,7 @@ class WordPressPublisher(BasePublisher):
                 "Content-Type": "image/png"  # Adjust if needed
             }
             resp = requests.post(url, auth=self.auth, headers=headers, data=img, timeout=60)
-            
+
         # Clean up temp file if created
         if image_source.startswith(('http://', 'https://')) and os.path.exists(temp_path):
             os.remove(temp_path)
@@ -43,7 +43,7 @@ class WordPressPublisher(BasePublisher):
         resp.raise_for_status()
         return resp.json()["id"]
 
-    def publish(self, title: str, content: str, image_source: str) -> str:
+    def publish(self, title: str, content: str, image_source: str, category_id: int = None) -> str:
         """Creates a post and returns the link."""
         media_id = None
         if image_source:
@@ -59,7 +59,10 @@ class WordPressPublisher(BasePublisher):
             "status": "publish",
             "featured_media": media_id
         }
-        
+
+        if category_id:
+            data["categories"] = [category_id]
+
         resp = requests.post(url, auth=self.auth, json=data, timeout=30)
         resp.raise_for_status()
         return resp.json()["link"]

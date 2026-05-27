@@ -41,10 +41,11 @@ class QuickRunInput(BaseModel):
 
 class JobBase(BaseModel):
     pipeline_id: str
+    pipeline_name: Optional[str] = None
     status: str
     current_step: Optional[str] = None
     progress: int = 0
-    logs: List[str] = Field(default_factory=list)
+    logs: List[Any] = Field(default_factory=list)
 
 class JobCreate(JobBase):
     pass

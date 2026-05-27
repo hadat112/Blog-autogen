@@ -305,3 +305,74 @@ def test_parse_article_json_repairs_concatenated_string_segments():
     assert parsed["content"] == "First part second part with suspense"
     assert parsed["caption"] == "Short caption"
     assert parsed["image_url"] == "https://example.com/image.jpg"
+
+
+@responses.activate
+def test_translate_article_fields_returns_standard_article_payload():
+    ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1")
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json={"choices": [{"message": {"content": "Translated title"}}]},
+        status=200,
+    )
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json={"choices": [{"message": {"content": "Translated paragraph"}}]},
+        status=200,
+    )
+
+    article = ai.translate_article_fields(
+        "Source title",
+        "Source paragraph",
+        "https://source.test/image.jpg",
+        language="Italian",
+    )
+
+    assert article == {
+        "title": "Translated title",
+        "content": "Translated paragraph",
+        "caption": "",
+        "image_url": "https://source.test/image.jpg",
+    }
+    assert len(responses.calls) == 2
+    first_payload = json.loads(responses.calls[0].request.body.decode("utf-8"))
+    first_prompt = first_payload["messages"][0]["content"]
+    assert "Translate the current article text into Italian" in first_prompt
+    assert "Preserve every event, fact, name, relationship" in first_prompt
+    assert "Do not summarize, expand, omit, reorder" in first_prompt
+
+
+@responses.activate
+def test_translate_article_fields_includes_previous_source_context_for_later_chunks():
+    ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1")
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json={"choices": [{"message": {"content": "Translated title"}}]},
+        status=200,
+    )
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json={"choices": [{"message": {"content": "Translated first chunk"}}]},
+        status=200,
+    )
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json={"choices": [{"message": {"content": "Translated second chunk"}}]},
+        status=200,
+    )
+    first = "First paragraph " + ("a" * 2400)
+    second = "Second paragraph with follow-up context. " + ("b" * 200)
+
+    article = ai.translate_article_fields("Source title", f"{first}\n\n{second}", language="Italian")
+
+    assert article["content"] == "Translated first chunk\n\nTranslated second chunk"
+    second_payload = json.loads(responses.calls[2].request.body.decode("utf-8"))
+    second_prompt = second_payload["messages"][0]["content"]
+    assert "Previous source context for continuity only" in second_prompt
+    assert "First paragraph" in second_prompt
+    assert "Second paragraph with follow-up context." in second_prompt

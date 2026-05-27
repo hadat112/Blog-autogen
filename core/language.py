@@ -8,7 +8,15 @@ def normalize_language(language: str) -> str:
         "english": "en",
         "vi": "vi",
         "vietnamese": "vi",
+        "hr": "hr",
+        "croatian": "hr",
+        "ro": "ro",
+        "romanian": "ro",
+        "it": "it",
+        "italian": "it",
+        "pl": "pl",
+        "polish": "pl",
     }
     if lang in aliases:
         return aliases[lang]
-    raise ValueError("Unsupported language. Use Ukraina/Ukrainian, Vietnamese, or English.")
+    raise ValueError("Unsupported language. Use Ukrainian, Vietnamese, English, Croatian, Romanian, Italian, or Polish.")

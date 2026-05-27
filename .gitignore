@@ -27,6 +27,7 @@ ENV/
 
 # Configuration (CRITICAL: Ignore local secrets)
 config.yaml
+credentials.json
 .env
 
 # Logs
