@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
-from .models import Account
+
+from infrastructure.db.models import Account
 
 def resolve_accounts_for_pipeline(db: Session, step_accounts: dict):
     resolved = {}

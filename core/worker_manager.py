@@ -2,10 +2,10 @@ import asyncio
 import logging
 from datetime import datetime
 from sqlalchemy.orm import Session
-from core.models import Job, Pipeline
+from infrastructure.db.models import Job, Pipeline
 from core.account_resolver import resolve_accounts_for_pipeline
 from core.orchestrator import Orchestrator
-from core.db import SessionLocal
+from infrastructure.db.session import SessionLocal
 
 logger = logging.getLogger(__name__)
 

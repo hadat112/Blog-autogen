@@ -45,6 +45,8 @@ class ConfigManager:
         self.config = self.load_config()
         self.config["disabled_steps"] = _effective_disabled_steps(self.config)
         self.config.pop("enable_image_generation", None)
+        self.config.pop("telegram_commands", None)
+        self.config.pop("scheduler", None)
 
     def load_config(self):
         if not os.path.exists(self.config_path):
@@ -208,13 +210,6 @@ class ConfigManager:
     def _update_telegram_category(self):
         self._apply_field_update("telegram_bot_token", "Telegram Bot Token:")
         self._apply_field_update("telegram_chat_id", "Telegram Chat ID:")
-        current_enabled = self.config.get("telegram_commands", {}).get("enabled", True)
-        choice = questionary.select(
-            "Enable Telegram /run command listener?",
-            choices=["Enabled", "Disabled"],
-            default="Enabled" if current_enabled else "Disabled",
-        ).ask()
-        self.config["telegram_commands"] = {"enabled": choice == "Enabled"}
 
     def _update_facebook_category(self):
         self._apply_field_update("facebook_page_id", "Facebook Page ID:")
@@ -237,42 +232,6 @@ class ConfigManager:
             ).ask() or []
         )
         self.config.pop("enable_image_generation", None)
-
-    def _update_scheduler_category(self):
-        scheduler_enabled = questionary.select(
-            "Enable scheduler?",
-            choices=["Enabled", "Disabled"],
-            default="Enabled" if self.config.get("scheduler", {}).get("enabled", False) else "Disabled",
-        ).ask() == "Enabled"
-        scheduler_jobs = []
-        if scheduler_enabled:
-            schedule_mode = questionary.select("Schedule mode:", choices=["Fixed", "RandomWindow"], default="Fixed").ask()
-            schedule_time = self._ask_with_validation("Schedule time (HH:MM):", "schedule_time", default_val_override="08:00", skip_if_exists=False)
-            schedule_limit_raw = self._ask_with_validation("Schedule --limit:", "schedule_limit", default_val_override="1", skip_if_exists=False)
-            schedule_limit = int(schedule_limit_raw) if str(schedule_limit_raw).isdigit() else 1
-            schedule_with_image = questionary.select("Schedule run with image?", choices=["Enabled", "Disabled"], default="Enabled").ask() == "Enabled"
-            job = {
-                "name": "daily-job",
-                "enabled": True,
-                "mode": "fixed" if schedule_mode == "Fixed" else "random_window",
-                "run_options": {
-                    "limit": schedule_limit,
-                    "threads": 5,
-                    "language": "uk",
-                    "debug": False,
-                    "update": False,
-                    "with_image": schedule_with_image,
-                    "no_image": not schedule_with_image,
-                },
-            }
-            if job["mode"] == "fixed":
-                job["time"] = schedule_time
-            else:
-                job["base_time"] = schedule_time
-                job["jitter_min"] = 5
-                job["jitter_max"] = 10
-            scheduler_jobs.append(job)
-        self.config["scheduler"] = {"enabled": scheduler_enabled, "jobs": scheduler_jobs}
 
     def _validate_category_after_save(self, category_key):
         if category_key == "wordpress":
@@ -305,7 +264,6 @@ class ConfigManager:
             "Facebook": self._update_facebook_category,
             "Image settings": self._update_image_category,
             "Disabled steps": self._update_disabled_steps_category,
-            "Scheduler": self._update_scheduler_category,
         }
         validation_keys = {
             "WordPress": "wordpress",
@@ -363,13 +321,6 @@ class ConfigManager:
         self.config["telegram_bot_token"] = self._ask_with_validation("Telegram Bot Token:", "telegram_bot_token", skip_if_exists=True)
         print("Please send a message to your bot on Telegram, then provide the Chat ID below.")
         self.config["telegram_chat_id"] = self._ask_with_validation("Telegram Chat ID:", "telegram_chat_id", skip_if_exists=True)
-        self.config["telegram_commands"] = {
-            "enabled": questionary.select(
-                "Enable Telegram /run command listener?",
-                choices=["Enabled", "Disabled"],
-                default="Enabled" if self.config.get("telegram_commands", {}).get("enabled", True) else "Disabled",
-            ).ask() == "Enabled"
-        }
 
         print("Testing Telegram connection...")
         success, msg = self._validate_telegram(self.config)
@@ -396,5 +347,4 @@ class ConfigManager:
         )
         self.config.pop("enable_image_generation", None)
 
-        self._update_scheduler_category()
         self.save_config()

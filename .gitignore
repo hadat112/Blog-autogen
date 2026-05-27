@@ -32,11 +32,13 @@ credentials.json
 
 # Logs
 *.log
+.blog-agent.pid
 
 # Project specific
 blog-autogen-runner
 temp/
 images/
+*.db
 
 # OS specific
 .DS_Store

@@ -8,9 +8,6 @@ from pathlib import Path
 from core.config_manager import ConfigManager
 from core.orchestrator import Orchestrator
 from core.run_options import parse_run_tokens
-from core.job_runner import JobRunner
-from core.scheduler_service import SchedulerService
-from core.telegram_service import TelegramService
 from core.language import normalize_language
 from core.article_crawler import extract_article_from_url
 
@@ -45,29 +42,6 @@ def _is_process_alive(pid: int) -> bool:
         return False
 
 
-def start_daemon(config: dict, pid_file: Path = DEFAULT_PID_FILE):
-    existing_pid = read_pid(pid_file)
-    if existing_pid is not None:
-        if _is_process_alive(existing_pid):
-            return False
-        remove_pid_file(pid_file)
-
-    first_fork = os.fork()
-    if first_fork > 0:
-        os._exit(0)
-
-    os.setsid()
-
-    second_fork = os.fork()
-    if second_fork > 0:
-        os._exit(0)
-
-    pid_file.write_text(str(os.getpid()))
-    job_runner = JobRunner(config=config)
-    run_listener_loop(config=config, job_runner=job_runner)
-    return True
-
-
 def stop_daemon(pid_file: Path = DEFAULT_PID_FILE):
     pid = read_pid(pid_file)
     if pid is None:
@@ -86,19 +60,6 @@ def stop_daemon(pid_file: Path = DEFAULT_PID_FILE):
     remove_pid_file(pid_file)
     return True
 
-
-def run_listener_loop(config: dict, job_runner: JobRunner):
-    scheduler_service = SchedulerService(config=config, job_runner=job_runner)
-    telegram_service = TelegramService(config=config, job_runner=job_runner)
-
-    if config.get("telegram_commands", {}).get("enabled", False):
-        telegram_service.run()
-        return
-
-    while True:
-        if config.get("scheduler", {}).get("enabled", False):
-            scheduler_service.tick()
-        time.sleep(2)
 
 def _normalize_disabled_steps(value):
     if not isinstance(value, list):
@@ -158,37 +119,17 @@ def main():
         if len(raw_tokens) >= 3 and raw_tokens[1] == "--pid-file":
             pid_file = Path(raw_tokens[2])
 
-        config_manager = ConfigManager()
-        config = config_manager.config or {}
-        telegram_cfg = config.get("telegram_commands", {})
-        scheduler_cfg = config.get("scheduler", {})
-
-        def set_listener_state(enabled: bool):
-            telegram_cfg["enabled"] = enabled
-            scheduler_cfg["enabled"] = enabled
-            scheduler_cfg.setdefault("jobs", [])
-            config["telegram_commands"] = telegram_cfg
-            config["scheduler"] = scheduler_cfg
-            config_manager.config = config
-            config_manager.save_config()
-
         if action == "start":
-            set_listener_state(True)
-            started = start_daemon(config=config, pid_file=pid_file)
-            print("agent started" if started else "agent already started")
+            print("Background agent has been removed. Run the CLI directly or use the web API.")
             return
 
         if action == "stop":
-            set_listener_state(False)
             stopped = stop_daemon(pid_file=pid_file)
-            print("agent stopped" if stopped else "agent already stopped")
+            print("old background agent stopped" if stopped else "no old background agent found")
             return
 
-        set_listener_state(False)
-        stop_daemon(pid_file=pid_file)
-        set_listener_state(True)
-        started = start_daemon(config=config, pid_file=pid_file)
-        print("agent restarted" if started else "agent already started")
+        stopped = stop_daemon(pid_file=pid_file)
+        print("old background agent stopped; restart is no longer supported" if stopped else "restart is no longer supported")
         return
 
     try:
@@ -231,18 +172,6 @@ def main():
     if not config:
         print("Error: Configuration is empty. Please run with --update to set up.")
         sys.exit(1)
-
-    listener_enabled = config.get("telegram_commands", {}).get("enabled", False) or config.get("scheduler", {}).get("enabled", False)
-    should_enter_listener_mode = listener_enabled and len(raw_tokens) == 0
-
-    if should_enter_listener_mode:
-        print("Listener mode enabled. Waiting for Telegram commands and scheduler jobs...")
-        job_runner = JobRunner(config=config)
-        try:
-            run_listener_loop(config=config, job_runner=job_runner)
-        except KeyboardInterrupt:
-            print("\nListener interrupted by user. Exiting...")
-        return
 
     try:
         effective_disabled_steps = _resolve_disabled_steps(options, config)

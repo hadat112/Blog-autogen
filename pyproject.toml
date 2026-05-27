@@ -23,8 +23,8 @@ dependencies = [
     "python-multipart",
 ]
 
-[tool.setuptools]
-packages = ["core", "providers", "publishers", "utils"]
+[tool.setuptools.packages.find]
+include = ["adapters*", "application*", "apps*", "core*", "infrastructure*"]
 py-modules = ["main"]
 
 [project.scripts]

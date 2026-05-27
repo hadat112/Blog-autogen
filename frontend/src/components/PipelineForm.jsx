@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { getAccounts } from '../api/client';
 
 const PipelineForm = ({ pipeline, onClose, onSave }) => {
@@ -15,7 +15,6 @@ const PipelineForm = ({ pipeline, onClose, onSave }) => {
       gs: '',
       tg: ''
     },
-    schedule: '',
     is_active: true
   });
 
