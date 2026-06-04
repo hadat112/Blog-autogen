@@ -6,9 +6,9 @@ cd "$(dirname "$0")/.."
 echo "Building frontend..."
 cd frontend
 if [ ! -d "node_modules" ]; then
-  npm install
+  pnpm install --frozen-lockfile
 fi
-npm run build
+pnpm build
 cd ..
 
 echo "Creating Mac release..."

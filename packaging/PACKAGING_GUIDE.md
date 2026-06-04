@@ -9,14 +9,14 @@ Check versions:
 ```bash
 python3 --version
 node --version
-npm --version
+pnpm --version
 ```
 
 Required:
 
 - Python 3.9+
 - Node 20.19+ or 22.12+
-- npm
+- pnpm
 
 If you use `nvm`, run:
 

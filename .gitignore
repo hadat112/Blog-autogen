@@ -39,6 +39,8 @@ blog-autogen-runner
 temp/
 images/
 *.db
+.pnpm-store/
+release/
 
 # OS specific
 .DS_Store

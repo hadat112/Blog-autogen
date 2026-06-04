@@ -370,7 +370,7 @@ Frontend build:
 
 ```bash
 cd frontend
-npm run build
+pnpm build
 ```
 
 ---

@@ -28,7 +28,7 @@ sleep 2
 
 # Start Frontend (Vite)
 echo "Starting Frontend on http://localhost:5173..."
-cd frontend && npm run dev &
+cd frontend && pnpm dev &
 
 # Keep the script running
 wait

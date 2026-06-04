@@ -8,7 +8,7 @@ start cmd /k "set PYTHONPATH=. && uvicorn apps.api.main:app --host 0.0.0.0 --por
 timeout /t 2 /nobreak > nul
 
 :: Start Frontend in a separate window
-start cmd /k "cd frontend && npm run dev"
+start cmd /k "cd frontend && pnpm dev"
 
 echo Services are starting in separate windows.
 echo Backend: http://localhost:8000
