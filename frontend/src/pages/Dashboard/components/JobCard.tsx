@@ -45,7 +45,9 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
     && typeof log.detail === 'string'
     && log.detail.includes('Step 1: Extracting article from ')
   ));
-  const inputUrl = inputLog?.url || stepOneLog?.detail?.split('Step 1: Extracting article from ')[1]?.trim() || '';
+  const inputUrl = job.input_type === 'url'
+    ? job.input_text || ''
+    : inputLog?.url || stepOneLog?.detail?.split('Step 1: Extracting article from ')[1]?.trim() || '';
   const hasBeenRerun = Boolean(job.rerun_job_id || job.rerun_at);
 
   const handleCopy = async (event: React.MouseEvent) => {

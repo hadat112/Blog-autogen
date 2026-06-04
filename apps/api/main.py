@@ -14,6 +14,10 @@ if "settings" not in [column["name"] for column in inspect(engine).get_columns("
 
 job_columns = [column["name"] for column in inspect(engine).get_columns("jobs")]
 with engine.begin() as conn:
+    if "input_text" not in job_columns:
+        conn.execute(text("ALTER TABLE jobs ADD COLUMN input_text VARCHAR"))
+    if "input_type" not in job_columns:
+        conn.execute(text("ALTER TABLE jobs ADD COLUMN input_type VARCHAR"))
     if "rerun_at" not in job_columns:
         conn.execute(text("ALTER TABLE jobs ADD COLUMN rerun_at DATETIME"))
     if "rerun_job_id" not in job_columns:

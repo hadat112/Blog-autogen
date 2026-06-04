@@ -53,7 +53,9 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ job, onClose }) => {
     && typeof log.detail === 'string'
     && log.detail.includes('Step 1: Extracting article from ')
   ));
-  const inputUrl = inputLog?.url || stepOneLog?.detail?.split('Step 1: Extracting article from ')[1]?.trim() || '';
+  const inputUrl = job.input_type === 'url'
+    ? job.input_text || ''
+    : inputLog?.url || stepOneLog?.detail?.split('Step 1: Extracting article from ')[1]?.trim() || '';
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center p-0 sm:p-4">

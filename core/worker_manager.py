@@ -9,6 +9,9 @@ from infrastructure.db.session import SessionLocal
 
 logger = logging.getLogger(__name__)
 
+MAX_JOB_LOGS = 120
+
+
 class WorkerManager:
     _instance = None
 
@@ -33,22 +36,17 @@ class WorkerManager:
             raise ValueError(f"Pipeline {pipeline_id} not found")
 
         # 1. Setup Job record
-        initial_logs = []
-        if prompt:
-            initial_logs.append({
-                "timestamp": datetime.utcnow().isoformat(),
-                "step_name": "Input",
-                "detail": prompt,
-                "event": "input",
-                "url": prompt if isinstance(prompt, str) and prompt.startswith("http") else None,
-            })
+        input_text = prompt.strip() if isinstance(prompt, str) else None
+        input_type = "url" if input_text and input_text.startswith("http") else "prompt" if input_text else None
 
         job = Job(
             pipeline_id=pipeline_id,
+            input_text=input_text,
+            input_type=input_type,
             status="queued",
             start_time=datetime.utcnow(),
             progress=0,
-            logs=initial_logs
+            logs=[]
         )
         db.add(job)
         db.commit()
@@ -89,17 +87,24 @@ class WorkerManager:
                     db_job.current_step = step_name
                     db_job.progress = step_progress
 
-                    logs = list(db_job.logs or [])
-                    logs.append({
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "task_id": task_id,
-                        "step_index": step_index,
-                        "step_name": step_name,
-                        "progress": step_progress,
-                        "detail": detail,
-                        "event": "info" if "error" not in step_name.lower() else "failed"
-                    })
-                    db_job.logs = logs
+                    event = "failed" if "error" in step_name.lower() else "info"
+                    should_log = (
+                        event == "failed"
+                        or step_progress == 100
+                        or (detail and detail != "working" and ("success" in detail.lower() or "error" in detail.lower() or "failed" in detail.lower()))
+                    )
+                    if should_log:
+                        logs = list(db_job.logs or [])
+                        logs.append({
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "task_id": task_id,
+                            "step_index": step_index,
+                            "step_name": step_name,
+                            "progress": step_progress,
+                            "detail": "Step completed" if detail == "working" and step_progress == 100 else detail,
+                            "event": event
+                        })
+                        db_job.logs = logs[-MAX_JOB_LOGS:]
                     update_db.commit()
 
         # 4. Initialize Orchestrator
@@ -136,6 +141,8 @@ class WorkerManager:
         try:
             with SessionLocal() as db:
                 job = db.query(Job).filter(Job.id == job_id).first()
+                if not job or job.status == "cancelled":
+                    return
                 if job:
                     job.status = "running"
                     job.current_step = "Starting"
@@ -148,14 +155,21 @@ class WorkerManager:
                 else:
                     result = await asyncio.to_thread(orchestrator.process_prompt, prompt)
 
+                if self._is_job_cancelled(job_id):
+                    return
+
                 res_status = result.get("status", "info")
                 if res_status == "error":
                     final_status = "failed"
-
-                self._add_log_event(job_id, "Completed", f"Processed {pipeline_type}: {prompt[:50]}...", res_status)
+                    self._add_log_event(job_id, "Failed", result.get("error") or f"Processed {pipeline_type} failed.", "failed")
+                else:
+                    self._add_log_event(job_id, "Completed", f"Processed {pipeline_type}: {prompt[:50]}...", res_status)
             else:
                 # Full run from prompts file
                 results = await asyncio.to_thread(orchestrator.run, prompts_file)
+
+                if self._is_job_cancelled(job_id):
+                    return
 
                 # Check if all items failed
                 if results and all(r.get("status") == "error" for r in results):
@@ -163,11 +177,15 @@ class WorkerManager:
                 elif any(r.get("status") == "error" for r in results):
                     final_status = "partial_success"
 
-                self._add_log_event(job_id, "Completed", f"Processed batch. {len(results)} items handled.", final_status)
+                if final_status == "failed":
+                    first_error = next((r.get("error") for r in results if r.get("status") == "error" and r.get("error")), "")
+                    self._add_log_event(job_id, "Failed", first_error or f"Processed batch. {len(results)} items failed.", "failed")
+                else:
+                    self._add_log_event(job_id, "Completed", f"Processed batch. {len(results)} items handled.", final_status)
 
             with SessionLocal() as db:
                 job = db.query(Job).filter(Job.id == job_id).first()
-                if job:
+                if job and job.status != "cancelled":
                     job.status = final_status
                     job.progress = 100
                     job.end_time = datetime.utcnow()
@@ -177,7 +195,7 @@ class WorkerManager:
             self._add_log_event(job_id, "Critical Error", str(e), "failed")
             with SessionLocal() as db:
                 job = db.query(Job).filter(Job.id == job_id).first()
-                if job:
+                if job and job.status != "cancelled":
                     job.status = "failed"
                     job.end_time = datetime.utcnow()
                     db.commit()
@@ -208,16 +226,21 @@ class WorkerManager:
                     "detail": "Job was cancelled by user.",
                     "event": "cancelled"
                 })
-                job.logs = logs
+                job.logs = logs[-MAX_JOB_LOGS:]
                 job.status = "cancelled"
                 job.current_step = "Cancelled"
                 job.end_time = datetime.utcnow()
                 db.commit()
 
+    def _is_job_cancelled(self, job_id: str):
+        with SessionLocal() as db:
+            job = db.query(Job).filter(Job.id == job_id).first()
+            return bool(job and job.status == "cancelled")
+
     def _add_log_event(self, job_id: str, event_name: str, detail: str, status: str = "info"):
         with SessionLocal() as db:
             job = db.query(Job).filter(Job.id == job_id).first()
-            if job:
+            if job and (job.status != "cancelled" or status == "cancelled"):
                 logs = list(job.logs or [])
                 logs.append({
                     "timestamp": datetime.utcnow().isoformat(),
@@ -225,7 +248,7 @@ class WorkerManager:
                     "detail": detail,
                     "event": status
                 })
-                job.logs = logs
+                job.logs = logs[-MAX_JOB_LOGS:]
                 db.commit()
 
 worker_manager = WorkerManager()

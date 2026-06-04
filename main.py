@@ -1,9 +1,6 @@
 import os
 import sys
-import time
-import signal
 import logging
-from pathlib import Path
 
 from core.config_manager import ConfigManager
 from core.orchestrator import Orchestrator
@@ -13,52 +10,6 @@ from core.article_crawler import extract_article_from_url
 
 
 IMAGE_STEP_ID = "ai_image_generation"
-
-
-DEFAULT_PID_FILE = Path(".blog-agent.pid")
-
-
-def read_pid(pid_file: Path):
-    if not pid_file.exists():
-        return None
-    try:
-        return int(pid_file.read_text().strip())
-    except Exception:
-        return None
-
-
-def remove_pid_file(pid_file: Path):
-    if pid_file.exists():
-        pid_file.unlink()
-
-
-def _is_process_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-        return True
-    except PermissionError:
-        return True
-    except OSError:
-        return False
-
-
-def stop_daemon(pid_file: Path = DEFAULT_PID_FILE):
-    pid = read_pid(pid_file)
-    if pid is None:
-        return False
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
-        remove_pid_file(pid_file)
-        return False
-
-    for _ in range(25):
-        if not _is_process_alive(pid):
-            break
-        time.sleep(0.2)
-
-    remove_pid_file(pid_file)
-    return True
 
 
 def _normalize_disabled_steps(value):
@@ -115,26 +66,6 @@ def _resolve_disabled_steps(options, config: dict) -> list[str]:
 
 def main():
     raw_tokens = sys.argv[1:]
-
-    if raw_tokens and raw_tokens[0].strip().lower() in {"start", "stop", "restart"}:
-        action = raw_tokens[0].strip().lower()
-
-        pid_file = DEFAULT_PID_FILE
-        if len(raw_tokens) >= 3 and raw_tokens[1] == "--pid-file":
-            pid_file = Path(raw_tokens[2])
-
-        if action == "start":
-            print("Background agent has been removed. Run the CLI directly or use the web API.")
-            return
-
-        if action == "stop":
-            stopped = stop_daemon(pid_file=pid_file)
-            print("old background agent stopped" if stopped else "no old background agent found")
-            return
-
-        stopped = stop_daemon(pid_file=pid_file)
-        print("old background agent stopped; restart is no longer supported" if stopped else "restart is no longer supported")
-        return
 
     try:
         options = parse_run_tokens(raw_tokens)

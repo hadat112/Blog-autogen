@@ -77,3 +77,5 @@ def test_create_job(db):
     assert job.start_time is not None
     assert job.progress == 0
     assert job.logs == []
+    assert job.input_text is None
+    assert job.input_type is None

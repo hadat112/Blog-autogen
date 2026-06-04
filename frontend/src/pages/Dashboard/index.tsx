@@ -9,6 +9,8 @@ import { History, Activity } from 'lucide-react';
 import { Job } from '../../api/types';
 
 const getJobInput = (job: Job) => {
+  if (job.input_text?.trim()) return job.input_text.trim();
+
   const logs = Array.isArray(job.logs) ? job.logs : [];
   const inputLog = logs.find((log) => log.event === 'input' && log.detail);
   if (inputLog?.detail) return inputLog.detail;

@@ -50,6 +50,8 @@ async def run_pipeline(id: str, prompt_data: Optional[schemas.QuickRunInput] = N
     service = PipelineService(db)
     try:
         job_id = await service.start_pipeline_run(id, prompt_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -86,34 +86,3 @@ def test_main_update_mode_exits_after_saving_config(mock_exists, mock_config_cls
     mock_config_cls.return_value.run_onboarding.assert_called_once_with(update=True)
     mock_orch_cls.assert_not_called()
 
-
-@patch("main.stop_daemon")
-def test_main_start_does_not_start_background_agent(mock_stop_daemon, monkeypatch, capsys):
-    monkeypatch.setattr("sys.argv", ["main.py", "start"])
-
-    from main import main
-
-    main()
-
-    assert "removed" in capsys.readouterr().out
-    mock_stop_daemon.assert_not_called()
-
-
-@patch("main.os.kill")
-def test_stop_daemon_kills_old_pid_and_removes_file(mock_kill, tmp_path):
-    from main import stop_daemon
-
-    pid_file = tmp_path / "agent.pid"
-    pid_file.write_text("123")
-
-    with patch("main._is_process_alive", return_value=False):
-        assert stop_daemon(pid_file) is True
-
-    mock_kill.assert_called_once_with(123, 15)
-    assert not pid_file.exists()
-
-
-def test_stop_daemon_returns_false_when_pid_missing(tmp_path):
-    from main import stop_daemon
-
-    assert stop_daemon(tmp_path / "missing.pid") is False

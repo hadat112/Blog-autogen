@@ -65,6 +65,8 @@ def test_run_pipeline_success(client, db_session):
     job = db_session.query(models.Job).filter(models.Job.id == job_id).first()
     assert job is not None
     assert job.pipeline_id == "test-pipeline"
+    assert job.input_text == "Hello world"
+    assert job.input_type == "prompt"
 
 def test_list_jobs(client, db_session):
     response = client.get("/jobs")
@@ -97,14 +99,9 @@ def test_rerun_failed_job_marks_original(client, db_session, monkeypatch):
         id="failed-job",
         pipeline_id="rerun-pipeline",
         status="failed",
-        logs=[
-            {
-                "event": "input",
-                "step_name": "Input",
-                "detail": "https://example.com/story",
-                "url": "https://example.com/story",
-            }
-        ],
+        input_text="https://example.com/story",
+        input_type="url",
+        logs=[],
     )
     db_session.add(pipeline)
     db_session.add(job)

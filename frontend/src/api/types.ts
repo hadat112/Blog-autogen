@@ -39,6 +39,8 @@ export interface Job {
   id: string;
   pipeline_id: string;
   pipeline_name?: string;
+  input_text?: string | null;
+  input_type?: "url" | "prompt" | null;
   status: "queued" | "pending" | "running" | "success" | "partial_success" | "failed" | "cancelled";
   current_step?: string;
   progress: number;

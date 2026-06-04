@@ -44,6 +44,8 @@ class QuickRunInput(BaseModel):
 class JobBase(BaseModel):
     pipeline_id: str
     pipeline_name: Optional[str] = None
+    input_text: Optional[str] = None
+    input_type: Optional[str] = None
     status: str
     current_step: Optional[str] = None
     progress: int = 0

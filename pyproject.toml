@@ -10,12 +10,10 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "requests",
-    "httpx",
     "pyyaml",
     "questionary",
     "gspread",
     "google-auth",
-    "python-telegram-bot",
     "tqdm",
     "sqlalchemy",
     "fastapi",
