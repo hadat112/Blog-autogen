@@ -26,6 +26,11 @@ const PipelineCard: React.FC<PipelineCardProps> = ({ pipeline, onEdit, onDelete 
             <span className="text-xs text-content-tertiary">
               Steps: {Object.values(pipeline.step_accounts).filter(v => v).length} configured
             </span>
+            {pipeline.settings?.wp_category_id && (
+              <span className="text-xs text-content-tertiary">
+                WP category: {pipeline.settings.wp_category_id}
+              </span>
+            )}
           </div>
         </div>
       </div>

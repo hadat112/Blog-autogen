@@ -22,6 +22,8 @@ class PipelineBase(BaseModel):
     type: str
     language: str
     step_accounts: Dict[str, str]
+    settings: Dict[str, Any] = Field(default_factory=dict)
+    wp_category_id: Optional[str] = None
     is_active: bool = True
 
 class PipelineCreate(PipelineBase):
@@ -37,6 +39,7 @@ class PipelineResponse(PipelineBase):
 class QuickRunInput(BaseModel):
     prompts_file: Optional[str] = None
     prompt: Optional[str] = None
+    rerun_from_job_id: Optional[str] = None
 
 class JobBase(BaseModel):
     pipeline_id: str
@@ -45,6 +48,8 @@ class JobBase(BaseModel):
     current_step: Optional[str] = None
     progress: int = 0
     logs: List[Any] = Field(default_factory=list)
+    rerun_at: Optional[datetime] = None
+    rerun_job_id: Optional[str] = None
 
 class JobCreate(JobBase):
     pass

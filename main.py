@@ -92,6 +92,10 @@ def _language_name_from_code(language_code: str) -> str:
         return "English"
     if language_code == "vi":
         return "Vietnamese"
+    if language_code == "lt":
+        return "Lithuanian"
+    if language_code == "et":
+        return "Estonian"
     return language_code
 
 

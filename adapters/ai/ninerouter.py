@@ -23,13 +23,44 @@ AI_MAX_ATTEMPTS = 2
 CHUNKED_ARTICLE_THRESHOLD = 8000
 TRANSLATION_CHUNK_SIZE = 2500
 TRANSLATION_CONTEXT_PARAGRAPHS = 1
-
-
+TRANSLATION_REFUSAL_RE = re.compile(
+    r"\b("
+    r"i\s+(?:am\s+)?sorry|"
+    r"i\s+can(?:not|'t)|"
+    r"i'?m\s+unable|"
+    r"copyright|"
+    r"policy|"
+    r"cannot\s+provide"
+    r")\b",
+    re.IGNORECASE,
+)
+TRANSLATION_PREFIX_RE = re.compile(
+    r"^\s*(?:"
+    r"(?:sure|certainly|of course)[,!.:\s-]+|"
+    r"(?:here(?:'s| is)?\s+(?:the\s+)?(?:translation|translated text)[.:]\s*)|"
+    r"(?:(?:translation|translated text|bản dịch)\s*:)\s*"
+    r")",
+    re.IGNORECASE,
+)
 def _build_styled_image_prompt(image_prompt: str) -> str:
     base_prompt = (image_prompt or "").strip()
     if base_prompt:
         return f"{base_prompt}\n\n{CINEMATIC_NATURALISM_STYLE_PROMPT}"
     return CINEMATIC_NATURALISM_STYLE_PROMPT
+
+
+def _clean_translation_output(text: str) -> str:
+    cleaned = (text or "").strip()
+    fenced = re.fullmatch(r"```(?:\w+)?\s*(.*?)\s*```", cleaned, re.DOTALL)
+    if fenced:
+        cleaned = fenced.group(1).strip()
+
+    previous = None
+    while previous != cleaned:
+        previous = cleaned
+        cleaned = TRANSLATION_PREFIX_RE.sub("", cleaned).strip()
+
+    return cleaned
 
 
 def _escape_newlines_inside_json_strings(text: str) -> str:
@@ -415,15 +446,19 @@ class NineRouterAI(BaseAI):
             raise last_error
         raise requests.HTTPError(f"AI request failed after {AI_MAX_ATTEMPTS} attempts: {last_error}")
 
-    def _chat_text(self, prompt: str) -> str:
+    def _chat_text(self, prompt: str, system_prompt: str = None) -> str:
         url = f"{self.base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
         data = {
             "model": self.text_model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "stream": False
         }
 
@@ -448,19 +483,43 @@ class NineRouterAI(BaseAI):
             )
 
         context_block = "\n\n".join(context_lines)
-        prompt = (
-            f"Translate the current article text into {language}.\n\n"
-            "Rules:\n"
-            "- Preserve every event, fact, name, relationship, number, date, and chronology.\n"
-            "- Keep the same narrator point of view, tense, emotional tone, and suspenseful story style.\n"
-            "- Translate relationship words naturally for the target language, but keep them consistent.\n"
-            "- Do not summarize, expand, omit, reorder, explain, or rewrite the story.\n"
-            "- Preserve paragraph breaks.\n"
-            "- Return only the translated current text.\n\n"
-            f"{context_block}\n\n"
-            f"Current text to translate:\n{text}"
+        system_prompt = (
+            "You are a strict professional translation engine. The user is providing text they want translated. "
+            "Your only job is to translate 100% of the source text into the requested target language. "
+            "Do not provide copyright warnings, refusal text, policy notes, summaries, explanations, labels, "
+            "introductions, markdown fences, or closing comments. Never leave ordinary source-language sentences "
+            "or paragraphs untranslated. Output only the translated text."
         )
-        return self._chat_text(prompt)
+        prompt = (
+            f"Target language: {language}\n\n"
+            "Task: translate all text inside <source_text> into the target language.\n\n"
+            "Hard output rules:\n"
+            "- Output only the translated text, with no prefix and no suffix.\n"
+            "- Every sentence and paragraph from <source_text> must be translated into the target language.\n"
+            "- Do not leave any ordinary source-language sentence unchanged.\n"
+            "- Keep only proper nouns, brand names, URLs, code, numbers, and quoted names unchanged when appropriate.\n"
+            "- Do not mention copyright, policies, permissions, limitations, or inability to comply.\n"
+            "- Do not add labels such as 'Translation:' or 'Here is the translation'.\n"
+            "- Do not summarize, expand, omit, reorder, explain, sanitize, or rewrite the story.\n"
+            "- If the source text is a title or headline, translate that title directly; do not make it catchier, shorter, longer, or different.\n"
+            "- Preserve every event, fact, name, relationship, number, date, chronology, point of view, tense, and tone.\n"
+            "- Keep the translated output as close as naturally possible to the source length and sentence-by-sentence structure.\n"
+            "- Preserve paragraph breaks.\n"
+            "- Translate relationship words naturally for the target language, but keep them consistent.\n\n"
+            "Before finalizing, internally verify that no full source sentence remains untranslated. "
+            "Do not output this verification.\n\n"
+            f"{context_block}\n\n"
+            f"<source_text>\n{text}\n</source_text>"
+        )
+        translated = self._chat_text(prompt, system_prompt=system_prompt)
+        if TRANSLATION_REFUSAL_RE.search(translated):
+            retry_prompt = (
+                f"Translate the text inside <source_text> into {language}. "
+                "Return only the translation. No labels, no commentary, no copyright or policy text.\n\n"
+                f"<source_text>\n{text}\n</source_text>"
+            )
+            translated = self._chat_text(retry_prompt, system_prompt=system_prompt)
+        return _clean_translation_output(translated)
 
     def _extract_article_chunked(self, clean_html: str, article_url: str, language: str) -> dict:
         fields = _extract_article_fields_locally(clean_html)

@@ -30,3 +30,13 @@ def sync_job_status(id: str, db: Session = Depends(get_db)):
     if result is None:
         raise HTTPException(status_code=404, detail="Job not found")
     return result
+
+
+@router.post("/jobs/{id}/cancel")
+async def cancel_job(id: str, db: Session = Depends(get_db)):
+    result = await JobService(db).cancel_job(id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if result.get("status") == "not_cancelled":
+        raise HTTPException(status_code=400, detail=f"Job is already {result.get('current_status')}")
+    return result

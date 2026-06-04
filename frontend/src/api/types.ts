@@ -3,7 +3,6 @@ export interface AccountConfig {
   username?: string;
   password?: string;
   app_password?: string;
-  category_id?: string;
   api_key?: string;
   base_url?: string;
   text_model?: string;
@@ -26,18 +25,32 @@ export interface Account {
 export interface Pipeline {
   id: string;
   name: string;
+  type: string;
   language: string;
   step_accounts: Record<string, string>;
+  settings: {
+    wp_category_id?: string;
+  };
+  wp_category_id?: string;
+  is_active: boolean;
 }
 
 export interface Job {
   id: string;
   pipeline_id: string;
-  status: "pending" | "running" | "success" | "failed";
+  pipeline_name?: string;
+  status: "queued" | "pending" | "running" | "success" | "partial_success" | "failed" | "cancelled";
+  current_step?: string;
+  progress: number;
+  logs?: any[];
+  start_time: string;
+  end_time?: string | null;
+  rerun_at?: string | null;
+  rerun_job_id?: string | null;
   title?: string;
   url?: string;
   error?: string;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
   outputs?: Record<string, any>;
 }

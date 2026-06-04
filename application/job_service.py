@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from core.worker_manager import worker_manager
 from infrastructure.db import models
 
 
@@ -48,3 +49,6 @@ class JobService:
                     return {"status": "updated", "new_status": "success"}
 
         return {"status": "checked", "current_status": job.status}
+
+    async def cancel_job(self, job_id: str):
+        return await worker_manager.cancel_job(job_id)

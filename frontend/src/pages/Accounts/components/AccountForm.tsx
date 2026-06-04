@@ -1,6 +1,6 @@
-import { CheckCircle, RefreshCw, Search, X, XCircle } from "lucide-react";
+import { CheckCircle, RefreshCw, X, XCircle } from "lucide-react";
 import React, { useEffect, useState } from "react";
-import { getWPCategories, testAccount } from "../../../api/client";
+import { testAccount } from "../../../api/client";
 import { Account, AccountConfig } from "../../../api/types";
 import { Button } from "../../../components/ui/Button";
 import {
@@ -35,8 +35,6 @@ const AccountForm: React.FC<AccountFormProps> = ({
     success: boolean;
     message: string;
   } | null>(null);
-  const [categories, setCategories] = useState<any[]>([]);
-  const [fetchingCats, setFetchingCats] = useState(false);
 
   useEffect(() => {
     if (account) {
@@ -69,22 +67,6 @@ const AccountForm: React.FC<AccountFormProps> = ({
       });
     } finally {
       setTesting(false);
-    }
-  };
-
-  const handleFetchCategories = async () => {
-    if (!formData.config?.url) return;
-    setFetchingCats(true);
-    try {
-      const { data } = await getWPCategories(formData.config as AccountConfig);
-      setCategories(data);
-    } catch (error: any) {
-      alert(
-        "Failed to fetch categories: " +
-          (error.response?.data?.detail || error.message),
-      );
-    } finally {
-      setFetchingCats(false);
     }
   };
 
@@ -136,53 +118,6 @@ const AccountForm: React.FC<AccountFormProps> = ({
                 value={formData.config?.password || ""}
                 onChange={(e) => handleConfigChange("password", e.target.value)}
               />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-content-primary">
-                Default Category
-              </label>
-              <div className="flex space-x-2">
-                {categories.length > 0 ? (
-                  <Select
-                    className="flex-1"
-                    value={formData.config?.category_id || ""}
-                    onChange={(e) =>
-                      handleConfigChange("category_id" as any, e.target.value)
-                    }
-                  >
-                    <option value="">-- Use Default --</option>
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name} ({cat.count})
-                      </option>
-                    ))}
-                  </Select>
-                ) : (
-                  <Input
-                    type="number"
-                    className="flex-1"
-                    value={formData.config?.category_id || ""}
-                    onChange={(e) =>
-                      handleConfigChange("category_id" as any, e.target.value)
-                    }
-                    placeholder="e.g. 1"
-                  />
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={handleFetchCategories}
-                  disabled={fetchingCats || !formData.config?.url}
-                  title="Fetch Categories from site"
-                >
-                  {fetchingCats ? (
-                    <RefreshCw size={16} className="animate-spin" />
-                  ) : (
-                    <Search size={16} />
-                  )}
-                </Button>
-              </div>
             </div>
           </>
         );

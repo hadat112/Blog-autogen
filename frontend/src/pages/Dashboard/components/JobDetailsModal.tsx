@@ -40,6 +40,7 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ job, onClose }) => {
     switch (status) {
       case 'success': return 'text-status-success bg-status-success/10 border-status-success/20';
       case 'failed': return 'text-status-danger bg-status-danger/10 border-status-danger/20';
+      case 'cancelled': return 'text-orange-700 bg-orange-100 border-orange-200';
       default: return 'text-accent bg-accent/10 border-accent/20';
     }
   };
@@ -150,7 +151,7 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ job, onClose }) => {
               <p className="text-xs font-bold text-content-tertiary uppercase mb-1">Active Step</p>
               <div className="flex items-center space-x-2 text-content-secondary">
                 {job.status === 'running' && <Loader2 size={16} className="animate-spin text-accent" />}
-                <span className="font-semibold">{job.current_step || (job.status === 'success' ? 'Finished' : 'None')}</span>
+                <span className="font-semibold">{job.current_step || (job.status === 'queued' ? 'Queued' : job.status === 'success' ? 'Finished' : job.status === 'cancelled' ? 'Cancelled' : 'None')}</span>
               </div>
             </div>
           </div>

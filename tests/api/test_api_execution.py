@@ -81,3 +81,67 @@ def test_get_job_status(client, db_session):
     assert response.status_code == 200
     assert response.json()["id"] == "test-job"
     assert response.json()["status"] == "running"
+
+def test_rerun_failed_job_marks_original(client, db_session, monkeypatch):
+    from application import pipeline_service
+    from infrastructure.db import models
+
+    pipeline = models.Pipeline(
+        id="rerun-pipeline",
+        name="Rerun Pipeline",
+        type="crawl",
+        language="en",
+        step_accounts={},
+    )
+    job = models.Job(
+        id="failed-job",
+        pipeline_id="rerun-pipeline",
+        status="failed",
+        logs=[
+            {
+                "event": "input",
+                "step_name": "Input",
+                "detail": "https://example.com/story",
+                "url": "https://example.com/story",
+            }
+        ],
+    )
+    db_session.add(pipeline)
+    db_session.add(job)
+    db_session.commit()
+
+    async def fake_start_pipeline_run(pipeline_id, db, prompts_file="prompts.txt", prompt=None):
+        assert pipeline_id == "rerun-pipeline"
+        assert prompt == "https://example.com/story"
+        return "new-rerun-job"
+
+    monkeypatch.setattr(pipeline_service.worker_manager, "start_pipeline_run", fake_start_pipeline_run)
+
+    response = client.post(
+        "/pipelines/rerun-pipeline/run",
+        json={
+            "prompt": "https://example.com/story",
+            "rerun_from_job_id": "failed-job",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"job_id": "new-rerun-job", "status": "queued"}
+
+    db_session.refresh(job)
+    assert job.rerun_job_id == "new-rerun-job"
+    assert job.rerun_at is not None
+
+def test_cancel_running_job(client, monkeypatch):
+    from application import job_service
+
+    async def fake_cancel_job(job_id):
+        assert job_id == "running-job"
+        return {"status": "cancelled"}
+
+    monkeypatch.setattr(job_service.worker_manager, "cancel_job", fake_cancel_job)
+
+    response = client.post("/jobs/running-job/cancel")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "cancelled"}

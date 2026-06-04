@@ -49,7 +49,7 @@ async def test_worker_manager_pipeline_run(db, mocker):
     # 3. Verify Job creation and status
     job = db.query(Job).filter(Job.id == job_id).first()
     assert job is not None
-    assert job.status in ["success", "running"]
+    assert job.status in ["success", "running", "queued"]
 
     # Let's wait a bit longer for the background task to finish
     for _ in range(20): # increased to 2 seconds
@@ -62,3 +62,39 @@ async def test_worker_manager_pipeline_run(db, mocker):
     assert job.progress == 100
 
     assert mock_instance.run.called
+    assert mock_orchestrator.call_args.kwargs["num_threads"] == 1
+
+@pytest.mark.anyio
+async def test_worker_manager_uses_pipeline_wp_category(db, mocker):
+    mocker.patch("core.worker_manager.SessionLocal", TestingSessionLocal)
+
+    wp_account = Account(
+        name="Test WP",
+        type="wp",
+        config={
+            "url": "https://wp.example.com",
+            "username": "user",
+            "password": "pass",
+            "category_id": "old-account-category",
+        },
+    )
+    db.add(wp_account)
+    db.commit()
+
+    pipeline = Pipeline(
+        name="Test Pipeline",
+        type="story",
+        step_accounts={"wp": wp_account.id},
+        settings={"wp_category_id": "new-pipeline-category"},
+    )
+    db.add(pipeline)
+    db.commit()
+
+    mock_orchestrator = mocker.patch("core.worker_manager.Orchestrator")
+    mock_orchestrator.return_value.run.return_value = [{"status": "success"}]
+
+    wm = WorkerManager()
+    await wm.start_pipeline_run(pipeline.id, db)
+
+    wp_config = mock_orchestrator.call_args.kwargs["wp_config"]
+    assert wp_config["category_id"] == "new-pipeline-category"

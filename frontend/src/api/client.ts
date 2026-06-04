@@ -21,5 +21,6 @@ export const runPipeline = (id: string, data: any) => client.post<{ job_id: stri
 export const getJobs = () => client.get<Job[]>('/jobs');
 export const getJob = (id: string) => client.get<Job>(`/jobs/${id}`);
 export const syncJob = (id: string) => client.post(`/jobs/${id}/sync`);
+export const cancelJob = (id: string) => client.post<{ status: string }>(`/jobs/${id}/cancel`);
 
 export default client;

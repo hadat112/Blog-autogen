@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getJobs } from '../../api/client';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { cancelJob, getJobs, runPipeline } from '../../api/client';
 import QuickRun from './components/QuickRun';
 import JobCard from './components/JobCard';
 import JobDetailsModal from './components/JobDetailsModal';
@@ -8,8 +8,25 @@ import DashboardSkeleton from './components/DashboardSkeleton';
 import { History, Activity } from 'lucide-react';
 import { Job } from '../../api/types';
 
+const getJobInput = (job: Job) => {
+  const logs = Array.isArray(job.logs) ? job.logs : [];
+  const inputLog = logs.find((log) => log.event === 'input' && log.detail);
+  if (inputLog?.detail) return inputLog.detail;
+
+  const prefix = 'Step 1: Extracting article from ';
+  const stepOneLog = logs.find((log) => (
+    log.step_name === 'Extract article from URL'
+    && typeof log.detail === 'string'
+    && log.detail.includes(prefix)
+  ));
+
+  return stepOneLog?.detail?.split(prefix)[1]?.trim() || '';
+};
+
 const Dashboard = () => {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [rerunningJobId, setRerunningJobId] = useState<string | null>(null);
+  const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
 
   const { data: jobs = [], isLoading, refetch } = useQuery({
     queryKey: ['jobs'],
@@ -20,8 +37,37 @@ const Dashboard = () => {
     refetchInterval: 3000, // Poll every 3 seconds
   });
 
-  const runningJobs = jobs.filter(j => j.status === 'running');
-  const pastJobs = jobs.filter(j => j.status !== 'running').slice(0, 10);
+  const rerunMutation = useMutation({
+    mutationFn: (job: Job) => {
+      const prompt = getJobInput(job);
+      if (!prompt) {
+        throw new Error('Job input was not found in logs');
+      }
+      return runPipeline(job.pipeline_id, {
+        prompt,
+        rerun_from_job_id: job.id,
+      });
+    },
+    onMutate: (job) => setRerunningJobId(job.id),
+    onSuccess: () => refetch(),
+    onError: (error: any) => {
+      alert('Failed to rerun job: ' + (error.response?.data?.detail || error.message));
+    },
+    onSettled: () => setRerunningJobId(null),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (jobId: string) => cancelJob(jobId),
+    onMutate: (jobId) => setCancellingJobId(jobId),
+    onSuccess: () => refetch(),
+    onError: (error: any) => {
+      alert('Failed to cancel job: ' + (error.response?.data?.detail || error.message));
+    },
+    onSettled: () => setCancellingJobId(null),
+  });
+
+  const runningJobs = jobs.filter(j => j.status === 'running' || j.status === 'queued');
+  const pastJobs = jobs.filter(j => j.status !== 'running' && j.status !== 'queued').slice(0, 10);
   const selectedJob = jobs.find(j => j.id === selectedJobId);
 
   if (isLoading && jobs.length === 0) {
@@ -44,7 +90,15 @@ const Dashboard = () => {
             </div>
           ) : (
             runningJobs.map(job => (
-              <JobCard key={job.id} job={job as any} onClick={() => setSelectedJobId(job.id)} />
+              <JobCard
+                key={job.id}
+                job={job as any}
+                onClick={() => setSelectedJobId(job.id)}
+                onRerun={() => rerunMutation.mutate(job)}
+                isRerunning={rerunningJobId === job.id}
+                onCancel={() => cancelMutation.mutate(job.id)}
+                isCancelling={cancellingJobId === job.id}
+              />
             ))
           )}
         </div>
@@ -62,7 +116,15 @@ const Dashboard = () => {
             </div>
           ) : (
             pastJobs.map(job => (
-              <JobCard key={job.id} job={job as any} onClick={() => setSelectedJobId(job.id)} />
+              <JobCard
+                key={job.id}
+                job={job as any}
+                onClick={() => setSelectedJobId(job.id)}
+                onRerun={() => rerunMutation.mutate(job)}
+                isRerunning={rerunningJobId === job.id}
+                onCancel={() => cancelMutation.mutate(job.id)}
+                isCancelling={cancellingJobId === job.id}
+              />
             ))
           )}
         </div>

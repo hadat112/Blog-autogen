@@ -21,8 +21,15 @@ class Pipeline(Base):
     type = Column(String, nullable=False)
     language = Column(String, default="uk")
     step_accounts = Column(JSON, nullable=False)
+    settings = Column(JSON, default=dict)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    @property
+    def wp_category_id(self):
+        if not isinstance(self.settings, dict):
+            return None
+        return self.settings.get("wp_category_id")
 
 class Job(Base):
     __tablename__ = "jobs"
@@ -34,3 +41,5 @@ class Job(Base):
     current_step = Column(String, nullable=True)
     progress = Column(Integer, default=0)
     logs = Column(JSON, default=[])
+    rerun_at = Column(DateTime, nullable=True)
+    rerun_job_id = Column(String, nullable=True)

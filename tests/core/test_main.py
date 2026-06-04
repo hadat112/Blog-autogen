@@ -10,8 +10,14 @@ def test_normalize_language_full_names_and_codes():
     assert normalize_language("ukraina") == "uk"
     assert normalize_language("ukrainian") == "uk"
     assert normalize_language("english") == "en"
+    assert normalize_language("litva") == "lt"
+    assert normalize_language("lithuanian") == "lt"
+    assert normalize_language("estonia") == "et"
+    assert normalize_language("estonian") == "et"
     assert normalize_language("uk") == "uk"
     assert normalize_language("en") == "en"
+    assert normalize_language("lt") == "lt"
+    assert normalize_language("et") == "et"
 
 
 def test_normalize_language_rejects_unknown_language():

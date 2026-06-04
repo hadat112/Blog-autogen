@@ -44,7 +44,17 @@ const Pipelines = () => {
         return createPipeline(formData);
       }
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
+      const savedPipeline = response.data;
+      queryClient.setQueryData<Pipeline[]>(["pipelines"], (current = []) => {
+        const exists = current.some((pipeline) => pipeline.id === savedPipeline.id);
+        if (exists) {
+          return current.map((pipeline) =>
+            pipeline.id === savedPipeline.id ? savedPipeline : pipeline,
+          );
+        }
+        return [...current, savedPipeline];
+      });
       queryClient.invalidateQueries({ queryKey: ["pipelines"] });
       setShowForm(false);
       setEditingPipeline(null);

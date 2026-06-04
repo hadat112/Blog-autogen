@@ -44,7 +44,8 @@ def test_create_pipeline(db):
         "name": "Test Pipeline",
         "type": "story",
         "language": "en",
-        "step_accounts": {"step1": "account1"}
+        "step_accounts": {"step1": "account1"},
+        "settings": {"wp_category_id": "7"}
     }
     pipeline = Pipeline(**pipeline_data)
     db.add(pipeline)
@@ -56,6 +57,7 @@ def test_create_pipeline(db):
     assert pipeline.type == "story"
     assert pipeline.language == "en"
     assert pipeline.step_accounts == {"step1": "account1"}
+    assert pipeline.settings == {"wp_category_id": "7"}
     assert pipeline.is_active is True
 
 def test_create_job(db):

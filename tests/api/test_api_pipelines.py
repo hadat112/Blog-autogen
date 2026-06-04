@@ -46,6 +46,7 @@ def test_create_pipeline():
             "ai": "ai_account_id",
             "wp": "wp_account_id"
         },
+        "settings": {"wp_category_id": "12"},
         "is_active": True
     }
     response = client.post("/pipelines", json=pipeline_data)
@@ -54,6 +55,8 @@ def test_create_pipeline():
     assert data["name"] == "Test Pipeline"
     assert "id" in data
     assert data["step_accounts"]["ai"] == "ai_account_id"
+    assert data["settings"]["wp_category_id"] == "12"
+    assert data["wp_category_id"] == "12"
 
 def test_get_pipeline():
     # First create one
@@ -86,13 +89,30 @@ def test_update_pipeline():
         "type": "story",
         "language": "en",
         "step_accounts": {"ai": "y"},
+        "settings": {"wp_category_id": "34"},
         "is_active": False
     }
     response = client.put(f"/pipelines/{pipeline_id}", json=update_data)
     assert response.status_code == 200
     assert response.json()["name"] == "New Name"
     assert response.json()["language"] == "en"
+    assert response.json()["settings"]["wp_category_id"] == "34"
+    assert response.json()["wp_category_id"] == "34"
     assert response.json()["is_active"] is False
+
+def test_create_pipeline_accepts_top_level_wp_category_id():
+    pipeline_data = {
+        "name": "Top Level Category",
+        "type": "story",
+        "language": "uk",
+        "step_accounts": {"wp": "wp_account_id"},
+        "wp_category_id": "99"
+    }
+    response = client.post("/pipelines", json=pipeline_data)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["wp_category_id"] == "99"
+    assert data["settings"]["wp_category_id"] == "99"
 
 def test_delete_pipeline():
     # First create one

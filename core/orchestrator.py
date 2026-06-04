@@ -138,6 +138,10 @@ class Orchestrator:
             return "Italian"
         if lang == "pl":
             return "Polish"
+        if lang == "lt":
+            return "Lithuanian"
+        if lang == "et":
+            return "Estonian"
         return self.language
 
     def prompt_language_hint(self):

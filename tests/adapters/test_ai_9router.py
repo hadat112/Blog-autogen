@@ -338,10 +338,18 @@ def test_translate_article_fields_returns_standard_article_payload():
     }
     assert len(responses.calls) == 2
     first_payload = json.loads(responses.calls[0].request.body.decode("utf-8"))
-    first_prompt = first_payload["messages"][0]["content"]
-    assert "Translate the current article text into Italian" in first_prompt
+    assert first_payload["messages"][0]["role"] == "system"
+    assert "professional translation engine" in first_payload["messages"][0]["content"]
+    first_prompt = first_payload["messages"][1]["content"]
+    assert "Target language: Italian" in first_prompt
+    assert "<source_text>" in first_prompt
+    assert "Every sentence and paragraph" in first_prompt
+    assert "Do not leave any ordinary source-language sentence unchanged" in first_prompt
     assert "Preserve every event, fact, name, relationship" in first_prompt
     assert "Do not summarize, expand, omit, reorder" in first_prompt
+    assert "If the source text is a title or headline" in first_prompt
+    assert "source length and sentence-by-sentence structure" in first_prompt
+    assert "Do not mention copyright" in first_prompt
 
 
 @responses.activate
@@ -372,7 +380,57 @@ def test_translate_article_fields_includes_previous_source_context_for_later_chu
 
     assert article["content"] == "Translated first chunk\n\nTranslated second chunk"
     second_payload = json.loads(responses.calls[2].request.body.decode("utf-8"))
-    second_prompt = second_payload["messages"][0]["content"]
+    second_prompt = second_payload["messages"][1]["content"]
     assert "Previous source context for continuity only" in second_prompt
     assert "First paragraph" in second_prompt
     assert "Second paragraph with follow-up context." in second_prompt
+
+
+@responses.activate
+def test_translate_article_fields_cleans_extra_translation_prefix():
+    ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1")
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json={"choices": [{"message": {"content": "Translation: Titolo tradotto"}}]},
+        status=200,
+    )
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json={"choices": [{"message": {"content": "Here is the translation: Paragrafo tradotto"}}]},
+        status=200,
+    )
+
+    article = ai.translate_article_fields("Source title", "Source paragraph", language="Italian")
+
+    assert article["title"] == "Titolo tradotto"
+    assert article["content"] == "Paragrafo tradotto"
+
+
+@responses.activate
+def test_translate_article_fields_retries_copyright_refusal():
+    ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1")
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json={"choices": [{"message": {"content": "Translated title"}}]},
+        status=200,
+    )
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json={"choices": [{"message": {"content": "I'm sorry, but I can't provide copyrighted text."}}]},
+        status=200,
+    )
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json={"choices": [{"message": {"content": "Translated paragraph"}}]},
+        status=200,
+    )
+
+    article = ai.translate_article_fields("Source title", "Source paragraph", language="Italian")
+
+    assert article["content"] == "Translated paragraph"
+    assert len(responses.calls) == 3

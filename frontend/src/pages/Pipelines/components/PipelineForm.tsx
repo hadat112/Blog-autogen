@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { RefreshCw, Search, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { getAccounts } from '../../../api/client';
-import { Pipeline } from '../../../api/types';
+import { getAccounts, getWPCategories } from '../../../api/client';
+import { Account, Pipeline } from '../../../api/types';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
@@ -14,18 +14,25 @@ interface PipelineFormProps {
   onSave: (formData: Partial<Pipeline>) => void;
 }
 
+const defaultFormData: Partial<Pipeline> = {
+  name: '',
+  type: 'story',
+  language: 'uk',
+  step_accounts: {
+    ai: '',
+    wp: '',
+    fb: '',
+    gs: '',
+    tg: ''
+  },
+  settings: {},
+  is_active: true
+};
+
 const PipelineForm: React.FC<PipelineFormProps> = ({ pipeline, onClose, onSave }) => {
-  const [formData, setFormData] = useState<Partial<Pipeline>>({
-    name: '',
-    language: 'uk',
-    step_accounts: {
-      ai: '',
-      wp: '',
-      fb: '',
-      gs: '',
-      tg: ''
-    }
-  });
+  const [formData, setFormData] = useState<Partial<Pipeline>>(defaultFormData);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [fetchingCats, setFetchingCats] = useState(false);
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
@@ -37,8 +44,25 @@ const PipelineForm: React.FC<PipelineFormProps> = ({ pipeline, onClose, onSave }
 
   useEffect(() => {
     if (pipeline) {
-      setFormData(pipeline);
+      const wpCategoryId =
+        pipeline.wp_category_id || pipeline.settings?.wp_category_id || '';
+      setFormData({
+        ...defaultFormData,
+        ...pipeline,
+        step_accounts: {
+          ...(defaultFormData.step_accounts || {}),
+          ...(pipeline.step_accounts || {})
+        },
+        settings: {
+          ...(pipeline.settings || {}),
+          wp_category_id: wpCategoryId
+        },
+        wp_category_id: wpCategoryId
+      });
+    } else {
+      setFormData(defaultFormData);
     }
+    setCategories([]);
   }, [pipeline]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -52,8 +76,56 @@ const PipelineForm: React.FC<PipelineFormProps> = ({ pipeline, onClose, onSave }
       step_accounts: {
         ...(formData.step_accounts || {}),
         [step]: accId
-      }
+      },
+      settings: step === 'wp' ? {
+        ...(formData.settings || {}),
+        wp_category_id: ''
+      } : formData.settings
     });
+    if (step === 'wp') {
+      setCategories([]);
+    }
+  };
+
+  const handleSettingChange = (key: string, value: string) => {
+    setFormData({
+      ...formData,
+      settings: {
+        ...(formData.settings || {}),
+        [key]: value
+      },
+      ...(key === 'wp_category_id' ? { wp_category_id: value } : {})
+    });
+  };
+
+  const selectedWpAccount = accounts.find(
+    (account: Account) => account.id === formData.step_accounts?.wp
+  );
+
+  const fetchCategoriesForAccount = async (account: Account) => {
+    setFetchingCats(true);
+    try {
+      const { data } = await getWPCategories(account.config);
+      setCategories(data);
+    } catch (error: any) {
+      alert(
+        'Failed to fetch categories: ' +
+          (error.response?.data?.detail || error.message),
+      );
+    } finally {
+      setFetchingCats(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedWpAccount || categories.length > 0 || fetchingCats) return;
+    if (!formData.settings?.wp_category_id) return;
+    fetchCategoriesForAccount(selectedWpAccount);
+  }, [selectedWpAccount, formData.settings?.wp_category_id]);
+
+  const handleFetchCategories = async () => {
+    if (!selectedWpAccount) return;
+    await fetchCategoriesForAccount(selectedWpAccount);
   };
 
   return (
@@ -94,6 +166,8 @@ const PipelineForm: React.FC<PipelineFormProps> = ({ pipeline, onClose, onSave }
                   <option value="ro">Romanian</option>
                   <option value="it">Italian</option>
                   <option value="pl">Polish</option>
+                  <option value="lt">Lithuanian</option>
+                  <option value="et">Estonian</option>
                 </Select>
               </div>
             </div>
@@ -122,6 +196,50 @@ const PipelineForm: React.FC<PipelineFormProps> = ({ pipeline, onClose, onSave }
                     <option value="">-- Select WP --</option>
                     {accounts.filter(a => a.type === 'wp').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-content-primary">WordPress Category</label>
+                  <div className="flex space-x-2">
+                    {categories.length > 0 ? (
+                      <Select
+                        className="flex-1"
+                        value={formData.settings?.wp_category_id || ''}
+                        onChange={(e) => handleSettingChange('wp_category_id', e.target.value)}
+                        disabled={!selectedWpAccount}
+                      >
+                        <option value="">-- Use Default --</option>
+                        {categories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.name} ({cat.count})
+                          </option>
+                        ))}
+                      </Select>
+                    ) : (
+                      <Input
+                        type="number"
+                        className="flex-1"
+                        value={formData.settings?.wp_category_id || ''}
+                        onChange={(e) => handleSettingChange('wp_category_id', e.target.value)}
+                        placeholder="e.g. 1"
+                        disabled={!selectedWpAccount}
+                      />
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={handleFetchCategories}
+                      disabled={fetchingCats || !selectedWpAccount}
+                      title="Fetch categories from selected WordPress account"
+                    >
+                      {fetchingCats ? (
+                        <RefreshCw size={16} className="animate-spin" />
+                      ) : (
+                        <Search size={16} />
+                      )}
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="space-y-1">
