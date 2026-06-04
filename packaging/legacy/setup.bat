@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0\..\.."
 echo === Blog-autogen Setup for Windows ===
 
 :: 1. Check and Install Python via winget

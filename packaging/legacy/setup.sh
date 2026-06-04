@@ -1,4 +1,5 @@
 #!/bin/bash
+cd "$(dirname "$0")/../.."
 
 echo "=== Blog-autogen Setup for Unix-like Systems ==="
 

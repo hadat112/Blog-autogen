@@ -1,5 +1,8 @@
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
 from sqlalchemy import inspect, text
 
 from apps.api.routes import accounts, jobs, pipelines
@@ -38,6 +41,32 @@ app.include_router(pipelines.router)
 app.include_router(jobs.router)
 
 
+FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+FRONTEND_ASSETS = FRONTEND_DIST / "assets"
+
+if FRONTEND_ASSETS.exists():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_ASSETS)), name="assets")
+
+
 @app.get("/")
 def read_root():
+    index_file = FRONTEND_DIST / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    return {"status": "ok"}
+
+
+@app.get("/{path:path}", include_in_schema=False)
+def serve_frontend(path: str):
+    if path.startswith(("accounts", "pipelines", "jobs")):
+        return {"status": "not_found"}
+
+    requested_file = FRONTEND_DIST / path
+    if requested_file.is_file():
+        return FileResponse(requested_file)
+
+    index_file = FRONTEND_DIST / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+
     return {"status": "ok"}

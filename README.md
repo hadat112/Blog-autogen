@@ -14,6 +14,8 @@
 - [🏗 Architecture](#-architecture)
 - [🛠 Strategic Analysis](#-strategic-analysis)
 - [📦 Getting Started](#-getting-started)
+- [🖱 One-Click Install For Non-Technical Users](#-one-click-install-for-non-technical-users)
+- [📦 Packaging Releases](#-packaging-releases)
 - [⚙️ Configuration](#️-configuration)
 - [📖 Usage Guide](#-usage-guide)
 - [🔧 Troubleshooting](#-troubleshooting)
@@ -88,7 +90,6 @@ graph TD
         TG[Telegram Bot API]
     end
 
-    %% Flow
     WebUI <--> API
     API <--> DB
     CLI --> ORC
@@ -96,7 +97,6 @@ graph TD
     ORC --> PL
     PL --> P1 & P2 & P3 & P4 & P5 & P6
 
-    %% Connections to External
     P1 & P2 --> AI
     P3 --> WP
     P4 --> FB
@@ -117,7 +117,7 @@ graph TD
 ### ⚠️ Considerations (Weaknesses)
 - **Configuration Overhead:** Requires several external API integrations (9Router, WordPress, Meta Graph API, Google Cloud, Telegram).
 - **Dependency on LLMs:** Quality is highly dependent on the prompt engineering and the stability of the chosen AI provider.
-- **Infrastructure:** Requires a stable Python environment and modern Node.js for the frontend suite.
+- **Infrastructure:** Requires a stable Python environment and modern Node.js for development builds.
 
 ---
 
@@ -125,15 +125,15 @@ graph TD
 
 ### Prerequisites
 - **Python:** 3.9 or higher
-- **Node.js:** 18 or higher (for Web UI)
-- **API Keys:** 9Router (or compatible AI provider), Google Cloud (for Sheets), Telegram Bot Token.
+- **Node.js:** 20.19+ or 22.12+ for development/building the Web UI
+- **API Keys:** 9Router or compatible AI provider, plus any publishing integrations you plan to use.
 
 ### Quick Setup
 
 #### macOS / Linux
 ```bash
 # Clone and run setup
-chmod +x setup.sh && ./setup.sh
+chmod +x packaging/legacy/setup.sh && ./packaging/legacy/setup.sh
 
 # Link the runner (Optional)
 sudo ln -sf $(pwd)/blog-autogen-runner /usr/local/bin/blog-autogen
@@ -141,7 +141,7 @@ sudo ln -sf $(pwd)/blog-autogen-runner /usr/local/bin/blog-autogen
 
 #### Windows
 ```powershell
-.\setup.bat
+.\packaging\legacy\setup.bat
 ```
 
 ### Configuration
@@ -150,9 +150,123 @@ Run the tool for the first time to launch the interactive onboarding wizard:
 blog-autogen --update
 ```
 
+---
+
+## 🖱 One-Click Install For Non-Technical Users
+
+For non-technical users, do not ask them to run Node.js or development commands. Build a release zip and send it to them.
+
+### Windows User Flow
+
+Give the user:
+
+```text
+StoryAutogen-Windows.zip
+```
+
+They should:
+
+1. Extract the zip.
+2. Double-click `install_windows.bat` once.
+3. Double-click `run.bat` whenever they want to use the tool.
+4. Keep the black terminal window open.
+5. Use the dashboard at `http://127.0.0.1:8000`.
+
+Requirements on the user's Windows machine:
+
+- Windows 10 or Windows 11.
+- Python 3.9+.
+- Browser.
+- Internet connection for first install.
+
+### macOS User Flow
+
+Give the user:
+
+```text
+StoryAutogen-Mac.zip
+```
+
+They should:
+
+1. Extract the zip.
+2. Right-click `install_mac.command`, then click `Open`.
+3. Right-click `run_mac.command`, then click `Open`.
+4. Keep the Terminal window open.
+5. Use the dashboard at `http://127.0.0.1:8000`.
+
+Requirements on the user's Mac:
+
+- macOS.
+- Python 3.9+.
+- Browser.
+- Internet connection for first install.
+
+Full details are in:
+
+```text
+packaging/PACKAGING_GUIDE.md
+```
+
+---
+
+## 📦 Packaging Releases
+
+The release packages include a prebuilt frontend served by FastAPI from:
+
+```text
+frontend/dist
+```
+
+The user does not need Node.js.
+
+### Build Windows Release
+
+On a build machine with Node 20.19+ or 22.12+:
+
+```bat
+packaging\build_windows_release.bat
+```
+
+Output:
+
+```text
+release/StoryAutogen-Windows.zip
+```
+
+### Build macOS Release
+
+On a build machine with Node 20.19+ or 22.12+:
+
+```bash
+./packaging/build_mac_release.command
+```
+
+Output:
+
+```text
+release/StoryAutogen-Mac.zip
+```
+
+The detailed packaging checklist is in:
+
+```text
+packaging/PACKAGING_GUIDE.md
+```
+
+---
+
 ## ⚙️ Configuration Details
 
-The system uses a `config.yaml` file to manage integrations. Key configuration groups include:
+The legacy CLI uses a `config.yaml` file. The Web UI stores accounts, pipelines, and job history in local SQLite.
+
+Local Web UI database:
+
+```text
+var/story_autogen.db
+```
+
+Key integration groups include:
 
 | Group | Key Fields | Description |
 |-------|------------|-------------|
@@ -179,11 +293,25 @@ blog-autogen --crawl-url "https://example.com/article"
 ### Mode B: Modern Web UI
 Ideal for managing accounts and monitoring job progress visually.
 ```bash
-# Start both Backend and Frontend
+# Start both Backend and Frontend in development
 ./dev.sh
 ```
 - **Backend:** `http://localhost:8000`
 - **Frontend:** `http://localhost:5173`
+
+### Mode C: Packaged Local Web App
+Ideal for non-technical users.
+
+```text
+run.bat              Windows
+run_mac.command      macOS
+```
+
+The packaged dashboard opens at:
+
+```text
+http://127.0.0.1:8000
+```
 
 ---
 
@@ -195,11 +323,23 @@ Ideal for managing accounts and monitoring job progress visually.
 
 ### 2. Facebook Post Failure
 - **Cause:** Expired Page Access Token or insufficient permissions.
-- **Fix:** Use the Meta for Developers "Graph API Explorer" to generate a **Permanent Page Access Token** with `pages_manage_posts` and `pages_read_engagement` permissions.
+- **Fix:** Use the Meta for Developers "Graph API Explorer" to generate a Page Access Token with `pages_manage_posts` and `pages_read_engagement` permissions.
 
 ### 3. Google Sheets "Permission Denied"
 - **Cause:** Service account email not invited to the spreadsheet.
-- **Fix:** Open your Google Sheet, click **Share**, and add the service account email (found in your `credentials.json`) as an **Editor**.
+- **Fix:** Open your Google Sheet, click **Share**, and add the service account email found in your credentials JSON as an **Editor**.
+
+### 4. Frontend Build Fails
+- **Cause:** Node.js is too old.
+- **Fix:** Use Node 20.19+ or 22.12+. This repo includes `.nvmrc`.
+
+### 5. Windows Cannot Find Python
+- **Cause:** Python is missing or was installed without PATH.
+- **Fix:** Install Python 3.9+ and tick **Add Python to PATH**.
+
+### 6. macOS Blocks `.command` Files
+- **Cause:** Gatekeeper blocks downloaded command files.
+- **Fix:** Right-click the command file, click **Open**, then confirm.
 
 ---
 
@@ -217,6 +357,20 @@ Contributions are welcome! To set up the development environment:
 ```bash
 pip install -e ".[dev]"
 pytest
+```
+
+Frontend type check:
+
+```bash
+cd frontend
+./node_modules/.bin/tsc --noEmit
+```
+
+Frontend build:
+
+```bash
+cd frontend
+npm run build
 ```
 
 ---

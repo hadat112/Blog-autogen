@@ -2,7 +2,7 @@ import axios from 'axios';
 import { Account, Pipeline, Job, AccountConfig } from './types';
 
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : window.location.origin),
 });
 
 export const getAccounts = () => client.get<Account[]>('/accounts');
