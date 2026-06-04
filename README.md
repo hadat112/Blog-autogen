@@ -224,8 +224,8 @@ The user does not need Node.js.
 
 On a build machine with Node 20.19+ or 22.12+:
 
-```bat
-packaging\build_windows_release.bat
+```bash
+./packaging/build_windows_release.command
 ```
 
 Output:
