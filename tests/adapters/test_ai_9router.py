@@ -339,17 +339,21 @@ def test_translate_article_fields_returns_standard_article_payload():
     assert len(responses.calls) == 2
     first_payload = json.loads(responses.calls[0].request.body.decode("utf-8"))
     assert first_payload["messages"][0]["role"] == "system"
-    assert "professional translation engine" in first_payload["messages"][0]["content"]
+    assert "professional translation processor" in first_payload["messages"][0]["content"]
     first_prompt = first_payload["messages"][1]["content"]
     assert "Target language: Italian" in first_prompt
+    assert "Source paragraph count: 1" in first_prompt
     assert "<source_text>" in first_prompt
     assert "Every sentence and paragraph" in first_prompt
+    assert "exactly 1 paragraphs" in first_prompt
     assert "Do not leave any ordinary source-language sentence unchanged" in first_prompt
     assert "Preserve every event, fact, name, relationship" in first_prompt
     assert "Do not summarize, expand, omit, reorder" in first_prompt
     assert "If the source text is a title or headline" in first_prompt
     assert "source length and sentence-by-sentence structure" in first_prompt
     assert "Do not mention copyright" in first_prompt
+    assert "Never answer with refusal wording" in first_prompt
+    assert "Internal completion check" in first_prompt
 
 
 @responses.activate
@@ -409,7 +413,7 @@ def test_translate_article_fields_cleans_extra_translation_prefix():
 
 
 @responses.activate
-def test_translate_article_fields_retries_copyright_refusal():
+def test_translate_article_fields_does_not_retry_refusal_output():
     ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1")
     responses.add(
         responses.POST,
@@ -423,14 +427,8 @@ def test_translate_article_fields_retries_copyright_refusal():
         json={"choices": [{"message": {"content": "I'm sorry, but I can't provide copyrighted text."}}]},
         status=200,
     )
-    responses.add(
-        responses.POST,
-        "https://api.9router.ai/v1/chat/completions",
-        json={"choices": [{"message": {"content": "Translated paragraph"}}]},
-        status=200,
-    )
 
     article = ai.translate_article_fields("Source title", "Source paragraph", language="Italian")
 
-    assert article["content"] == "Translated paragraph"
-    assert len(responses.calls) == 3
+    assert article["content"] == "I'm sorry, but I can't provide copyrighted text."
+    assert len(responses.calls) == 2

@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Play, Send, Zap } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Send, Zap } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { getPipelines, runPipeline } from '../../../api/client';
 import { Card, CardHeader, CardTitle, CardContent } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
-import { cn } from '../../../lib/utils';
 
 interface QuickRunProps {
   onRunStarted?: (jobId: string) => void;
@@ -15,6 +14,7 @@ interface QuickRunProps {
 const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
   const [selectedPipeline, setSelectedPipeline] = useState('');
   const [input, setInput] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: pipelines = [] } = useQuery({
     queryKey: ['pipelines'],
@@ -48,6 +48,11 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
     runMutation.mutate({ pipelineId: selectedPipeline, prompt: input.trim() });
   };
 
+  const handlePipelineChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedPipeline(e.target.value);
+    inputRef.current?.focus();
+  };
+
   return (
     <Card className="border-border-default shadow-sm overflow-hidden">
       <CardHeader className="p-5 pb-0">
@@ -67,7 +72,7 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
               size="default"
               className="bg-surface-subtle focus:bg-surface transition-colors border-border-default"
               value={selectedPipeline}
-              onChange={(e) => setSelectedPipeline(e.target.value)}
+              onChange={handlePipelineChange}
             >
               {pipelines.map(p => (
                 <option key={p.id} value={p.id}>{p.name} ({p.language})</option>
@@ -80,6 +85,7 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
             <label className="text-[10px] font-bold text-content-tertiary uppercase tracking-widest ml-0.5">Content Input (URL / Prompt)</label>
             <div className="relative group">
               <Input 
+                ref={inputRef}
                 size="default"
                 className="pr-12 bg-surface-subtle focus:bg-surface transition-all border-border-default group-hover:border-accent/50"
                 placeholder="Paste an article URL or enter a creative prompt..."

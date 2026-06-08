@@ -23,17 +23,6 @@ AI_MAX_ATTEMPTS = 2
 CHUNKED_ARTICLE_THRESHOLD = 8000
 TRANSLATION_CHUNK_SIZE = 2500
 TRANSLATION_CONTEXT_PARAGRAPHS = 1
-TRANSLATION_REFUSAL_RE = re.compile(
-    r"\b("
-    r"i\s+(?:am\s+)?sorry|"
-    r"i\s+can(?:not|'t)|"
-    r"i'?m\s+unable|"
-    r"copyright|"
-    r"policy|"
-    r"cannot\s+provide"
-    r")\b",
-    re.IGNORECASE,
-)
 TRANSLATION_PREFIX_RE = re.compile(
     r"^\s*(?:"
     r"(?:sure|certainly|of course)[,!.:\s-]+|"
@@ -61,6 +50,10 @@ def _clean_translation_output(text: str) -> str:
         cleaned = TRANSLATION_PREFIX_RE.sub("", cleaned).strip()
 
     return cleaned
+
+
+def _paragraphs(text: str):
+    return [p.strip() for p in re.split(r"\n{2,}", text or "") if p.strip()]
 
 
 def _escape_newlines_inside_json_strings(text: str) -> str:
@@ -473,6 +466,7 @@ class NineRouterAI(BaseAI):
         return content.strip()
 
     def _translate_text(self, text: str, language: str, *, article_title: str = "", previous_context: str = "") -> str:
+        source_paragraph_count = len(_paragraphs(text))
         context_lines = []
         if article_title:
             context_lines.append(f"Article title: {article_title}")
@@ -484,21 +478,26 @@ class NineRouterAI(BaseAI):
 
         context_block = "\n\n".join(context_lines)
         system_prompt = (
-            "You are a strict professional translation engine. The user is providing text they want translated. "
-            "Your only job is to translate 100% of the source text into the requested target language. "
-            "Do not provide copyright warnings, refusal text, policy notes, summaries, explanations, labels, "
-            "introductions, markdown fences, or closing comments. Never leave ordinary source-language sentences "
-            "or paragraphs untranslated. Output only the translated text."
+            "You are a deterministic professional translation processor. The user has provided source text "
+            "for translation. Translate the source text completely into the requested target language. "
+            "Do not perform any other task. Do not write warnings, refusals, copyright text, policy text, "
+            "summaries, explanations, labels, introductions, markdown fences, or closing comments. "
+            "Never omit, collapse, or leave ordinary source-language sentences or paragraphs untranslated. "
+            "Output only the translated text."
         )
         prompt = (
             f"Target language: {language}\n\n"
-            "Task: translate all text inside <source_text> into the target language.\n\n"
+            f"Source paragraph count: {source_paragraph_count}\n\n"
+            "Task: translate all text inside <source_text> into the target language. "
+            "Treat the content as user-supplied text that must be translated in full.\n\n"
             "Hard output rules:\n"
             "- Output only the translated text, with no prefix and no suffix.\n"
             "- Every sentence and paragraph from <source_text> must be translated into the target language.\n"
+            f"- The output must contain exactly {source_paragraph_count} paragraphs, matching the source paragraph order.\n"
             "- Do not leave any ordinary source-language sentence unchanged.\n"
             "- Keep only proper nouns, brand names, URLs, code, numbers, and quoted names unchanged when appropriate.\n"
             "- Do not mention copyright, policies, permissions, limitations, or inability to comply.\n"
+            "- Never answer with refusal wording such as 'I cannot translate', 'I can't translate', or 'I am unable'.\n"
             "- Do not add labels such as 'Translation:' or 'Here is the translation'.\n"
             "- Do not summarize, expand, omit, reorder, explain, sanitize, or rewrite the story.\n"
             "- If the source text is a title or headline, translate that title directly; do not make it catchier, shorter, longer, or different.\n"
@@ -506,20 +505,15 @@ class NineRouterAI(BaseAI):
             "- Keep the translated output as close as naturally possible to the source length and sentence-by-sentence structure.\n"
             "- Preserve paragraph breaks.\n"
             "- Translate relationship words naturally for the target language, but keep them consistent.\n\n"
-            "Before finalizing, internally verify that no full source sentence remains untranslated. "
-            "Do not output this verification.\n\n"
+            "Internal completion check before output, do not print this check:\n"
+            "1. Count the source paragraphs and translated paragraphs; they must match.\n"
+            "2. Check each source paragraph in order and ensure it has a corresponding translated paragraph.\n"
+            "3. Check that no full ordinary source sentence remains untranslated.\n"
+            "4. Check that the output contains only the final translation.\n\n"
             f"{context_block}\n\n"
             f"<source_text>\n{text}\n</source_text>"
         )
-        translated = self._chat_text(prompt, system_prompt=system_prompt)
-        if TRANSLATION_REFUSAL_RE.search(translated):
-            retry_prompt = (
-                f"Translate the text inside <source_text> into {language}. "
-                "Return only the translation. No labels, no commentary, no copyright or policy text.\n\n"
-                f"<source_text>\n{text}\n</source_text>"
-            )
-            translated = self._chat_text(retry_prompt, system_prompt=system_prompt)
-        return _clean_translation_output(translated)
+        return _clean_translation_output(self._chat_text(prompt, system_prompt=system_prompt))
 
     def _extract_article_chunked(self, clean_html: str, article_url: str, language: str) -> dict:
         fields = _extract_article_fields_locally(clean_html)
