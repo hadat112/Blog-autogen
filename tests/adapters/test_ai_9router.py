@@ -4,7 +4,9 @@ from pathlib import Path
 import pytest
 from adapters.ai.ninerouter import (
     NineRouterAI,
+    TranslationOutputError,
     _parse_story_json,
+    _split_translation_chunks,
     CINEMATIC_NATURALISM_STYLE_PROMPT,
 )
 
@@ -344,21 +346,23 @@ def test_translate_article_fields_returns_standard_article_payload():
     assert "Target language: Italian" in first_prompt
     assert "Source paragraph count: 1" in first_prompt
     assert "<source_text>" in first_prompt
-    assert "Every sentence and paragraph" in first_prompt
+    assert "Translate every sentence" in first_prompt
     assert "exactly 1 paragraphs" in first_prompt
-    assert "Do not leave any ordinary source-language sentence unchanged" in first_prompt
-    assert "Preserve every event, fact, name, relationship" in first_prompt
-    assert "Do not summarize, expand, omit, reorder" in first_prompt
-    assert "If the source text is a title or headline" in first_prompt
-    assert "source length and sentence-by-sentence structure" in first_prompt
-    assert "Do not mention copyright" in first_prompt
-    assert "Never answer with refusal wording" in first_prompt
-    assert "Internal completion check" in first_prompt
+    assert "Preserve facts, names, relationships, numbers" in first_prompt
+    assert "Translate titles directly" in first_prompt
+    assert "consistent terminology" in first_prompt
+    assert "refusals, copyright, or policy text" in first_prompt
 
 
 @responses.activate
 def test_translate_article_fields_includes_previous_source_context_for_later_chunks():
-    ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1")
+    ai = NineRouterAI(
+        "test_key",
+        "gpt-4o",
+        "dall-e-3",
+        base_url="https://api.9router.ai/v1",
+        translation_chunk_size=2500,
+    )
     responses.add(
         responses.POST,
         "https://api.9router.ai/v1/chat/completions",
@@ -368,13 +372,13 @@ def test_translate_article_fields_includes_previous_source_context_for_later_chu
     responses.add(
         responses.POST,
         "https://api.9router.ai/v1/chat/completions",
-        json={"choices": [{"message": {"content": "Translated first chunk"}}]},
+        json={"choices": [{"message": {"content": "T" * 2400}}]},
         status=200,
     )
     responses.add(
         responses.POST,
         "https://api.9router.ai/v1/chat/completions",
-        json={"choices": [{"message": {"content": "Translated second chunk"}}]},
+        json={"choices": [{"message": {"content": "S" * 220}}]},
         status=200,
     )
     first = "First paragraph " + ("a" * 2400)
@@ -382,11 +386,13 @@ def test_translate_article_fields_includes_previous_source_context_for_later_chu
 
     article = ai.translate_article_fields("Source title", f"{first}\n\n{second}", language="Italian")
 
-    assert article["content"] == "Translated first chunk\n\nTranslated second chunk"
+    assert article["content"] == f"{'T' * 2400}\n\n{'S' * 220}"
     second_payload = json.loads(responses.calls[2].request.body.decode("utf-8"))
     second_prompt = second_payload["messages"][1]["content"]
     assert "Previous source context for continuity only" in second_prompt
-    assert "First paragraph" in second_prompt
+    assert "a" * 200 in second_prompt
+    assert "Previous translated context for terminology and voice only" in second_prompt
+    assert "T" * 200 in second_prompt
     assert "Second paragraph with follow-up context." in second_prompt
 
 
@@ -413,7 +419,7 @@ def test_translate_article_fields_cleans_extra_translation_prefix():
 
 
 @responses.activate
-def test_translate_article_fields_does_not_retry_refusal_output():
+def test_translate_article_fields_fails_without_retry_on_refusal_output():
     ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1")
     responses.add(
         responses.POST,
@@ -428,7 +434,50 @@ def test_translate_article_fields_does_not_retry_refusal_output():
         status=200,
     )
 
-    article = ai.translate_article_fields("Source title", "Source paragraph", language="Italian")
+    with pytest.raises(TranslationOutputError) as exc_info:
+        ai.translate_article_fields(
+            "Source title",
+            "Source paragraph",
+            language="Italian",
+        )
 
-    assert article["content"] == "I'm sorry, but I can't provide copyrighted text."
+    assert "refusal or policy text" in str(exc_info.value)
+    assert exc_info.value.output == "I'm sorry, but I can't provide copyrighted text."
     assert len(responses.calls) == 2
+
+
+@responses.activate
+def test_request_max_attempts_can_disable_http_retry():
+    ai = NineRouterAI(
+        "test_key",
+        "gpt-4o",
+        "dall-e-3",
+        base_url="https://api.9router.ai/v1",
+        request_max_attempts=1,
+    )
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json={"error": "temporary"},
+        status=503,
+    )
+
+    with pytest.raises(Exception):
+        ai._chat_text("Translate this")
+
+    assert len(responses.calls) == 1
+
+
+def test_translation_chunker_prefers_sentence_boundaries():
+    first_sentence = "A" * 700 + "."
+    second_sentence = "B" * 700 + "."
+
+    chunks = _split_translation_chunks(
+        f"{first_sentence} {second_sentence}",
+        max_chars=900,
+    )
+
+    assert len(chunks) == 2
+    assert chunks[0].text == first_sentence
+    assert chunks[1].text == second_sentence
+    assert chunks[1].continues_previous is True

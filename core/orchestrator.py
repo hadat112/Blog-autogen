@@ -93,12 +93,20 @@ class Orchestrator:
         self.progress_callback = progress_callback
 
         # Initialize providers
+        ai_kwargs = {
+            "api_key": ai_config.get("api_key"),
+            "text_model": ai_config.get("text_model"),
+            "image_model": ai_config.get("image_model"),
+            "base_url": ai_config.get("base_url", "http://localhost:20128/v1"),
+        } if ai_config else None
+        if ai_kwargs and ai_config.get("translation_chunk_size"):
+            ai_kwargs["translation_chunk_size"] = ai_config.get("translation_chunk_size")
+        if ai_kwargs and ai_config.get("translation_context_chars") is not None:
+            ai_kwargs["translation_context_chars"] = ai_config.get("translation_context_chars")
+
         self.ai = NineRouterAI(
-            api_key=ai_config.get("api_key"),
-            text_model=ai_config.get("text_model"),
-            image_model=ai_config.get("image_model"),
-            base_url=ai_config.get("base_url", "http://localhost:20128/v1")
-        ) if ai_config else None
+            **ai_kwargs
+        ) if ai_kwargs else None
 
         self.sheets = GoogleSheetsProvider(
             credentials_json=gs_config.get("credentials_path") or gs_config.get("credentials_json") or "credentials.json",

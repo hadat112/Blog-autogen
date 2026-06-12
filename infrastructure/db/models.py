@@ -45,3 +45,22 @@ class Job(Base):
     logs = Column(JSON, default=list)
     rerun_at = Column(DateTime, nullable=True)
     rerun_job_id = Column(String, nullable=True)
+
+
+class TranslationBenchmarkRun(Base):
+    __tablename__ = "translation_benchmark_runs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    status = Column(String, default="queued")
+    progress = Column(Integer, default=0)
+    current_step = Column(String, nullable=True)
+    target_language = Column(String, nullable=False)
+    suite = Column(String, default="standard")
+    selected_account_ids = Column(JSON, default=list)
+    request_config = Column(JSON, default=dict)
+    results = Column(JSON, default=list)
+    manual_ratings = Column(JSON, default=dict)
+    error = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)

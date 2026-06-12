@@ -172,6 +172,32 @@ const AccountForm: React.FC<AccountFormProps> = ({
                 }
               />
             </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-content-primary">
+                Translation Chunk Size
+              </label>
+              <Input
+                type="number"
+                min="500"
+                value={formData.config?.translation_chunk_size || "5000"}
+                onChange={(e) =>
+                  handleConfigChange("translation_chunk_size", e.target.value)
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-content-primary">
+                Translation Context Chars
+              </label>
+              <Input
+                type="number"
+                min="0"
+                value={formData.config?.translation_context_chars || "400"}
+                onChange={(e) =>
+                  handleConfigChange("translation_context_chars", e.target.value)
+                }
+              />
+            </div>
           </>
         );
       case "fb":

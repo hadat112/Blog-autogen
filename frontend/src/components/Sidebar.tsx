@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, GitBranch, Settings, X, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Users, GitBranch, Settings, X, Zap, ChevronLeft, ChevronRight, FlaskConical } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -14,6 +14,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, isCollapsed = fals
     { id: 'dashboard', path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
     { id: 'accounts', path: '/accounts', label: 'Accounts', icon: <Users size={20} /> },
     { id: 'pipelines', path: '/pipelines', label: 'Pipelines', icon: <GitBranch size={20} /> },
+    { id: 'translation-benchmarks', path: '/translation-benchmarks', label: 'Benchmarks', icon: <FlaskConical size={20} /> },
     { id: 'settings', path: '/settings', label: 'Settings', icon: <Settings size={20} /> },
   ];
 

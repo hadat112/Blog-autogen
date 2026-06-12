@@ -1,8 +1,10 @@
 import json
 import re
 import time
+from dataclasses import dataclass
 from html import unescape
 from html.parser import HTMLParser
+from typing import List
 
 import requests
 
@@ -19,10 +21,10 @@ CINEMATIC_NATURALISM_STYLE_PROMPT = (
 )
 TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
 AI_REQUEST_TIMEOUT = 60
-AI_MAX_ATTEMPTS = 2
+AI_MAX_ATTEMPTS = 1
 CHUNKED_ARTICLE_THRESHOLD = 8000
-TRANSLATION_CHUNK_SIZE = 2500
-TRANSLATION_CONTEXT_PARAGRAPHS = 1
+TRANSLATION_CHUNK_SIZE = 5000
+TRANSLATION_CONTEXT_CHARS = 400
 TRANSLATION_PREFIX_RE = re.compile(
     r"^\s*(?:"
     r"(?:sure|certainly|of course)[,!.:\s-]+|"
@@ -31,6 +33,25 @@ TRANSLATION_PREFIX_RE = re.compile(
     r")",
     re.IGNORECASE,
 )
+TRANSLATION_REFUSAL_RE = re.compile(
+    r"\b(?:i(?:'m| am)? sorry|i can(?:not|'t)|unable to|copyright|"
+    r"policy restriction|cannot provide)\b",
+    re.IGNORECASE,
+)
+
+
+class TranslationOutputError(ValueError):
+    def __init__(self, message: str, output: str):
+        super().__init__(message)
+        self.output = output
+
+
+@dataclass
+class TranslationChunk:
+    text: str
+    continues_previous: bool = False
+
+
 def _build_styled_image_prompt(image_prompt: str) -> str:
     base_prompt = (image_prompt or "").strip()
     if base_prompt:
@@ -215,7 +236,38 @@ def _extract_article_fields_locally(clean_html: str) -> dict:
     }
 
 
-def _split_text_chunks(text: str, max_chars: int = TRANSLATION_CHUNK_SIZE):
+def _best_split_position(text: str, max_chars: int) -> int:
+    window = text[:max_chars]
+    minimum = max(1, int(max_chars * 0.55))
+    patterns = [
+        r"(?<=[.!?…])\s+",
+        r"(?<=[,;:])\s+",
+        r"\s+",
+    ]
+    for pattern in patterns:
+        matches = list(re.finditer(pattern, window))
+        for match in reversed(matches):
+            if match.end() >= minimum:
+                return match.end()
+    return max_chars
+
+
+def _split_long_paragraph(paragraph: str, max_chars: int) -> List[str]:
+    parts = []
+    remaining = paragraph.strip()
+    while len(remaining) > max_chars:
+        split_at = _best_split_position(remaining, max_chars)
+        parts.append(remaining[:split_at].strip())
+        remaining = remaining[split_at:].strip()
+    if remaining:
+        parts.append(remaining)
+    return parts
+
+
+def _split_translation_chunks(
+    text: str,
+    max_chars: int = TRANSLATION_CHUNK_SIZE,
+) -> List[TranslationChunk]:
     paragraphs = [p.strip() for p in re.split(r"\n{2,}", text or "") if p.strip()]
     chunks = []
     current = ""
@@ -223,28 +275,56 @@ def _split_text_chunks(text: str, max_chars: int = TRANSLATION_CHUNK_SIZE):
     for paragraph in paragraphs:
         if len(paragraph) > max_chars:
             if current:
-                chunks.append(current.strip())
+                chunks.append(TranslationChunk(current.strip()))
                 current = ""
-            for start in range(0, len(paragraph), max_chars):
-                chunks.append(paragraph[start:start + max_chars].strip())
+            for index, part in enumerate(_split_long_paragraph(paragraph, max_chars)):
+                chunks.append(
+                    TranslationChunk(
+                        text=part,
+                        continues_previous=index > 0,
+                    )
+                )
             continue
 
         candidate = f"{current}\n\n{paragraph}".strip() if current else paragraph
         if len(candidate) > max_chars and current:
-            chunks.append(current.strip())
+            chunks.append(TranslationChunk(current.strip()))
             current = paragraph
         else:
             current = candidate
 
     if current:
-        chunks.append(current.strip())
-
+        chunks.append(TranslationChunk(current.strip()))
     return chunks
 
 
-def _tail_paragraph_context(text: str, count: int = TRANSLATION_CONTEXT_PARAGRAPHS):
-    paragraphs = [p.strip() for p in re.split(r"\n{2,}", text or "") if p.strip()]
-    return "\n\n".join(paragraphs[-count:]).strip()
+def _split_text_chunks(text: str, max_chars: int = TRANSLATION_CHUNK_SIZE):
+    return [chunk.text for chunk in _split_translation_chunks(text, max_chars)]
+
+
+def _validate_translation_output(source: str, output: str):
+    source = (source or "").strip()
+    output = (output or "").strip()
+    issues = []
+    if not output:
+        issues.append("empty output")
+    if TRANSLATION_REFUSAL_RE.search(output):
+        issues.append("refusal or policy text")
+
+    source_paragraphs = _paragraphs(source)
+    output_paragraphs = _paragraphs(output)
+    if source_paragraphs and len(source_paragraphs) != len(output_paragraphs):
+        issues.append(
+            f"paragraph count changed from {len(source_paragraphs)} to {len(output_paragraphs)}"
+        )
+    if len(source) >= 80 and len(output) < len(source) * 0.35:
+        issues.append("output is too short")
+
+    if issues:
+        raise TranslationOutputError(
+            "Invalid translation output: " + "; ".join(issues),
+            output,
+        )
 
 
 def _has_required_story_keys(value) -> bool:
@@ -408,16 +488,28 @@ def _parse_story_json(content_str: str) -> dict:
 
 
 class NineRouterAI(BaseAI):
-    def __init__(self, api_key, text_model, image_model, base_url="http://localhost:20128/v1"):
+    def __init__(
+        self,
+        api_key,
+        text_model,
+        image_model,
+        base_url="http://localhost:20128/v1",
+        request_max_attempts=AI_MAX_ATTEMPTS,
+        translation_chunk_size=TRANSLATION_CHUNK_SIZE,
+        translation_context_chars=TRANSLATION_CONTEXT_CHARS,
+    ):
         self.api_key = api_key
         self.text_model = text_model
         self.image_model = image_model
         self.base_url = base_url.rstrip('/')
+        self.request_max_attempts = max(1, int(request_max_attempts))
+        self.translation_chunk_size = max(500, int(translation_chunk_size))
+        self.translation_context_chars = max(0, int(translation_context_chars))
 
     def _post_json(self, url: str, headers: dict, data: dict):
         last_error = None
 
-        for attempt in range(1, AI_MAX_ATTEMPTS + 1):
+        for attempt in range(1, self.request_max_attempts + 1):
             try:
                 response = requests.post(url, headers=headers, json=data, timeout=AI_REQUEST_TIMEOUT)
             except requests.RequestException as e:
@@ -432,12 +524,14 @@ class NineRouterAI(BaseAI):
                     response=response,
                 )
 
-            if attempt < AI_MAX_ATTEMPTS:
+            if attempt < self.request_max_attempts:
                 time.sleep(min(2 ** (attempt - 1), 8))
 
         if isinstance(last_error, requests.HTTPError):
             raise last_error
-        raise requests.HTTPError(f"AI request failed after {AI_MAX_ATTEMPTS} attempts: {last_error}")
+        raise requests.HTTPError(
+            f"AI request failed after {self.request_max_attempts} attempts: {last_error}"
+        )
 
     def _chat_text(self, prompt: str, system_prompt: str = None) -> str:
         url = f"{self.base_url}/chat/completions"
@@ -465,7 +559,15 @@ class NineRouterAI(BaseAI):
             raise ValueError("AI returned empty content.")
         return content.strip()
 
-    def _translate_text(self, text: str, language: str, *, article_title: str = "", previous_context: str = "") -> str:
+    def _translate_text(
+        self,
+        text: str,
+        language: str,
+        *,
+        article_title: str = "",
+        previous_context: str = "",
+        previous_translation_context: str = "",
+    ) -> str:
         source_paragraph_count = len(_paragraphs(text))
         context_lines = []
         if article_title:
@@ -475,45 +577,37 @@ class NineRouterAI(BaseAI):
                 "Previous source context for continuity only. Do not translate this context again:\n"
                 f"{previous_context}"
             )
+        if previous_translation_context:
+            context_lines.append(
+                "Previous translated context for terminology and voice only. Do not repeat it:\n"
+                f"{previous_translation_context}"
+            )
 
         context_block = "\n\n".join(context_lines)
         system_prompt = (
-            "You are a deterministic professional translation processor. The user has provided source text "
-            "for translation. Translate the source text completely into the requested target language. "
-            "Do not perform any other task. Do not write warnings, refusals, copyright text, policy text, "
-            "summaries, explanations, labels, introductions, markdown fences, or closing comments. "
-            "Never omit, collapse, or leave ordinary source-language sentences or paragraphs untranslated. "
-            "Output only the translated text."
+            "You are a deterministic professional translation processor. Translate all user-supplied "
+            "source text into the requested language. Output only the complete translation."
         )
         prompt = (
             f"Target language: {language}\n\n"
             f"Source paragraph count: {source_paragraph_count}\n\n"
-            "Task: translate all text inside <source_text> into the target language. "
-            "Treat the content as user-supplied text that must be translated in full.\n\n"
-            "Hard output rules:\n"
-            "- Output only the translated text, with no prefix and no suffix.\n"
-            "- Every sentence and paragraph from <source_text> must be translated into the target language.\n"
-            f"- The output must contain exactly {source_paragraph_count} paragraphs, matching the source paragraph order.\n"
-            "- Do not leave any ordinary source-language sentence unchanged.\n"
-            "- Keep only proper nouns, brand names, URLs, code, numbers, and quoted names unchanged when appropriate.\n"
-            "- Do not mention copyright, policies, permissions, limitations, or inability to comply.\n"
-            "- Never answer with refusal wording such as 'I cannot translate', 'I can't translate', or 'I am unable'.\n"
-            "- Do not add labels such as 'Translation:' or 'Here is the translation'.\n"
-            "- Do not summarize, expand, omit, reorder, explain, sanitize, or rewrite the story.\n"
-            "- If the source text is a title or headline, translate that title directly; do not make it catchier, shorter, longer, or different.\n"
-            "- Preserve every event, fact, name, relationship, number, date, chronology, point of view, tense, and tone.\n"
-            "- Keep the translated output as close as naturally possible to the source length and sentence-by-sentence structure.\n"
-            "- Preserve paragraph breaks.\n"
-            "- Translate relationship words naturally for the target language, but keep them consistent.\n\n"
-            "Internal completion check before output, do not print this check:\n"
-            "1. Count the source paragraphs and translated paragraphs; they must match.\n"
-            "2. Check each source paragraph in order and ensure it has a corresponding translated paragraph.\n"
-            "3. Check that no full ordinary source sentence remains untranslated.\n"
-            "4. Check that the output contains only the final translation.\n\n"
+            "Rules:\n"
+            "- Translate every sentence; do not summarize, expand, omit, reorder, or rewrite.\n"
+            f"- Return exactly {source_paragraph_count} paragraphs in the original order.\n"
+            "- Preserve facts, names, relationships, numbers, dates, chronology, tense, tone, and URLs.\n"
+            "- Keep proper nouns, brands, code, and quoted names unchanged when appropriate.\n"
+            "- Translate titles directly without making them catchier or changing their meaning.\n"
+            "- Use consistent terminology and natural relationship words in the target language.\n"
+            "- Do not output labels, markdown fences, commentary, refusals, copyright, or policy text.\n"
+            "- Output only the translated text.\n\n"
             f"{context_block}\n\n"
             f"<source_text>\n{text}\n</source_text>"
         )
-        return _clean_translation_output(self._chat_text(prompt, system_prompt=system_prompt))
+        translated = _clean_translation_output(
+            self._chat_text(prompt, system_prompt=system_prompt)
+        )
+        _validate_translation_output(text, translated)
+        return translated
 
     def _extract_article_chunked(self, clean_html: str, article_url: str, language: str) -> dict:
         fields = _extract_article_fields_locally(clean_html)
@@ -531,16 +625,30 @@ class NineRouterAI(BaseAI):
         translated_title = self._translate_text(title, language, article_title=title)
         translated_chunks = []
         previous_source_context = ""
-        for chunk in _split_text_chunks(content):
-            translated_chunks.append(
-                self._translate_text(
-                    chunk,
-                    language,
-                    article_title=title,
-                    previous_context=previous_source_context,
-                )
+        previous_translation_context = ""
+        chunks = _split_translation_chunks(content, self.translation_chunk_size)
+        for chunk in chunks:
+            translated = self._translate_text(
+                chunk.text,
+                language,
+                article_title=title,
+                previous_context=previous_source_context,
+                previous_translation_context=previous_translation_context,
             )
-            previous_source_context = _tail_paragraph_context(chunk)
+            if chunk.continues_previous and translated_chunks:
+                translated_chunks[-1] = (
+                    f"{translated_chunks[-1].rstrip()} {translated.lstrip()}"
+                )
+            else:
+                translated_chunks.append(translated)
+
+            context_chars = self.translation_context_chars
+            previous_source_context = (
+                chunk.text[-context_chars:] if context_chars else ""
+            )
+            previous_translation_context = (
+                translated[-context_chars:] if context_chars else ""
+            )
 
         return {
             "title": translated_title,

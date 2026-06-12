@@ -1,5 +1,11 @@
 import axios from 'axios';
-import { Account, Pipeline, Job, AccountConfig } from './types';
+import {
+  Account,
+  Pipeline,
+  Job,
+  AccountConfig,
+  TranslationBenchmarkRun,
+} from './types';
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : window.location.origin),
@@ -22,5 +28,21 @@ export const getJobs = () => client.get<Job[]>('/jobs');
 export const getJob = (id: string) => client.get<Job>(`/jobs/${id}`);
 export const syncJob = (id: string) => client.post(`/jobs/${id}/sync`);
 export const cancelJob = (id: string) => client.post<{ status: string }>(`/jobs/${id}/cancel`);
+
+export const getTranslationBenchmarks = () =>
+  client.get<TranslationBenchmarkRun[]>('/translation-benchmarks');
+export const getTranslationBenchmark = (id: string) =>
+  client.get<TranslationBenchmarkRun>(`/translation-benchmarks/${id}`);
+export const createTranslationBenchmark = (data: {
+  account_ids: string[];
+  target_language: string;
+  suite: "standard" | "custom";
+  custom_title?: string;
+  custom_content?: string;
+}) => client.post<TranslationBenchmarkRun>('/translation-benchmarks', data);
+export const rateTranslationBenchmark = (
+  id: string,
+  data: { account_id: string; score: number; notes?: string },
+) => client.post<TranslationBenchmarkRun>(`/translation-benchmarks/${id}/ratings`, data);
 
 export default client;

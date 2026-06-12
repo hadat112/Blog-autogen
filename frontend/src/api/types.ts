@@ -7,6 +7,8 @@ export interface AccountConfig {
   base_url?: string;
   text_model?: string;
   image_model?: string;
+  translation_chunk_size?: string;
+  translation_context_chars?: string;
   page_id?: string;
   access_token?: string;
   spreadsheet_id?: string;
@@ -55,4 +57,53 @@ export interface Job {
   created_at?: string;
   updated_at?: string;
   outputs?: Record<string, any>;
+}
+
+export interface TranslationBenchmarkCaseResult {
+  case_id: string;
+  source_title: string;
+  source_content: string;
+  translated_title: string;
+  translated_content: string;
+  score: number;
+  valid: boolean;
+  latency_ms: number;
+  error?: string | null;
+  title_metrics?: Record<string, any> | null;
+  content_metrics?: Record<string, any> | null;
+}
+
+export interface TranslationBenchmarkCandidate {
+  account_id: string;
+  account_name: string;
+  model: string;
+  blind_label: string;
+  average_score: number;
+  valid_rate: number;
+  latency_ms: number;
+  request_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  cases: TranslationBenchmarkCaseResult[];
+}
+
+export interface TranslationBenchmarkRun {
+  id: string;
+  status: "queued" | "running" | "success" | "failed";
+  progress: number;
+  current_step?: string | null;
+  target_language: string;
+  suite: "standard" | "custom";
+  selected_account_ids: string[];
+  request_config: {
+    suite?: string;
+    custom_title?: string;
+    custom_content?: string;
+  };
+  results: TranslationBenchmarkCandidate[];
+  manual_ratings: Record<string, { score: number; notes?: string }>;
+  error?: string | null;
+  created_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
 }

@@ -208,6 +208,13 @@ Full details are in:
 packaging/PACKAGING_GUIDE.md
 ```
 
+Translation model comparison is documented in:
+
+```text
+docs/translation-benchmark.md
+docs/translation-benchmark-handoff.vi.md
+```
+
 ---
 
 ## 📦 Packaging Releases

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List, Any, Dict
+from typing import Optional, List, Any, Dict, Literal
 from pydantic import BaseModel, Field
 
 class AccountBase(BaseModel):
@@ -59,6 +59,40 @@ class JobCreate(JobBase):
 class JobResponse(JobBase):
     id: str
     start_time: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TranslationBenchmarkCreate(BaseModel):
+    account_ids: List[str]
+    target_language: str
+    suite: Literal["standard", "custom"] = "standard"
+    custom_title: Optional[str] = None
+    custom_content: Optional[str] = None
+
+
+class TranslationBenchmarkRating(BaseModel):
+    account_id: str
+    score: int = Field(ge=1, le=5)
+    notes: str = ""
+
+
+class TranslationBenchmarkResponse(BaseModel):
+    id: str
+    status: str
+    progress: int
+    current_step: Optional[str] = None
+    target_language: str
+    suite: str
+    selected_account_ids: List[str] = Field(default_factory=list)
+    request_config: Dict[str, Any] = Field(default_factory=dict)
+    results: List[Any] = Field(default_factory=list)
+    manual_ratings: Dict[str, Any] = Field(default_factory=dict)
+    error: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
