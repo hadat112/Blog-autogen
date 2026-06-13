@@ -15,10 +15,13 @@ echo "Creating Windows release..."
 rm -rf release/StoryAutogen-Windows release/StoryAutogen-Windows.zip
 mkdir -p release/StoryAutogen-Windows/frontend
 
-cp -R adapters application apps core infrastructure release/StoryAutogen-Windows/
+cp -R adapters application apps config core infrastructure release/StoryAutogen-Windows/
 cp prompts.txt pyproject.toml release/StoryAutogen-Windows/
 cp packaging/windows/README_WINDOWS.txt packaging/windows/install_windows.bat packaging/windows/run.bat packaging/app_launcher.py release/StoryAutogen-Windows/
 cp -R frontend/dist release/StoryAutogen-Windows/frontend/
+
+find release/StoryAutogen-Windows -type d -name "__pycache__" -prune -exec rm -rf {} +
+find release/StoryAutogen-Windows -type f -name "*.pyc" -delete
 
 cd release
 zip -r StoryAutogen-Windows.zip StoryAutogen-Windows >/dev/null

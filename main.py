@@ -5,7 +5,6 @@ import logging
 from core.config_manager import ConfigManager
 from core.orchestrator import Orchestrator
 from core.run_options import parse_run_tokens
-from core.language import normalize_language
 from core.article_crawler import extract_article_from_url
 
 
@@ -36,20 +35,6 @@ def _effective_disabled_steps_from_config(config: dict) -> list[str]:
     return [IMAGE_STEP_ID]
 
 
-def _language_name_from_code(language_code: str) -> str:
-    if language_code == "uk":
-        return "Ukrainian"
-    if language_code == "en":
-        return "English"
-    if language_code == "vi":
-        return "Vietnamese"
-    if language_code == "lt":
-        return "Lithuanian"
-    if language_code == "et":
-        return "Estonian"
-    return language_code
-
-
 def _resolve_disabled_steps(options, config: dict) -> list[str]:
     disabled_steps = _effective_disabled_steps_from_config(config)
 
@@ -76,10 +61,9 @@ def main():
         print("Error: invalid arguments")
         sys.exit(1)
 
-    try:
-        language = normalize_language(options.language)
-    except ValueError as e:
-        print(f"Error: {e}")
+    language = options.language
+    if not isinstance(language, str) or not language.strip():
+        print("Error: language cannot be empty")
         sys.exit(1)
 
     logging.basicConfig(
@@ -125,7 +109,7 @@ def main():
 
     if options.crawl_url:
         print(f"Crawling article from {options.crawl_url}...")
-        article_data = extract_article_from_url(options.crawl_url, orchestrator.ai, language=_language_name_from_code(language))
+        article_data = extract_article_from_url(options.crawl_url, orchestrator.ai, language=language)
         orchestrator.process_article_data(article_data)
         return
 

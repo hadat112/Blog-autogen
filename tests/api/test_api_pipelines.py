@@ -41,7 +41,7 @@ def test_create_pipeline():
     pipeline_data = {
         "name": "Test Pipeline",
         "type": "story",
-        "language": "uk",
+        "language": "Ukrainian",
         "step_accounts": {
             "ai": "ai_account_id",
             "wp": "wp_account_id"
@@ -53,6 +53,7 @@ def test_create_pipeline():
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == "Test Pipeline"
+    assert data["language"] == "Ukrainian"
     assert "id" in data
     assert data["step_accounts"]["ai"] == "ai_account_id"
     assert data["settings"]["wp_category_id"] == "12"
@@ -63,7 +64,7 @@ def test_get_pipeline():
     pipeline_data = {
         "name": "Get Pipeline",
         "type": "story",
-        "language": "uk",
+        "language": "Ukrainian",
         "step_accounts": {"ai": "x"}
     }
     create_resp = client.post("/pipelines", json=pipeline_data)
@@ -78,7 +79,7 @@ def test_update_pipeline():
     pipeline_data = {
         "name": "Old Name",
         "type": "story",
-        "language": "uk",
+        "language": "Ukrainian",
         "step_accounts": {"ai": "x"}
     }
     create_resp = client.post("/pipelines", json=pipeline_data)
@@ -87,7 +88,7 @@ def test_update_pipeline():
     update_data = {
         "name": "New Name",
         "type": "story",
-        "language": "en",
+        "language": "English",
         "step_accounts": {"ai": "y"},
         "settings": {"wp_category_id": "34"},
         "is_active": False
@@ -95,7 +96,7 @@ def test_update_pipeline():
     response = client.put(f"/pipelines/{pipeline_id}", json=update_data)
     assert response.status_code == 200
     assert response.json()["name"] == "New Name"
-    assert response.json()["language"] == "en"
+    assert response.json()["language"] == "English"
     assert response.json()["settings"]["wp_category_id"] == "34"
     assert response.json()["wp_category_id"] == "34"
     assert response.json()["is_active"] is False
@@ -104,7 +105,7 @@ def test_create_pipeline_accepts_top_level_wp_category_id():
     pipeline_data = {
         "name": "Top Level Category",
         "type": "story",
-        "language": "uk",
+        "language": "Ukrainian",
         "step_accounts": {"wp": "wp_account_id"},
         "wp_category_id": "99"
     }
@@ -119,7 +120,7 @@ def test_delete_pipeline():
     pipeline_data = {
         "name": "Delete Me",
         "type": "story",
-        "language": "uk",
+        "language": "Ukrainian",
         "step_accounts": {"ai": "x"}
     }
     create_resp = client.post("/pipelines", json=pipeline_data)
@@ -131,3 +132,85 @@ def test_delete_pipeline():
     # Verify it's gone
     get_resp = client.get(f"/pipelines/{pipeline_id}")
     assert get_resp.status_code == 404
+
+
+def test_create_pipeline_preserves_custom_language_text():
+    response = client.post(
+        "/pipelines",
+        json={
+            "name": "Custom Language",
+            "type": "story",
+            "language": "abc",
+            "step_accounts": {},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["language"] == "abc"
+
+
+def test_create_crawl_pipeline_accepts_empty_language_for_repost_original():
+    response = client.post(
+        "/pipelines",
+        json={
+            "name": "Repost Original",
+            "type": "crawl",
+            "language": "",
+            "step_accounts": {},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["language"] == ""
+
+
+def test_create_story_pipeline_rejects_empty_language():
+    response = client.post(
+        "/pipelines",
+        json={
+            "name": "Story Needs Language",
+            "type": "story",
+            "language": "",
+            "step_accounts": {},
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Language is required"
+
+
+def test_existing_pipeline_can_keep_disabled_language():
+    create_response = client.post(
+        "/pipelines",
+        json={
+            "name": "Dutch Pipeline",
+            "type": "story",
+            "language": "Dutch",
+            "step_accounts": {},
+        },
+    )
+    pipeline = create_response.json()
+    dutch = next(
+        language for language in client.get("/languages").json()
+        if language["code"] == "nl"
+    )
+    client.put(
+        "/languages/nl",
+        json={
+            "display_name": dutch["display_name"],
+            "is_active": False,
+        },
+    )
+
+    response = client.put(
+        f"/pipelines/{pipeline['id']}",
+        json={
+            "name": "Dutch Pipeline Updated",
+            "type": "story",
+            "language": "Dutch",
+            "step_accounts": {},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["language"] == "Dutch"

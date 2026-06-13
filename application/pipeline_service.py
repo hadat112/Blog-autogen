@@ -22,11 +22,19 @@ class PipelineService:
             settings["wp_category_id"] = pipeline_data.wp_category_id
         return settings
 
+    def _language_value(self, language: str, pipeline_type: str):
+        if not isinstance(language, str):
+            raise ValueError("Language is required")
+        if pipeline_type != "crawl" and not language.strip():
+            raise ValueError("Language is required")
+        return language
+
     def create_pipeline(self, pipeline_data):
+        language_name = self._language_value(pipeline_data.language, pipeline_data.type)
         pipeline = models.Pipeline(
             name=pipeline_data.name,
             type=pipeline_data.type,
-            language=pipeline_data.language,
+            language=language_name,
             step_accounts=pipeline_data.step_accounts,
             settings=self._settings_from_pipeline_data(pipeline_data),
             is_active=pipeline_data.is_active,
@@ -43,7 +51,7 @@ class PipelineService:
 
         pipeline.name = pipeline_data.name
         pipeline.type = pipeline_data.type
-        pipeline.language = pipeline_data.language
+        pipeline.language = self._language_value(pipeline_data.language, pipeline_data.type)
         pipeline.step_accounts = pipeline_data.step_accounts
         pipeline.settings = self._settings_from_pipeline_data(pipeline_data)
         pipeline.is_active = pipeline_data.is_active

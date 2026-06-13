@@ -248,7 +248,13 @@ def parse_wp_post_payload(post_json: dict, original_html: str = "", origin_api: 
     }
 
 
-def _extract_wp_article_from_response(response, ai_client, language: str, log_callback=None):
+def _extract_wp_article_from_response(
+    response,
+    ai_client,
+    language: str,
+    log_callback=None,
+    translate: bool = True,
+):
     origin_api = _wp_api_base(response.url)
     if not origin_api:
         return None
@@ -269,6 +275,16 @@ def _extract_wp_article_from_response(response, ai_client, language: str, log_ca
     if not fields["title"] or not fields["content"]:
         return None
 
+    if not translate:
+        if log_callback:
+            log_callback("Step 2: Using original WordPress article without translation.")
+        return {
+            "title": fields["title"],
+            "content": fields["content"],
+            "caption": "",
+            "image_url": fields["image_url"],
+        }
+
     if log_callback:
         log_callback("Step 2: Translating article via AI...")
 
@@ -284,7 +300,13 @@ def _extract_wp_article_from_response(response, ai_client, language: str, log_ca
     return ai_client.extract_article(clean_html, response.url, language=language)
 
 
-def extract_article_from_url(article_url: str, ai_client, language: str = "Ukrainian", log_callback=None) -> dict:
+def extract_article_from_url(
+    article_url: str,
+    ai_client,
+    language: str = "Ukrainian",
+    log_callback=None,
+    translate: bool = True,
+) -> dict:
     response = requests.get(
         article_url,
         headers={
@@ -296,7 +318,15 @@ def extract_article_from_url(article_url: str, ai_client, language: str = "Ukrai
     )
     response.raise_for_status()
 
-    article = _extract_wp_article_from_response(response, ai_client, language, log_callback=log_callback)
+    article = _extract_wp_article_from_response(
+        response,
+        ai_client,
+        language,
+        log_callback=log_callback,
+        translate=translate,
+    )
+    if article is None and not translate:
+        raise ValueError("Repost original requires a WordPress REST article with title and content.")
     if article is None:
         clean_html = clean_article_html(response.text, response.url)
         if log_callback:

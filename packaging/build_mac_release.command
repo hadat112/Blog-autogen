@@ -15,10 +15,13 @@ echo "Creating Mac release..."
 rm -rf release
 mkdir -p release/StoryAutogen-Mac/frontend
 
-cp -R adapters application apps core infrastructure release/StoryAutogen-Mac/
+cp -R adapters application apps config core infrastructure release/StoryAutogen-Mac/
 cp prompts.txt pyproject.toml release/StoryAutogen-Mac/
 cp packaging/mac/README_MAC.txt packaging/mac/install_mac.command packaging/mac/run_mac.command packaging/app_launcher.py release/StoryAutogen-Mac/
 cp -R frontend/dist release/StoryAutogen-Mac/frontend/
+
+find release/StoryAutogen-Mac -type d -name "__pycache__" -prune -exec rm -rf {} +
+find release/StoryAutogen-Mac -type f -name "*.pyc" -delete
 
 chmod +x release/StoryAutogen-Mac/install_mac.command
 chmod +x release/StoryAutogen-Mac/run_mac.command

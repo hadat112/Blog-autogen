@@ -291,7 +291,9 @@ def test_extract_article_prompt_includes_output_language():
     assert "caption must be 300-500 words" in prompt
     assert "cut from the article content itself" in prompt
     assert "read more in the comments below" in prompt
-    assert "Write title, content, caption, and the caption CTA entirely in Vietnamese." in prompt
+    assert "mandatory target language is exactly: Vietnamese" in prompt
+    assert "reader-facing word in title, content, caption, and caption CTA in Vietnamese only" in prompt
+    assert "verify that title, content, caption, and the caption CTA are entirely in Vietnamese" in prompt
 
 
 def test_parse_article_json_repairs_concatenated_string_segments():
@@ -338,26 +340,57 @@ def test_translate_article_fields_returns_standard_article_payload():
     }
     assert len(responses.calls) == 2
     first_payload = json.loads(responses.calls[0].request.body.decode("utf-8"))
+    assert first_payload["temperature"] == 0.2
     assert first_payload["messages"][0]["role"] == "system"
-    assert "professional translation processor" in first_payload["messages"][0]["content"]
+    assert "deterministic translation engine" in first_payload["messages"][0]["content"]
+    assert "dialogue inside quotation marks" in first_payload["messages"][0]["content"]
+    assert "Never expose analysis, reasoning, self-correction" in first_payload["messages"][0]["content"]
     first_prompt = first_payload["messages"][1]["content"]
-    assert "Target language: Italian" in first_prompt
+    assert "TARGET LANGUAGE (authoritative, preserve exactly as written): Italian" in first_prompt
+    assert "Translate all content inside <source_text> into Italian" in first_prompt
+    assert "Translate every narration sentence and every quoted line of dialogue" in first_prompt
+    assert "Quotation marks do not make text exempt from translation" in first_prompt
+    assert '"Note:", "Wait:", "Inconsistent:", "Correction:"' in first_prompt
+    assert "Never apologize, refuse, discuss copyright or permission" in first_prompt
+    assert "Use exactly Italian" in first_prompt
     assert "Source paragraph count: 1" in first_prompt
     assert "<source_text>" in first_prompt
-    assert "Every sentence and paragraph" in first_prompt
     assert "exactly 1 paragraphs" in first_prompt
-    assert "Do not leave any ordinary source-language sentence unchanged" in first_prompt
     assert "Preserve every event, fact, name, relationship" in first_prompt
     assert "Do not summarize, expand, omit, reorder" in first_prompt
     assert "If the source text is a title or headline" in first_prompt
     assert "source length and sentence-by-sentence structure" in first_prompt
-    assert "Do not mention copyright" in first_prompt
-    assert "Never answer with refusal wording" in first_prompt
-    assert "Internal completion check" in first_prompt
+    assert "SILENT FINAL CHECK" in first_prompt
 
 
 @responses.activate
-def test_translate_article_fields_includes_previous_source_context_for_later_chunks():
+def test_translation_prompt_preserves_custom_language_text():
+    ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1")
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json={"choices": [{"message": {"content": "Custom output"}}]},
+        status=200,
+    )
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json={"choices": [{"message": {"content": "Custom paragraph"}}]},
+        status=200,
+    )
+
+    ai.translate_article_fields("Title", "Paragraph", language="abc")
+
+    payload = json.loads(responses.calls[0].request.body.decode("utf-8"))
+    assert payload["temperature"] == 0.2
+    prompt = payload["messages"][1]["content"]
+    assert "TARGET LANGUAGE (authoritative, preserve exactly as written): abc" in prompt
+    assert "Translate all content inside <source_text> into abc" in prompt
+    assert "Use exactly abc" in prompt
+
+
+@responses.activate
+def test_translate_article_fields_uses_previous_translation_for_later_chunks():
     ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1")
     responses.add(
         responses.POST,
@@ -377,7 +410,7 @@ def test_translate_article_fields_includes_previous_source_context_for_later_chu
         json={"choices": [{"message": {"content": "Translated second chunk"}}]},
         status=200,
     )
-    first = "First paragraph " + ("a" * 2400)
+    first = "First paragraph " + ("a" * 1600)
     second = "Second paragraph with follow-up context. " + ("b" * 200)
 
     article = ai.translate_article_fields("Source title", f"{first}\n\n{second}", language="Italian")
@@ -385,8 +418,10 @@ def test_translate_article_fields_includes_previous_source_context_for_later_chu
     assert article["content"] == "Translated first chunk\n\nTranslated second chunk"
     second_payload = json.loads(responses.calls[2].request.body.decode("utf-8"))
     second_prompt = second_payload["messages"][1]["content"]
-    assert "Previous source context for continuity only" in second_prompt
-    assert "First paragraph" in second_prompt
+    assert "Previous translated context already written in Italian" in second_prompt
+    assert "Translated first chunk" in second_prompt
+    assert "Do not repeat, rewrite, summarize" in second_prompt
+    assert "First paragraph" not in second_prompt
     assert "Second paragraph with follow-up context." in second_prompt
 
 

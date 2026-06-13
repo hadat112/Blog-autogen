@@ -143,6 +143,56 @@ def test_extract_article_from_url_uses_wp_rest_when_post_id_exists():
 
 
 @responses.activate
+def test_extract_article_from_url_can_repost_wp_rest_without_translation():
+    responses.add(
+        responses.GET,
+        "https://source.test/article-original",
+        body="""
+        <html>
+          <head>
+            <link rel="alternate" type="application/json" href="https://source.test/wp-json/wp/v2/posts/77">
+          </head>
+          <body><article><h1>HTML title</h1></article></body>
+        </html>
+        """,
+        status=200,
+        content_type="text/html",
+    )
+    responses.add(
+        responses.GET,
+        "https://source.test/wp-json/wp/v2/posts?slug=article-original&_embed=1",
+        json=[{
+            "id": 77,
+            "title": {"rendered": "Original Title"},
+            "content": {"rendered": "<p>Original paragraph one.</p><p>Original paragraph two.</p>"},
+            "_embedded": {"wp:featuredmedia": [{"source_url": "https://source.test/original.jpg"}]},
+        }],
+        status=200,
+    )
+    ai = TranslatingAI()
+    log_messages = []
+
+    article = extract_article_from_url(
+        "https://source.test/article-original",
+        ai,
+        language="",
+        translate=False,
+        log_callback=log_messages.append,
+    )
+
+    assert article == {
+        "title": "Original Title",
+        "content": "Original paragraph one.\n\nOriginal paragraph two.",
+        "caption": "",
+        "image_url": "https://source.test/original.jpg",
+        "source_url": "https://source.test/article-original",
+    }
+    assert ai.calls == []
+    assert ai.translation_calls == []
+    assert log_messages == ["Step 2: Using original WordPress article without translation."]
+
+
+@responses.activate
 def test_extract_article_from_url_falls_back_to_post_id_when_slug_lookup_misses():
     responses.add(
         responses.GET,

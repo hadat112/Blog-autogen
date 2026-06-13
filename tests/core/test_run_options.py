@@ -43,7 +43,6 @@ def test_parse_tokens_supports_lang_alias():
     assert opts.language == "Vietnamese"
 
 
-def test_parse_tokens_defaults_language_to_ukraina():
+def test_parse_tokens_defaults_language_to_ukrainian():
     opts = parse_run_tokens([])
-    assert opts.language == "Ukraina"
-
+    assert opts.language == "Ukrainian"

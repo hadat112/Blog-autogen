@@ -5,11 +5,23 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from sqlalchemy import inspect, text
 
-from apps.api.routes import accounts, jobs, pipelines
+from apps.api.routes import accounts, jobs, languages, pipelines
+from application.language_service import LanguageService
 from infrastructure.db.session import Base, engine
+from infrastructure.db.session import SessionLocal
 
 
 Base.metadata.create_all(bind=engine)
+
+language_columns = [
+    column["name"] for column in inspect(engine).get_columns("languages")
+]
+if "prompt_name" in language_columns:
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE languages DROP COLUMN prompt_name"))
+
+with SessionLocal() as db:
+    LanguageService(db).ensure_defaults()
 
 if "settings" not in [column["name"] for column in inspect(engine).get_columns("pipelines")]:
     with engine.begin() as conn:
@@ -39,6 +51,7 @@ app.add_middleware(
 app.include_router(accounts.router)
 app.include_router(pipelines.router)
 app.include_router(jobs.router)
+app.include_router(languages.router)
 
 
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -58,7 +71,7 @@ def read_root():
 
 @app.get("/{path:path}", include_in_schema=False)
 def serve_frontend(path: str):
-    if path.startswith(("accounts", "pipelines", "jobs")):
+    if path.startswith(("accounts", "pipelines", "jobs", "languages")):
         return {"status": "not_found"}
 
     requested_file = FRONTEND_DIST / path

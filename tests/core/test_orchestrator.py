@@ -80,7 +80,10 @@ def test_process_prompt_success(mock_storage, mock_fb, mock_wp, mock_sheets, moc
     assert result["title"] == "Test Title"
     assert result["url"] == "https://wp.url/story"
     
-    orch.ai.generate_story.assert_called_once_with("Test Prompt")
+    story_prompt = orch.ai.generate_story.call_args.args[0]
+    assert "Target language: Ukrainian" in story_prompt
+    assert "title, content, and caption in Ukrainian only" in story_prompt
+    assert story_prompt.endswith("Test Prompt")
     orch.ai.generate_image.assert_called_once_with("Test Image Prompt")
     orch.wp.publish.assert_called_once_with("Test Title", "Test Content", "https://image.url", category_id=None)
     orch.sheets.append_row.assert_called_once()
@@ -261,7 +264,8 @@ def test_process_article_data_starts_at_publishing_steps(mock_storage, mock_fb, 
     orch.sheets.append_row.assert_called_once()
     fb_caption = orch.fb.publish_photo_caption.call_args.args[0]
     assert fb_caption.startswith("Crawled content with enough words for publishing")
-    assert fb_caption.endswith("Читайте продовження за посиланням у коментарях нижче!")
+    assert fb_caption.endswith("...")
+    assert "Click the link" not in fb_caption
     orch.fb.publish_photo_caption.assert_called_once_with(fb_caption, "https://source.test/image.jpg")
     orch.fb.comment_on_post.assert_called_once_with(
         orch.fb.publish_photo_caption.return_value,
@@ -301,12 +305,67 @@ def test_process_article_data_debug_saves_crawled_article_response(mock_storage,
 @patch("core.orchestrator.WordPressPublisher")
 @patch("core.orchestrator.FacebookPagePublisher")
 @patch("core.orchestrator.StorageProvider")
-def test_create_teaser_caption_uses_vietnamese_cta(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_config):
-    orch = Orchestrator(config=mock_config, language="vi")
+def test_create_teaser_caption_does_not_inject_wrong_language_cta(mock_storage, mock_fb, mock_wp, mock_sheets, mock_ai, mock_config):
+    orch = Orchestrator(config=mock_config, language="Vietnamese")
     content = " ".join(f"word{i}" for i in range(700))
 
     caption = orch.create_teaser_caption(content)
 
-    assert caption.endswith("Đọc tiếp ở phần bình luận bên dưới!")
+    assert caption.endswith("...")
+    assert "Click the link" not in caption
     assert len(caption.split()) >= 400
     assert "word315" in caption
+
+
+@patch("core.orchestrator.NineRouterAI")
+@patch("core.orchestrator.GoogleSheetsProvider")
+@patch("core.orchestrator.WordPressPublisher")
+@patch("core.orchestrator.FacebookPagePublisher")
+@patch("core.orchestrator.StorageProvider")
+def test_language_text_is_inserted_into_prompt_unchanged(
+    mock_storage,
+    mock_fb,
+    mock_wp,
+    mock_sheets,
+    mock_ai,
+    mock_config,
+):
+    orch = Orchestrator(config=mock_config, language="abc")
+
+    assert orch.apply_language_to_prompt("Write in {language}") == "Write in abc"
+    reinforced = orch.enforce_story_language("Original request")
+    assert "Target language: abc" in reinforced
+    assert "title, content, and caption in abc only" in reinforced
+    assert reinforced.endswith("Original request")
+
+
+@patch("core.article_crawler.extract_article_from_url")
+@patch("core.orchestrator.NineRouterAI")
+@patch("core.orchestrator.GoogleSheetsProvider")
+@patch("core.orchestrator.WordPressPublisher")
+@patch("core.orchestrator.FacebookPagePublisher")
+@patch("core.orchestrator.StorageProvider")
+def test_process_crawl_empty_language_reposts_original(
+    mock_storage,
+    mock_fb,
+    mock_wp,
+    mock_sheets,
+    mock_ai,
+    mock_extract_article,
+    mock_config,
+):
+    orch = Orchestrator(config=mock_config, language="")
+    mock_extract_article.return_value = {
+        "title": "Original",
+        "content": "Original content",
+        "caption": "",
+        "image_url": "",
+        "source_url": "https://source.test/story",
+    }
+    orch.wp.publish.return_value = "https://wp.url/original"
+
+    result = orch.process_crawl("https://source.test/story")
+
+    assert result["status"] == "success"
+    mock_extract_article.assert_called_once()
+    assert mock_extract_article.call_args.kwargs["translate"] is False

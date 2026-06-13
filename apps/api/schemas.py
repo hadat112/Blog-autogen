@@ -17,6 +17,22 @@ class AccountResponse(AccountBase):
     class Config:
         from_attributes = True
 
+class LanguageBase(BaseModel):
+    display_name: str = Field(min_length=1)
+    is_active: bool = True
+
+class LanguageCreate(LanguageBase):
+    code: str = Field(min_length=1, max_length=12)
+
+class LanguageUpdate(LanguageBase):
+    pass
+
+class LanguageResponse(LanguageCreate):
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 class PipelineBase(BaseModel):
     name: str
     type: str

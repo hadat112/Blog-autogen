@@ -4,6 +4,7 @@ import Layout from './components/Layout';
 import Accounts from './pages/Accounts';
 import Pipelines from './pages/Pipelines';
 import Dashboard from './pages/Dashboard';
+import Settings from './pages/Settings';
 
 const App: React.FC = () => {
   return (
@@ -13,7 +14,7 @@ const App: React.FC = () => {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/pipelines" element={<Pipelines />} />
-        <Route path="/settings" element={<div className="p-4 bg-surface rounded-lg shadow border border-border-default">Global Settings (Coming Soon)</div>} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<div>Page not found</div>} />
       </Routes>
     </Layout>

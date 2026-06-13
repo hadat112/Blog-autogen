@@ -11,6 +11,11 @@ interface PipelineCardProps {
 }
 
 const PipelineCard: React.FC<PipelineCardProps> = ({ pipeline, onEdit, onDelete }) => {
+  const languageLabel =
+    pipeline.type === 'crawl' && !pipeline.language
+      ? 'Original'
+      : pipeline.language;
+
   return (
     <Card className="flex flex-row items-center justify-between p-6 hover:shadow-md transition-shadow">
       <div className="flex items-center space-x-4">
@@ -21,7 +26,10 @@ const PipelineCard: React.FC<PipelineCardProps> = ({ pipeline, onEdit, onDelete 
           <h4 className="font-bold text-content-primary">{pipeline.name}</h4>
           <div className="flex items-center space-x-3 mt-1">
             <span className="text-xs font-semibold text-content-secondary bg-surface-subtle px-2 py-0.5 rounded uppercase">
-              {pipeline.language}
+              {languageLabel}
+            </span>
+            <span className="text-xs font-semibold text-content-secondary bg-surface-subtle px-2 py-0.5 rounded uppercase">
+              {pipeline.type}
             </span>
             <span className="text-xs text-content-tertiary">
               Steps: {Object.values(pipeline.step_accounts).filter(v => v).length} configured

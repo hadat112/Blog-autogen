@@ -19,7 +19,7 @@ class Pipeline(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String, nullable=False)
     type = Column(String, nullable=False)
-    language = Column(String, default="uk")
+    language = Column(String, default="Ukrainian")
     step_accounts = Column(JSON, nullable=False)
     settings = Column(JSON, default=dict)
     is_active = Column(Boolean, default=True)
@@ -30,6 +30,13 @@ class Pipeline(Base):
         if not isinstance(self.settings, dict):
             return None
         return self.settings.get("wp_category_id")
+
+class Language(Base):
+    __tablename__ = "languages"
+    code = Column(String, primary_key=True)
+    display_name = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class Job(Base):
     __tablename__ = "jobs"

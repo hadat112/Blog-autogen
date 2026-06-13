@@ -43,7 +43,7 @@ def test_create_pipeline(db):
     pipeline_data = {
         "name": "Test Pipeline",
         "type": "story",
-        "language": "en",
+        "language": "English",
         "step_accounts": {"step1": "account1"},
         "settings": {"wp_category_id": "7"}
     }
@@ -55,7 +55,7 @@ def test_create_pipeline(db):
     assert pipeline.id is not None
     assert pipeline.name == "Test Pipeline"
     assert pipeline.type == "story"
-    assert pipeline.language == "en"
+    assert pipeline.language == "English"
     assert pipeline.step_accounts == {"step1": "account1"}
     assert pipeline.settings == {"wp_category_id": "7"}
     assert pipeline.is_active is True

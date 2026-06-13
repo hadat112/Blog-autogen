@@ -28,7 +28,7 @@ def parse_run_tokens(tokens: list[str]) -> RunOptions:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--threads", type=int, default=5)
-    parser.add_argument("--language", "--lang", dest="language", type=str, default="Ukraina")
+    parser.add_argument("--language", "--lang", dest="language", type=str, default="Ukrainian")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--update", action="store_true")
     parser.add_argument("--with-image", action="store_true")

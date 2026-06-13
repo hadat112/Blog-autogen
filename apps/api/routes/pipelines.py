@@ -26,12 +26,18 @@ def get_pipeline(id: str, db: Session = Depends(get_db)):
 
 @router.post("/pipelines", response_model=schemas.PipelineResponse)
 def create_pipeline(pipeline: schemas.PipelineCreate, db: Session = Depends(get_db)):
-    return PipelineService(db).create_pipeline(pipeline)
+    try:
+        return PipelineService(db).create_pipeline(pipeline)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.put("/pipelines/{id}", response_model=schemas.PipelineResponse)
 def update_pipeline(id: str, pipeline: schemas.PipelineCreate, db: Session = Depends(get_db)):
-    updated = PipelineService(db).update_pipeline(id, pipeline)
+    try:
+        updated = PipelineService(db).update_pipeline(id, pipeline)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if not updated:
         raise HTTPException(status_code=404, detail="Pipeline not found")
     return updated
@@ -48,6 +54,14 @@ def delete_pipeline(id: str, db: Session = Depends(get_db)):
 @router.post("/pipelines/{id}/run")
 async def run_pipeline(id: str, prompt_data: Optional[schemas.QuickRunInput] = None, db: Session = Depends(get_db)):
     service = PipelineService(db)
+    pipeline = service.get_pipeline(id)
+    if not pipeline:
+        raise HTTPException(status_code=404, detail="Pipeline not found")
+    response_status = (
+        "running"
+        if pipeline.type == "crawl" and not (pipeline.language or "").strip()
+        else "queued"
+    )
     try:
         job_id = await service.start_pipeline_run(id, prompt_data)
     except ValueError as e:
@@ -57,4 +71,4 @@ async def run_pipeline(id: str, prompt_data: Optional[schemas.QuickRunInput] = N
 
     if not job_id:
         raise HTTPException(status_code=404, detail="Pipeline not found")
-    return {"job_id": job_id, "status": "queued"}
+    return {"job_id": job_id, "status": response_status}

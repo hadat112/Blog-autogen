@@ -40,7 +40,7 @@ class Orchestrator:
                  config=None,
                  num_threads=5,
                  limit=None,
-                 language="uk",
+                 language="Ukrainian",
                  debug=False,
                  disabled_steps=None,
                  progress_callback=None):
@@ -122,37 +122,27 @@ class Orchestrator:
         if self.debug:
             os.makedirs("debug", exist_ok=True)
 
-    def prompt_language_name(self):
-        lang = (self.language or "").strip().lower()
-        if lang == "uk":
-            return "Ukrainian"
-        if lang == "en":
-            return "English"
-        if lang == "vi":
-            return "Vietnamese"
-        if lang == "hr":
-            return "Croatian"
-        if lang == "ro":
-            return "Romanian"
-        if lang == "it":
-            return "Italian"
-        if lang == "pl":
-            return "Polish"
-        if lang == "lt":
-            return "Lithuanian"
-        if lang == "et":
-            return "Estonian"
-        return self.language
-
     def prompt_language_hint(self):
-        lang_name = self.prompt_language_name()
-        return f"{lang_name} (code: {self.language})" if self.language else lang_name
+        return self.language
 
     def apply_language_to_prompt(self, prompt):
         return prompt.replace("{language}", self.prompt_language_hint()) if "{language}" in prompt else prompt
 
     def apply_language_to_prompts(self, prompts):
         return [self.apply_language_to_prompt(p) for p in prompts] if prompts else prompts
+
+    def enforce_story_language(self, prompt):
+        return (
+            "MANDATORY OUTPUT LANGUAGE\n"
+            f"Target language: {self.language}\n"
+            f"Write every reader-facing word in title, content, and caption in {self.language} only.\n"
+            "Do not switch to English or any other language. Do not translate, normalize, "
+            "reinterpret, or replace the target language value.\n"
+            "The caption CTA must also be written in the same target language.\n"
+            "Before returning JSON, verify that no ordinary sentence in title, content, or "
+            "caption is written in another language.\n\n"
+            f"{prompt}"
+        )
 
     def load_prompts(self, prompts_file):
         with open(prompts_file, "r") as f:
@@ -185,12 +175,7 @@ class Orchestrator:
             return None
 
     def caption_cta(self, language=None):
-        lang = (language or self.language or "").strip().lower()
-        if lang in {"uk", "ukrainian", "ukraina"}:
-            return "Читайте продовження за посиланням у коментарях нижче!"
-        if lang in {"vi", "vietnamese"}:
-            return "Đọc tiếp ở phần bình luận bên dưới!"
-        return "Click the link in the comments below to read the full story!"
+        return ""
 
     def create_teaser_caption(self, content, language=None):
         words = content.split()
@@ -198,7 +183,8 @@ class Orchestrator:
         if len(words) > 650:
             start = max(0, min(len(words) - 450, int(len(words) * 0.45)))
         excerpt = " ".join(words[start:start + 450])
-        return f"{excerpt}...\n\n{self.caption_cta(language)}"
+        cta = self.caption_cta(language)
+        return f"{excerpt}...\n\n{cta}" if cta else f"{excerpt}..."
 
     def build_publication_core(self, starting_step_index):
         step_indexes = {
@@ -258,7 +244,7 @@ class Orchestrator:
         state = PipelineState(
             article=article,
             disabled_steps=set(self.disabled_steps),
-            language_name=self.prompt_language_name(),
+            language_name=self.language,
             caption_cta=self.caption_cta(),
             log_task_id=log_task_id,
             task_id=task_id,
@@ -318,7 +304,13 @@ class Orchestrator:
             def crawl_log(message):
                 self._emit_log(f"{log_task_id} {message}", 2, "AI Translate", 0, task_id=task_id)
 
-            article_data = extract_article_from_url(url, self.ai, language=self.prompt_language_name(), log_callback=crawl_log)
+            article_data = extract_article_from_url(
+                url,
+                self.ai,
+                language=self.language,
+                log_callback=crawl_log,
+                translate=bool((self.language or "").strip()),
+            )
 
             self._emit_log(f"{log_task_id} Extraction Success: Title='{article_data.get('title', '')[:30]}...'", 1, "Extract article from URL", 100, task_id=task_id)
 
@@ -346,7 +338,9 @@ class Orchestrator:
 
             print(f"\n{log_task_id} Step 1: Generating story via AI...")
             try:
-                story_data = self.ai.generate_story(prompt)
+                story_data = self.ai.generate_story(
+                    self.enforce_story_language(prompt)
+                )
                 df = self.save_debug_file(story_data)
                 if df:
                     print(f"{log_task_id} Debug: AI response saved to {df}")

@@ -35,6 +35,13 @@ export interface Pipeline {
   is_active: boolean;
 }
 
+export interface Language {
+  code: string;
+  display_name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface Job {
   id: string;
   pipeline_id: string;

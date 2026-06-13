@@ -68,6 +68,35 @@ def test_run_pipeline_success(client, db_session):
     assert job.input_text == "Hello world"
     assert job.input_type == "prompt"
 
+
+def test_run_original_crawl_pipeline_returns_running(client, db_session, monkeypatch):
+    from application import pipeline_service
+    from infrastructure.db import models
+
+    pipeline = models.Pipeline(
+        id="original-run-pipeline",
+        name="Original Run Pipeline",
+        type="crawl",
+        language="",
+        step_accounts={},
+    )
+    db_session.add(pipeline)
+    db_session.commit()
+
+    async def fake_start_pipeline_run(pipeline_id, db, prompts_file="prompts.txt", prompt=None):
+        assert pipeline_id == "original-run-pipeline"
+        return "original-job"
+
+    monkeypatch.setattr(pipeline_service.worker_manager, "start_pipeline_run", fake_start_pipeline_run)
+
+    response = client.post(
+        "/pipelines/original-run-pipeline/run",
+        json={"prompt": "https://example.com/story"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"job_id": "original-job", "status": "running"}
+
 def test_list_jobs(client, db_session):
     response = client.get("/jobs")
     assert response.status_code == 200

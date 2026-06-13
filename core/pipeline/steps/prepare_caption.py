@@ -18,7 +18,11 @@ class PrepareCaptionPlugin(BaseStep):
         if len(words) > 650:
             start = max(0, min(len(words) - 450, int(len(words) * 0.45)))
         excerpt = " ".join(words[start:start + 450])
-        state.article.caption = f"{excerpt}...\n\n{state.caption_cta}"
+        state.article.caption = (
+            f"{excerpt}...\n\n{state.caption_cta}"
+            if state.caption_cta
+            else f"{excerpt}..."
+        )
         self._log(
             emit,
             state,

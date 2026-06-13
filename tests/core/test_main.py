@@ -1,30 +1,6 @@
 from unittest.mock import patch
 
-import pytest
-
 from core.run_options import RunOptions
-from main import normalize_language
-
-
-def test_normalize_language_full_names_and_codes():
-    assert normalize_language("ukraina") == "uk"
-    assert normalize_language("ukrainian") == "uk"
-    assert normalize_language("english") == "en"
-    assert normalize_language("litva") == "lt"
-    assert normalize_language("lithuanian") == "lt"
-    assert normalize_language("estonia") == "et"
-    assert normalize_language("estonian") == "et"
-    assert normalize_language("uk") == "uk"
-    assert normalize_language("en") == "en"
-    assert normalize_language("lt") == "lt"
-    assert normalize_language("et") == "et"
-
-
-def test_normalize_language_rejects_unknown_language():
-    with pytest.raises(ValueError):
-        normalize_language("japanese")
-
-
 def test_resolve_disabled_steps_prefers_new_config_key():
     from main import _resolve_disabled_steps
 
@@ -73,6 +49,27 @@ def test_main_cli_runs_once_even_if_old_listener_config_exists(mock_exists, mock
 @patch("main.Orchestrator")
 @patch("main.ConfigManager")
 @patch("main.os.path.exists")
+def test_main_passes_custom_language_through_unchanged(
+    mock_exists,
+    mock_config_cls,
+    mock_orch_cls,
+    monkeypatch,
+):
+    mock_exists.return_value = True
+    mock_config_cls.return_value.config = {"disabled_steps": []}
+    mock_orch_cls.return_value.run.return_value = []
+    monkeypatch.setattr("sys.argv", ["main.py", "--language", "abc"])
+
+    from main import main
+
+    main()
+
+    assert mock_orch_cls.call_args.kwargs["language"] == "abc"
+
+
+@patch("main.Orchestrator")
+@patch("main.ConfigManager")
+@patch("main.os.path.exists")
 def test_main_update_mode_exits_after_saving_config(mock_exists, mock_config_cls, mock_orch_cls, monkeypatch):
     mock_exists.return_value = True
     mock_config_cls.return_value.config = {"disabled_steps": []}
@@ -85,4 +82,3 @@ def test_main_update_mode_exits_after_saving_config(mock_exists, mock_config_cls
 
     mock_config_cls.return_value.run_onboarding.assert_called_once_with(update=True)
     mock_orch_cls.assert_not_called()
-

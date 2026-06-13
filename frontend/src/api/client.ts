@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Account, Pipeline, Job, AccountConfig } from './types';
+import { Account, Pipeline, Job, AccountConfig, Language } from './types';
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : window.location.origin),
@@ -17,6 +17,14 @@ export const createPipeline = (data: Partial<Pipeline>) => client.post<Pipeline>
 export const updatePipeline = (id: string, data: Partial<Pipeline>) => client.put<Pipeline>(`/pipelines/${id}`, data);
 export const deletePipeline = (id: string) => client.delete(`/pipelines/${id}`);
 export const runPipeline = (id: string, data: any) => client.post<{ job_id: string }>(`/pipelines/${id}/run`, data);
+
+export const getLanguages = () => client.get<Language[]>('/languages');
+export const createLanguage = (data: Omit<Language, 'created_at'>) =>
+  client.post<Language>('/languages', data);
+export const updateLanguage = (
+  code: string,
+  data: Pick<Language, 'display_name' | 'is_active'>,
+) => client.put<Language>(`/languages/${code}`, data);
 
 export const getJobs = () => client.get<Job[]>('/jobs');
 export const getJob = (id: string) => client.get<Job>(`/jobs/${id}`);

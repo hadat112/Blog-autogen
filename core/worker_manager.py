@@ -34,16 +34,17 @@ class WorkerManager:
         pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
         if not pipeline:
             raise ValueError(f"Pipeline {pipeline_id} not found")
-
         # 1. Setup Job record
         input_text = prompt.strip() if isinstance(prompt, str) else None
         input_type = "url" if input_text and input_text.startswith("http") else "prompt" if input_text else None
+
+        run_without_queue = pipeline.type == "crawl" and not (pipeline.language or "").strip()
 
         job = Job(
             pipeline_id=pipeline_id,
             input_text=input_text,
             input_type=input_type,
-            status="queued",
+            status="running" if run_without_queue else "queued",
             start_time=datetime.utcnow(),
             progress=0,
             logs=[]
@@ -120,11 +121,47 @@ class WorkerManager:
             progress_callback=progress_callback
         )
 
-        # 5. Queue in background. The lock in _run_job_task enforces one active pipeline.
-        task = asyncio.create_task(self._run_job_task(job_id, orchestrator, pipeline.type, prompts_file, prompt))
+        # 5. Run in background. Translated/AI jobs use the lock so only one pipeline
+        # runs at a time; original repost jobs can run immediately because they skip AI.
+        if run_without_queue:
+            task = asyncio.create_task(
+                self._run_job_task_unqueued(
+                    job_id,
+                    orchestrator,
+                    pipeline.type,
+                    prompts_file,
+                    prompt,
+                )
+            )
+        else:
+            task = asyncio.create_task(
+                self._run_job_task(
+                    job_id,
+                    orchestrator,
+                    pipeline.type,
+                    prompts_file,
+                    prompt,
+                )
+            )
         self.active_jobs[job_id] = task
 
         return job_id
+
+    async def _run_job_task_unqueued(
+        self,
+        job_id: str,
+        orchestrator: Orchestrator,
+        pipeline_type: str,
+        prompts_file: str,
+        prompt: str = None,
+    ):
+        try:
+            await self._execute_job_task(job_id, orchestrator, pipeline_type, prompts_file, prompt)
+        except asyncio.CancelledError:
+            self._mark_job_cancelled(job_id)
+            raise
+        finally:
+            self.active_jobs.pop(job_id, None)
 
     async def _run_job_task(self, job_id: str, orchestrator: Orchestrator, pipeline_type: str, prompts_file: str, prompt: str = None):
         try:

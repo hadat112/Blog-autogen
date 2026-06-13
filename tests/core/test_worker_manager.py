@@ -3,7 +3,7 @@ import asyncio
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from infrastructure.db.session import Base
-from infrastructure.db.models import Pipeline, Account, Job
+from infrastructure.db.models import Pipeline, Account, Job, Language
 from core.worker_manager import WorkerManager
 
 # Use in-memory SQLite for testing
@@ -98,3 +98,69 @@ async def test_worker_manager_uses_pipeline_wp_category(db, mocker):
 
     wp_config = mock_orchestrator.call_args.kwargs["wp_config"]
     assert wp_config["category_id"] == "new-pipeline-category"
+
+
+@pytest.mark.anyio
+async def test_worker_manager_uses_configured_prompt_language(db, mocker):
+    mocker.patch("core.worker_manager.SessionLocal", TestingSessionLocal)
+    db.add(Language(
+        code="nl",
+        display_name="Nederlands",
+        is_active=True,
+    ))
+    pipeline = Pipeline(
+        name="Dutch Pipeline",
+        type="story",
+        language="Nederlands",
+        step_accounts={},
+    )
+    db.add(pipeline)
+    db.commit()
+
+    mock_orchestrator = mocker.patch("core.worker_manager.Orchestrator")
+    mock_orchestrator.return_value.run.return_value = [{"status": "success"}]
+
+    await WorkerManager().start_pipeline_run(pipeline.id, db)
+
+    assert mock_orchestrator.call_args.kwargs["language"] == "Nederlands"
+    assert "language_name" not in mock_orchestrator.call_args.kwargs
+
+
+@pytest.mark.anyio
+async def test_original_crawl_pipeline_runs_without_queue_lock(db, mocker):
+    mocker.patch("core.worker_manager.SessionLocal", TestingSessionLocal)
+    pipeline = Pipeline(
+        name="Original Repost",
+        type="crawl",
+        language="",
+        step_accounts={},
+    )
+    db.add(pipeline)
+    db.commit()
+
+    mock_orchestrator = mocker.patch("core.worker_manager.Orchestrator")
+    mock_orchestrator.return_value.process_crawl.return_value = {"status": "success"}
+
+    wm = WorkerManager()
+    lock = wm._get_run_lock()
+    await lock.acquire()
+    try:
+        job_id = await wm.start_pipeline_run(
+            pipeline.id,
+            db,
+            prompt="https://example.com/post",
+        )
+
+        job = db.query(Job).filter(Job.id == job_id).first()
+        assert job.status == "running"
+
+        for _ in range(20):
+            db.refresh(job)
+            if job.status == "success":
+                break
+            await asyncio.sleep(0.1)
+
+        assert job.status == "success"
+        assert mock_orchestrator.return_value.process_crawl.called
+    finally:
+        lock.release()

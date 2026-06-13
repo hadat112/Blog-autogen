@@ -1,0 +1,13 @@
+[
+  { "code": "uk", "display_name": "Ukrainian" },
+  { "code": "vi", "display_name": "Vietnamese" },
+  { "code": "en", "display_name": "English" },
+  { "code": "hr", "display_name": "Croatian" },
+  { "code": "ro", "display_name": "Romanian" },
+  { "code": "it", "display_name": "Italian" },
+  { "code": "pl", "display_name": "Polish" },
+  { "code": "lt", "display_name": "Lithuanian" },
+  { "code": "et", "display_name": "Estonian" },
+  { "code": "nl", "display_name": "Dutch" },
+  { "code": "cs", "display_name": "Czech" }
+]
