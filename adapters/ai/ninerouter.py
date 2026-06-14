@@ -1,6 +1,8 @@
 import json
+import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from html import unescape
 from html.parser import HTMLParser
 
@@ -18,12 +20,17 @@ CINEMATIC_NATURALISM_STYLE_PROMPT = (
     "no teal-orange look, no heavy shadows, no dramatic dark tone."
 )
 TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
-AI_REQUEST_TIMEOUT = 60
+DEFAULT_AI_REQUEST_TIMEOUT = 180
 AI_MAX_ATTEMPTS = 2
+TRANSLATION_MAX_RETRIES = 4
+TRANSLATION_RETRY_DELAYS = (2, 5, 10)
 TRANSLATION_TEMPERATURE = 0.2
 CHUNKED_ARTICLE_THRESHOLD = 8000
-TRANSLATION_CHUNK_SIZE = 1800
+TRANSLATION_CHUNK_SIZE = 6000
 TRANSLATION_CONTEXT_PARAGRAPHS = 1
+TRANSLATION_MODES = {"sequential", "parallel"}
+DEFAULT_TRANSLATION_MODE = "sequential"
+DEFAULT_TRANSLATION_MAX_CONCURRENCY = 2
 TRANSLATION_PREFIX_RE = re.compile(
     r"^\s*(?:"
     r"(?:sure|certainly|of course)[,!.:\s-]+|"
@@ -37,6 +44,19 @@ def _build_styled_image_prompt(image_prompt: str) -> str:
     if base_prompt:
         return f"{base_prompt}\n\n{CINEMATIC_NATURALISM_STYLE_PROMPT}"
     return CINEMATIC_NATURALISM_STYLE_PROMPT
+
+
+def _get_ai_request_timeout() -> int:
+    raw_timeout = os.getenv("AI_REQUEST_TIMEOUT")
+    if not raw_timeout:
+        return DEFAULT_AI_REQUEST_TIMEOUT
+
+    try:
+        timeout = int(raw_timeout)
+    except ValueError:
+        return DEFAULT_AI_REQUEST_TIMEOUT
+
+    return timeout if timeout > 0 else DEFAULT_AI_REQUEST_TIMEOUT
 
 
 def _clean_translation_output(text: str) -> str:
@@ -243,9 +263,26 @@ def _split_text_chunks(text: str, max_chars: int = TRANSLATION_CHUNK_SIZE):
     return chunks
 
 
+def _word_count(text: str) -> int:
+    return len(re.findall(r"\S+", text or ""))
+
+
 def _tail_paragraph_context(text: str, count: int = TRANSLATION_CONTEXT_PARAGRAPHS):
     paragraphs = [p.strip() for p in re.split(r"\n{2,}", text or "") if p.strip()]
     return "\n\n".join(paragraphs[-count:]).strip()
+
+
+def _normalize_translation_mode(value) -> str:
+    mode = str(value or DEFAULT_TRANSLATION_MODE).strip().lower()
+    return mode if mode in TRANSLATION_MODES else DEFAULT_TRANSLATION_MODE
+
+
+def _normalize_translation_max_concurrency(value) -> int:
+    try:
+        concurrency = int(value)
+    except (TypeError, ValueError):
+        concurrency = DEFAULT_TRANSLATION_MAX_CONCURRENCY
+    return max(1, min(concurrency, 8))
 
 
 def _has_required_story_keys(value) -> bool:
@@ -409,18 +446,30 @@ def _parse_story_json(content_str: str) -> dict:
 
 
 class NineRouterAI(BaseAI):
-    def __init__(self, api_key, text_model, image_model, base_url="http://localhost:20128/v1"):
+    def __init__(
+        self,
+        api_key,
+        text_model,
+        image_model,
+        base_url="http://localhost:20128/v1",
+        translation_mode=DEFAULT_TRANSLATION_MODE,
+        translation_max_concurrency=DEFAULT_TRANSLATION_MAX_CONCURRENCY,
+    ):
         self.api_key = api_key
         self.text_model = text_model
         self.image_model = image_model
         self.base_url = base_url.rstrip('/')
+        self.translation_mode = _normalize_translation_mode(translation_mode)
+        self.translation_max_concurrency = _normalize_translation_max_concurrency(
+            translation_max_concurrency
+        )
 
     def _post_json(self, url: str, headers: dict, data: dict):
         last_error = None
 
         for attempt in range(1, AI_MAX_ATTEMPTS + 1):
             try:
-                response = requests.post(url, headers=headers, json=data, timeout=AI_REQUEST_TIMEOUT)
+                response = requests.post(url, headers=headers, json=data, timeout=_get_ai_request_timeout())
             except requests.RequestException as e:
                 last_error = e
             else:
@@ -467,7 +516,15 @@ class NineRouterAI(BaseAI):
             raise ValueError("AI returned empty content.")
         return content.strip()
 
-    def _translate_text(self, text: str, language: str, *, article_title: str = "", previous_translation_context: str = "") -> str:
+    def _translate_text(
+        self,
+        text: str,
+        language: str,
+        *,
+        article_title: str = "",
+        previous_translation_context: str = "",
+        previous_source_context: str = "",
+    ) -> str:
         source_paragraph_count = len(_paragraphs(text))
         context_lines = []
         if article_title:
@@ -478,6 +535,13 @@ class NineRouterAI(BaseAI):
                 "pronouns, terminology, tone, and style consistent. Do not repeat, rewrite, summarize, or "
                 "include any part of this context in the output:\n"
                 f"{previous_translation_context}"
+            )
+        if previous_source_context:
+            context_lines.append(
+                "Previous source context from the original article, not translated yet. Use it only to "
+                "understand continuity, names, pronouns, terminology, tone, and references. Do not translate, "
+                "repeat, rewrite, summarize, or include any part of this source context in the output:\n"
+                f"{previous_source_context}"
             )
 
         context_block = "\n\n".join(context_lines)
@@ -533,6 +597,19 @@ class NineRouterAI(BaseAI):
         )
         return _clean_translation_output(self._chat_text(prompt, system_prompt=system_prompt))
 
+    def _translate_text_with_retry(self, *args, **kwargs) -> str:
+        last_error = None
+        for attempt in range(TRANSLATION_MAX_RETRIES):
+            try:
+                return self._translate_text(*args, **kwargs)
+            except requests.HTTPError as e:
+                last_error = e
+                status_code = getattr(getattr(e, "response", None), "status_code", None)
+                if status_code != 429 or attempt == TRANSLATION_MAX_RETRIES - 1:
+                    raise
+                time.sleep(TRANSLATION_RETRY_DELAYS[min(attempt, len(TRANSLATION_RETRY_DELAYS) - 1)])
+        raise last_error
+
     def _extract_article_chunked(self, clean_html: str, article_url: str, language: str) -> dict:
         fields = _extract_article_fields_locally(clean_html)
         if not fields["title"] or not fields["content"]:
@@ -545,19 +622,24 @@ class NineRouterAI(BaseAI):
             language,
         )
 
-    def translate_article_fields(self, title: str, content: str, image_url: str = "", language: str = "Ukrainian") -> dict:
-        translated_title = self._translate_text(title, language, article_title=title)
-        translated_chunks = []
-        previous_translation_context = ""
-        for chunk in _split_text_chunks(content):
-            translated_chunk = self._translate_text(
-                chunk,
-                language,
-                article_title=translated_title,
-                previous_translation_context=previous_translation_context,
-            )
-            translated_chunks.append(translated_chunk)
-            previous_translation_context = _tail_paragraph_context(translated_chunk)
+    def translate_article_fields(
+        self,
+        title: str,
+        content: str,
+        image_url: str = "",
+        language: str = "Ukrainian",
+        progress_callback=None,
+    ) -> dict:
+        translated_title = self._translate_text_with_retry(title, language, article_title=title)
+        chunks = _split_text_chunks(content)
+        total_words = _word_count(content)
+        translated_chunks = self._translate_chunks(
+            chunks,
+            language,
+            translated_title,
+            total_words,
+            progress_callback,
+        )
 
         return {
             "title": translated_title,
@@ -565,6 +647,110 @@ class NineRouterAI(BaseAI):
             "caption": "",
             "image_url": (image_url or "").strip(),
         }
+
+    def _translate_chunks_sequential(
+        self,
+        chunks,
+        language: str,
+        translated_title: str,
+        total_words: int,
+        progress_callback=None,
+    ):
+        translated_chunks = []
+        previous_translation_context = ""
+        translated_words = 0
+        for index, chunk in enumerate(chunks, start=1):
+            translated_chunk = self._translate_text_with_retry(
+                chunk,
+                language,
+                article_title=translated_title,
+                previous_translation_context=previous_translation_context,
+            )
+            translated_chunks.append(translated_chunk)
+            previous_translation_context = _tail_paragraph_context(translated_chunk)
+            translated_words += _word_count(chunk)
+
+            if progress_callback and total_words:
+                percent = min(100, round((translated_words / total_words) * 100))
+                progress_callback(
+                    f"Step 2: chunk{index} done {percent}% ({translated_words}/{total_words} words)"
+                )
+
+        return translated_chunks
+
+    def _translate_chunk_parallel_job(self, index: int, chunk: str, language: str, translated_title: str, previous_source_context: str):
+        translated_chunk = self._translate_text_with_retry(
+            chunk,
+            language,
+            article_title=translated_title,
+            previous_source_context=previous_source_context,
+        )
+        return index, translated_chunk
+
+    def _translate_chunks_parallel(
+        self,
+        chunks,
+        language: str,
+        translated_title: str,
+        total_words: int,
+        progress_callback=None,
+    ):
+        translated_chunks = [None] * len(chunks)
+        completed_words = 0
+        max_workers = min(self.translation_max_concurrency, len(chunks))
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {}
+            for index, chunk in enumerate(chunks, start=1):
+                previous_source_context = _tail_paragraph_context(chunks[index - 2]) if index > 1 else ""
+                future = executor.submit(
+                    self._translate_chunk_parallel_job,
+                    index,
+                    chunk,
+                    language,
+                    translated_title,
+                    previous_source_context,
+                )
+                futures[future] = (index, chunk)
+
+            for future in as_completed(futures):
+                index, chunk = futures[future]
+                result_index, translated_chunk = future.result()
+                translated_chunks[result_index - 1] = translated_chunk
+                completed_words += _word_count(chunk)
+
+                if progress_callback and total_words:
+                    percent = min(100, round((completed_words / total_words) * 100))
+                    progress_callback(
+                        f"Step 2: chunk{index} done {percent}% ({completed_words}/{total_words} words)"
+                    )
+
+        return translated_chunks
+
+    def _translate_chunks(
+        self,
+        chunks,
+        language: str,
+        translated_title: str,
+        total_words: int,
+        progress_callback=None,
+    ):
+        if self.translation_mode != "parallel" or len(chunks) <= 1 or self.translation_max_concurrency <= 1:
+            return self._translate_chunks_sequential(
+                chunks,
+                language,
+                translated_title,
+                total_words,
+                progress_callback,
+            )
+
+        return self._translate_chunks_parallel(
+            chunks,
+            language,
+            translated_title,
+            total_words,
+            progress_callback,
+        )
 
     def generate_story(self, prompt: str) -> dict:
         url = f"{self.base_url}/chat/completions"

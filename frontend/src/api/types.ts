@@ -42,6 +42,11 @@ export interface Language {
   created_at: string;
 }
 
+export interface AppSettings {
+  translation_mode: "sequential" | "parallel";
+  translation_max_concurrency: number;
+}
+
 export interface Job {
   id: string;
   pipeline_id: string;

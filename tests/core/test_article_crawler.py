@@ -32,6 +32,26 @@ class TranslatingAI(FakeAI):
         }
 
 
+class ProgressTranslatingAI(TranslatingAI):
+    def translate_article_fields(
+        self,
+        title,
+        content,
+        image_url="",
+        language="Ukrainian",
+        progress_callback=None,
+    ):
+        self.translation_calls.append((title, content, image_url, language))
+        if progress_callback:
+            progress_callback("Step 2: chunk1 done 100% (2/2 words)")
+        return {
+            "title": f"{title} translated",
+            "content": f"{content} translated",
+            "caption": "",
+            "image_url": image_url,
+        }
+
+
 def test_extract_wp_post_id_from_rest_link_and_shortlink():
     html = '<link rel="alternate" href="https://source.test/wp-json/wp/v2/posts/59423">'
     assert extract_wp_post_id(html, "https://source.test/story") == "59423"
@@ -140,6 +160,44 @@ def test_extract_article_from_url_uses_wp_rest_when_post_id_exists():
         )
     ]
     assert log_messages == ["Step 2: Translating article via AI..."]
+
+
+@responses.activate
+def test_extract_article_from_url_logs_translation_progress_when_supported():
+    responses.add(
+        responses.GET,
+        "https://source.test/article-progress",
+        body="""
+        <html>
+          <head>
+            <link rel="alternate" type="application/json" href="https://source.test/wp-json/wp/v2/posts/99">
+          </head>
+          <body><article><h1>HTML title</h1></article></body>
+        </html>
+        """,
+        status=200,
+        content_type="text/html",
+    )
+    responses.add(
+        responses.GET,
+        "https://source.test/wp-json/wp/v2/posts?slug=article-progress&_embed=1",
+        json=[{
+            "id": 99,
+            "title": {"rendered": "REST Title"},
+            "content": {"rendered": "<p>REST paragraph.</p>"},
+            "_embedded": {"wp:featuredmedia": [{"source_url": "https://source.test/rest-image.jpg"}]},
+        }],
+        status=200,
+    )
+    ai = ProgressTranslatingAI()
+    log_messages = []
+
+    extract_article_from_url("https://source.test/article-progress", ai, language="Italian", log_callback=log_messages.append)
+
+    assert log_messages == [
+        "Step 2: Translating article via AI...",
+        "Step 2: chunk1 done 100% (2/2 words)",
+    ]
 
 
 @responses.activate

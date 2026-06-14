@@ -2,6 +2,7 @@ import asyncio
 import logging
 from datetime import datetime
 from sqlalchemy.orm import Session
+from core.config_manager import ConfigManager
 from infrastructure.db.models import Job, Pipeline
 from core.account_resolver import resolve_accounts_for_pipeline
 from core.orchestrator import Orchestrator
@@ -56,6 +57,12 @@ class WorkerManager:
 
         # 2. Resolve Accounts
         account_configs = resolve_accounts_for_pipeline(db, pipeline.step_accounts)
+        app_config = ConfigManager().config
+        ai_config = None
+        if account_configs.get("ai"):
+            ai_config = dict(account_configs["ai"])
+            ai_config["translation_mode"] = app_config.get("translation_mode", "sequential")
+            ai_config["translation_max_concurrency"] = app_config.get("translation_max_concurrency", 2)
         wp_config = dict(account_configs.get("wp") or {})
         wp_config.pop("category_id", None)
         pipeline_settings = pipeline.settings if isinstance(pipeline.settings, dict) else {}
@@ -110,7 +117,7 @@ class WorkerManager:
 
         # 4. Initialize Orchestrator
         orchestrator = Orchestrator(
-            ai_config=account_configs.get("ai"),
+            ai_config=ai_config,
             wp_config=wp_config or None,
             fb_config=account_configs.get("fb"),
             gs_config=account_configs.get("gs"),

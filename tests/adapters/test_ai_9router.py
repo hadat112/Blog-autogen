@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from adapters.ai.ninerouter import (
     NineRouterAI,
+    _get_ai_request_timeout,
     _parse_story_json,
     CINEMATIC_NATURALISM_STYLE_PROMPT,
 )
@@ -18,6 +19,18 @@ EXPECTED_STYLE_PROMPT = (
 assert CINEMATIC_NATURALISM_STYLE_PROMPT == EXPECTED_STYLE_PROMPT
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
+
+
+def test_ai_request_timeout_defaults_to_180_seconds(monkeypatch):
+    monkeypatch.delenv("AI_REQUEST_TIMEOUT", raising=False)
+
+    assert _get_ai_request_timeout() == 180
+
+
+def test_ai_request_timeout_can_be_overridden(monkeypatch):
+    monkeypatch.setenv("AI_REQUEST_TIMEOUT", "300")
+
+    assert _get_ai_request_timeout() == 300
 
 
 def _load_raw_content(filename: str) -> str:
@@ -410,12 +423,22 @@ def test_translate_article_fields_uses_previous_translation_for_later_chunks():
         json={"choices": [{"message": {"content": "Translated second chunk"}}]},
         status=200,
     )
-    first = "First paragraph " + ("a" * 1600)
+    first = "First paragraph " + ("a" * 5800)
     second = "Second paragraph with follow-up context. " + ("b" * 200)
 
-    article = ai.translate_article_fields("Source title", f"{first}\n\n{second}", language="Italian")
+    progress_messages = []
+    article = ai.translate_article_fields(
+        "Source title",
+        f"{first}\n\n{second}",
+        language="Italian",
+        progress_callback=progress_messages.append,
+    )
 
     assert article["content"] == "Translated first chunk\n\nTranslated second chunk"
+    assert progress_messages == [
+        "Step 2: chunk1 done 33% (3/9 words)",
+        "Step 2: chunk2 done 100% (9/9 words)",
+    ]
     second_payload = json.loads(responses.calls[2].request.body.decode("utf-8"))
     second_prompt = second_payload["messages"][1]["content"]
     assert "Previous translated context already written in Italian" in second_prompt
@@ -423,6 +446,74 @@ def test_translate_article_fields_uses_previous_translation_for_later_chunks():
     assert "Do not repeat, rewrite, summarize" in second_prompt
     assert "First paragraph" not in second_prompt
     assert "Second paragraph with follow-up context." in second_prompt
+
+
+@responses.activate
+def test_translate_text_with_source_context_writes_prompt_clearly():
+    ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1")
+    responses.add(
+        responses.POST,
+        "https://api.9router.ai/v1/chat/completions",
+        json={"choices": [{"message": {"content": "Translated current chunk"}}]},
+        status=200,
+    )
+
+    translated = ai._translate_text(
+        "Current source paragraph.",
+        "Italian",
+        article_title="Translated title",
+        previous_source_context="Previous source paragraph.",
+    )
+
+    assert translated == "Translated current chunk"
+    payload = json.loads(responses.calls[0].request.body.decode("utf-8"))
+    prompt = payload["messages"][1]["content"]
+    assert "Previous source context from the original article, not translated yet" in prompt
+    assert "Do not translate, repeat, rewrite, summarize" in prompt
+    assert "Previous source paragraph." in prompt
+
+
+def test_parallel_translation_preserves_chunk_order_and_uses_source_context(monkeypatch):
+    ai = NineRouterAI(
+        "test_key",
+        "gpt-4o",
+        "dall-e-3",
+        translation_mode="parallel",
+        translation_max_concurrency=2,
+    )
+    calls = []
+
+    def fake_translate(text, language, *, article_title="", previous_translation_context="", previous_source_context=""):
+        calls.append(
+            {
+                "text": text,
+                "previous_translation_context": previous_translation_context,
+                "previous_source_context": previous_source_context,
+            }
+        )
+        if text == "Source title":
+            return "Translated title"
+        if text.startswith("First paragraph"):
+            return "Translated first chunk"
+        return "Translated second chunk"
+
+    monkeypatch.setattr(ai, "_translate_text_with_retry", fake_translate)
+    first = "First paragraph " + ("a" * 5800)
+    second = "Second paragraph with follow-up context. " + ("b" * 200)
+
+    article = ai.translate_article_fields(
+        "Source title",
+        f"{first}\n\n{second}",
+        language="Italian",
+    )
+
+    assert article["content"] == "Translated first chunk\n\nTranslated second chunk"
+    first_call = next(call for call in calls if call["text"].startswith("First paragraph"))
+    second_call = next(call for call in calls if call["text"].startswith("Second paragraph"))
+    assert first_call["previous_translation_context"] == ""
+    assert second_call["previous_translation_context"] == ""
+    assert first_call["previous_source_context"] == ""
+    assert second_call["previous_source_context"].startswith("First paragraph")
 
 
 @responses.activate

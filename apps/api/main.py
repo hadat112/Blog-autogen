@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from sqlalchemy import inspect, text
 
-from apps.api.routes import accounts, jobs, languages, pipelines
+from apps.api.routes import accounts, jobs, languages, pipelines, settings
 from application.language_service import LanguageService
 from infrastructure.db.session import Base, engine
 from infrastructure.db.session import SessionLocal
@@ -52,6 +52,7 @@ app.include_router(accounts.router)
 app.include_router(pipelines.router)
 app.include_router(jobs.router)
 app.include_router(languages.router)
+app.include_router(settings.router)
 
 
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -71,7 +72,7 @@ def read_root():
 
 @app.get("/{path:path}", include_in_schema=False)
 def serve_frontend(path: str):
-    if path.startswith(("accounts", "pipelines", "jobs", "languages")):
+    if path.startswith(("accounts", "pipelines", "jobs", "languages", "settings")):
         return {"status": "not_found"}
 
     requested_file = FRONTEND_DIST / path

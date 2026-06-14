@@ -33,6 +33,10 @@ class LanguageResponse(LanguageCreate):
     class Config:
         from_attributes = True
 
+class AppSettings(BaseModel):
+    translation_mode: str = Field(default="sequential")
+    translation_max_concurrency: int = Field(default=2, ge=1, le=8)
+
 class PipelineBase(BaseModel):
     name: str
     type: str

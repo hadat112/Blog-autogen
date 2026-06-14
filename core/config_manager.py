@@ -11,6 +11,9 @@ DISABLED_STEP_CHOICES = [
     ("Facebook comment", "facebook_comment"),
     ("Telegram notify", "telegram_notify"),
 ]
+TRANSLATION_MODE_CHOICES = ["sequential", "parallel"]
+DEFAULT_TRANSLATION_MODE = "sequential"
+DEFAULT_TRANSLATION_MAX_CONCURRENCY = 2
 
 
 def _normalize_disabled_steps(value):
@@ -39,11 +42,30 @@ def _effective_disabled_steps(config):
     return ["ai_image_generation"]
 
 
+def _normalize_translation_mode(value):
+    mode = str(value or DEFAULT_TRANSLATION_MODE).strip().lower()
+    return mode if mode in TRANSLATION_MODE_CHOICES else DEFAULT_TRANSLATION_MODE
+
+
+def _normalize_translation_max_concurrency(value):
+    try:
+        concurrency = int(value)
+    except (TypeError, ValueError):
+        concurrency = DEFAULT_TRANSLATION_MAX_CONCURRENCY
+    return max(1, min(concurrency, 8))
+
+
 class ConfigManager:
     def __init__(self, config_path="config.yaml"):
         self.config_path = config_path
         self.config = self.load_config()
         self.config["disabled_steps"] = _effective_disabled_steps(self.config)
+        self.config["translation_mode"] = _normalize_translation_mode(
+            self.config.get("translation_mode")
+        )
+        self.config["translation_max_concurrency"] = _normalize_translation_max_concurrency(
+            self.config.get("translation_max_concurrency")
+        )
         self.config.pop("enable_image_generation", None)
         self.config.pop("telegram_commands", None)
         self.config.pop("scheduler", None)
@@ -219,6 +241,24 @@ class ConfigManager:
     def _update_image_category(self):
         self._apply_field_update("image_mode", "Image Mode:", is_select=True, choices=["Local", "Direct"])
 
+    def _update_translation_category(self):
+        self._apply_field_update(
+            "translation_mode",
+            "Translation chunk mode:",
+            is_select=True,
+            choices=TRANSLATION_MODE_CHOICES,
+            default_val_override=DEFAULT_TRANSLATION_MODE,
+        )
+        self.config["translation_mode"] = _normalize_translation_mode(self.config.get("translation_mode"))
+        self._apply_field_update(
+            "translation_max_concurrency",
+            "Translation max concurrency:",
+            default_val_override=str(DEFAULT_TRANSLATION_MAX_CONCURRENCY),
+        )
+        self.config["translation_max_concurrency"] = _normalize_translation_max_concurrency(
+            self.config.get("translation_max_concurrency")
+        )
+
     def _update_disabled_steps_category(self):
         current_disabled_steps = set(_effective_disabled_steps(self.config))
         disabled_step_choices = [
@@ -263,6 +303,7 @@ class ConfigManager:
             "Telegram": self._update_telegram_category,
             "Facebook": self._update_facebook_category,
             "Image settings": self._update_image_category,
+            "Translation settings": self._update_translation_category,
             "Disabled steps": self._update_disabled_steps_category,
         }
         validation_keys = {
@@ -334,6 +375,10 @@ class ConfigManager:
         self.config["facebook_graph_version"] = self._ask_with_validation("Facebook Graph API Version:", "facebook_graph_version", default_val_override="v23.0", skip_if_exists=True)
 
         self.config["image_mode"] = self._ask_with_validation("Image Mode:", "image_mode", is_select=True, choices=["Local", "Direct"], skip_if_exists=True)
+        self.config["translation_mode"] = _normalize_translation_mode(self.config.get("translation_mode"))
+        self.config["translation_max_concurrency"] = _normalize_translation_max_concurrency(
+            self.config.get("translation_max_concurrency")
+        )
         current_disabled_steps = set(_effective_disabled_steps(self.config))
         disabled_step_choices = [
             questionary.Choice(title=label, value=step, checked=step in current_disabled_steps)

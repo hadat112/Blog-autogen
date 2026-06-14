@@ -22,6 +22,7 @@ cp -R frontend/dist release/StoryAutogen-Mac/frontend/
 
 find release/StoryAutogen-Mac -type d -name "__pycache__" -prune -exec rm -rf {} +
 find release/StoryAutogen-Mac -type f -name "*.pyc" -delete
+find release/StoryAutogen-Mac -type f -name ".DS_Store" -delete
 
 chmod +x release/StoryAutogen-Mac/install_mac.command
 chmod +x release/StoryAutogen-Mac/run_mac.command

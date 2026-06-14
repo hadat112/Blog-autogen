@@ -1,5 +1,6 @@
 from html.parser import HTMLParser
 from html import unescape
+import inspect
 import re
 from urllib.parse import parse_qs, urljoin, urlparse
 
@@ -248,6 +249,15 @@ def parse_wp_post_payload(post_json: dict, original_html: str = "", origin_api: 
     }
 
 
+def _supports_progress_callback(func) -> bool:
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):
+        return False
+
+    return "progress_callback" in signature.parameters
+
+
 def _extract_wp_article_from_response(
     response,
     ai_client,
@@ -289,11 +299,15 @@ def _extract_wp_article_from_response(
         log_callback("Step 2: Translating article via AI...")
 
     if hasattr(ai_client, "translate_article_fields"):
+        kwargs = {"language": language}
+        if log_callback and _supports_progress_callback(ai_client.translate_article_fields):
+            kwargs["progress_callback"] = log_callback
+
         return ai_client.translate_article_fields(
             fields["title"],
             fields["content"],
             fields["image_url"],
-            language=language,
+            **kwargs,
         )
 
     clean_html = f"<h1>{fields['title']}</h1>\n{fields['content']}"

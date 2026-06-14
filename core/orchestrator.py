@@ -51,7 +51,9 @@ class Orchestrator:
                 "api_key": config.get("ninerouter_api_key"),
                 "text_model": config.get("ninerouter_text_model"),
                 "image_model": config.get("ninerouter_image_model"),
-                "base_url": config.get("ninerouter_base_url", "http://localhost:20128/v1")
+                "base_url": config.get("ninerouter_base_url", "http://localhost:20128/v1"),
+                "translation_mode": config.get("translation_mode", "sequential"),
+                "translation_max_concurrency": config.get("translation_max_concurrency", 2),
             }
             wp_config = {
                 "url": config.get("wordpress_url"),
@@ -97,7 +99,9 @@ class Orchestrator:
             api_key=ai_config.get("api_key"),
             text_model=ai_config.get("text_model"),
             image_model=ai_config.get("image_model"),
-            base_url=ai_config.get("base_url", "http://localhost:20128/v1")
+            base_url=ai_config.get("base_url", "http://localhost:20128/v1"),
+            translation_mode=ai_config.get("translation_mode", "sequential"),
+            translation_max_concurrency=ai_config.get("translation_max_concurrency", 2),
         ) if ai_config else None
 
         self.sheets = GoogleSheetsProvider(

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Account, Pipeline, Job, AccountConfig, Language } from './types';
+import { Account, Pipeline, Job, AccountConfig, Language, AppSettings } from './types';
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : window.location.origin),
@@ -25,6 +25,10 @@ export const updateLanguage = (
   code: string,
   data: Pick<Language, 'display_name' | 'is_active'>,
 ) => client.put<Language>(`/languages/${code}`, data);
+
+export const getSettings = () => client.get<AppSettings>('/settings');
+export const updateSettings = (data: AppSettings) =>
+  client.put<AppSettings>('/settings', data);
 
 export const getJobs = () => client.get<Job[]>('/jobs');
 export const getJob = (id: string) => client.get<Job>(`/jobs/${id}`);

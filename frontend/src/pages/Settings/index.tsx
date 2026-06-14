@@ -1,16 +1,28 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Languages, Pencil, Plus, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChevronRight,
+  Languages,
+  Pencil,
+  Plus,
+  Save,
+  Settings as SettingsIcon,
+  X,
+} from 'lucide-react';
 import { FormEvent, useState } from 'react';
 
 import {
   createLanguage,
   getLanguages,
+  getSettings,
   updateLanguage,
+  updateSettings,
 } from '../../api/client';
-import { Language } from '../../api/types';
+import { AppSettings, Language } from '../../api/types';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
+import { Select } from '../../components/ui/Select';
 
 type LanguageForm = {
   code: string;
@@ -24,17 +36,43 @@ const emptyForm: LanguageForm = {
   is_active: true,
 };
 
+const concurrencyPresets = [
+  { value: 1, label: 'Safe' },
+  { value: 2, label: 'Recommended' },
+  { value: 3, label: 'Fast' },
+];
+
+type SettingsScreen = 'menu' | 'translation' | 'languages';
+
 const Settings = () => {
   const queryClient = useQueryClient();
+  const [activeScreen, setActiveScreen] = useState<SettingsScreen>('menu');
   const [editingCode, setEditingCode] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<LanguageForm>(emptyForm);
+  const [settingsForm, setSettingsForm] = useState<AppSettings>({
+    translation_mode: 'sequential',
+    translation_max_concurrency: 2,
+  });
 
   const { data: languages = [], isLoading } = useQuery({
     queryKey: ['languages'],
     queryFn: async () => {
       const { data } = await getLanguages();
       return Array.isArray(data) ? data : [];
+    },
+  });
+
+  const { isLoading: isSettingsLoading } = useQuery({
+    queryKey: ['settings'],
+    queryFn: async () => {
+      const { data } = await getSettings();
+      const settings = {
+        translation_mode: data.translation_mode || 'sequential',
+        translation_max_concurrency: data.translation_max_concurrency || 2,
+      } as AppSettings;
+      setSettingsForm(settings);
+      return settings;
     },
   });
 
@@ -83,6 +121,20 @@ const Settings = () => {
     },
   });
 
+  const settingsMutation = useMutation({
+    mutationFn: (data: AppSettings) => updateSettings(data),
+    onSuccess: ({ data }) => {
+      setSettingsForm(data);
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+    },
+    onError: (error: any) => {
+      alert(
+        'Failed to save settings: ' +
+          (error.response?.data?.detail || error.message),
+      );
+    },
+  });
+
   const startEdit = (language: Language) => {
     setEditingCode(language.code);
     setForm({
@@ -98,14 +150,215 @@ const Settings = () => {
     saveMutation.mutate(form);
   };
 
+  const saveSettings = (event: FormEvent) => {
+    event.preventDefault();
+    settingsMutation.mutate({
+      translation_mode: settingsForm.translation_mode,
+      translation_max_concurrency: Math.min(
+        8,
+        Math.max(1, Number(settingsForm.translation_max_concurrency) || 2),
+      ),
+    });
+  };
+
+  if (activeScreen === 'menu') {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h3 className="text-xl font-bold text-content-primary">Settings</h3>
+          <p className="text-sm text-content-secondary">
+            Choose a settings area to configure.
+          </p>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setActiveScreen('translation')}
+            className="flex items-center justify-between rounded-md border border-border-default bg-surface p-4 text-left shadow-sm transition-colors hover:bg-surface-subtle"
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-content-primary">
+                <SettingsIcon size={18} />
+              </div>
+              <div className="min-w-0">
+                <div className="font-semibold text-content-primary">
+                  Translation Settings
+                </div>
+                <div className="text-sm text-content-secondary">
+                  Chunk mode, concurrency, and context behavior.
+                </div>
+              </div>
+            </div>
+            <ChevronRight size={18} className="shrink-0 text-content-secondary" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveScreen('languages')}
+            className="flex items-center justify-between rounded-md border border-border-default bg-surface p-4 text-left shadow-sm transition-colors hover:bg-surface-subtle"
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-content-primary">
+                <Languages size={18} />
+              </div>
+              <div className="min-w-0">
+                <div className="font-semibold text-content-primary">
+                  Languages
+                </div>
+                <div className="text-sm text-content-secondary">
+                  Available languages for new pipelines.
+                </div>
+              </div>
+            </div>
+            <ChevronRight size={18} className="shrink-0 text-content-secondary" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {activeScreen === 'translation' && (
+      <>
+      <div className="flex items-center gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={() => setActiveScreen('menu')}
+          title="Back to settings"
+        >
+          <ArrowLeft size={18} />
+        </Button>
         <div>
-          <h3 className="text-xl font-bold text-content-primary">Languages</h3>
+          <h3 className="text-xl font-bold text-content-primary">
+            Translation Settings
+          </h3>
           <p className="text-sm text-content-secondary">
-            Configure the languages available when creating pipelines.
+            Configure chunk processing for article translation.
           </p>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader className="border-b border-border-subtle">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <SettingsIcon size={18} />
+            Translation Settings
+          </CardTitle>
+        </CardHeader>
+        <form onSubmit={saveSettings}>
+          <CardContent className="space-y-5 p-5">
+            {isSettingsLoading ? (
+              <div className="text-sm text-content-secondary">Loading settings...</div>
+            ) : (
+              <>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-content-primary">
+                      Chunk Mode
+                    </label>
+                    <Select
+                      value={settingsForm.translation_mode}
+                      onChange={(event) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          translation_mode: event.target.value as AppSettings['translation_mode'],
+                        })
+                      }
+                    >
+                      <option value="sequential">Sequential</option>
+                      <option value="parallel">Parallel</option>
+                    </Select>
+                    <p className="text-xs leading-5 text-content-secondary">
+                      Sequential keeps translated context from the previous chunk.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-content-primary">
+                      Max Concurrency
+                    </label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={8}
+                      value={settingsForm.translation_max_concurrency}
+                      disabled={settingsForm.translation_mode === 'sequential'}
+                      onChange={(event) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          translation_max_concurrency: Number(event.target.value),
+                        })
+                      }
+                    />
+                    <p className="text-xs leading-5 text-content-secondary">
+                      Parallel uses previous source text as context and preserves chunk order.
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {concurrencyPresets.map((preset) => (
+                        <Button
+                          key={preset.value}
+                          type="button"
+                          variant={
+                            settingsForm.translation_max_concurrency === preset.value
+                              ? 'secondary'
+                              : 'outline'
+                          }
+                          size="sm"
+                          disabled={settingsForm.translation_mode === 'sequential'}
+                          onClick={() =>
+                            setSettingsForm({
+                              ...settingsForm,
+                              translation_max_concurrency: preset.value,
+                            })
+                          }
+                          title={`Use concurrency ${preset.value}`}
+                        >
+                          {preset.value} {preset.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
+                    className="flex items-center gap-2"
+                    disabled={settingsMutation.isPending}
+                  >
+                    <Save size={16} />
+                    Save Settings
+                  </Button>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </form>
+      </Card>
+      </>
+      )}
+
+      {activeScreen === 'languages' && (
+      <>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => setActiveScreen('menu')}
+            title="Back to settings"
+          >
+            <ArrowLeft size={18} />
+          </Button>
+          <div>
+            <h3 className="text-xl font-bold text-content-primary">Languages</h3>
+            <p className="text-sm text-content-secondary">
+              Configure the languages available when creating pipelines.
+            </p>
+          </div>
         </div>
         <Button
           onClick={() => {
@@ -154,14 +407,14 @@ const Settings = () => {
                       aria-checked={language.is_active}
                       disabled={toggleMutation.isPending}
                       onClick={() => toggleMutation.mutate(language)}
-                      className={`relative h-6 w-11 rounded-full transition-colors disabled:opacity-50 ${
+                      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
                         language.is_active ? 'bg-accent' : 'bg-border-strong'
                       }`}
                       title={language.is_active ? 'Disable language' : 'Enable language'}
                     >
                       <span
-                        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                          language.is_active ? 'translate-x-5' : 'translate-x-0.5'
+                        className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                          language.is_active ? 'translate-x-5' : 'translate-x-0'
                         }`}
                       />
                     </button>
@@ -247,6 +500,8 @@ const Settings = () => {
             </form>
           </Card>
         </div>
+      )}
+      </>
       )}
     </div>
   );
