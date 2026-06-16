@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Account, Pipeline, Job, AccountConfig, Language, AppSettings } from './types';
+import { Account, Pipeline, Job, AccountConfig, Language, AppSettings, AIModel } from './types';
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : window.location.origin),
@@ -11,6 +11,8 @@ export const updateAccount = (id: string, data: Partial<Account>) => client.put<
 export const deleteAccount = (id: string) => client.delete(`/accounts/${id}`);
 export const testAccount = (data: { id?: string; type?: string; config?: AccountConfig }) => client.post('/accounts/test', data);
 export const getWPCategories = (config: AccountConfig) => client.post('/accounts/wp-categories', config);
+export const getAIModels = (config: Pick<AccountConfig, 'base_url' | 'api_key'>) =>
+  client.post<AIModel[]>('/accounts/ai-models', config);
 
 export const getPipelines = () => client.get<Pipeline[]>('/pipelines');
 export const createPipeline = (data: Partial<Pipeline>) => client.post<Pipeline>('/pipelines', data);

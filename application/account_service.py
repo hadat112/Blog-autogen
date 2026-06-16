@@ -86,7 +86,9 @@ def perform_connection_test(account_type: str, config: dict):
         elif account_type == "ai":
             base_url = config.get("base_url", "http://localhost:20128/v1").rstrip("/")
             url = f"{base_url}/models"
-            headers = {"Authorization": f"Bearer {config.get('api_key')}"}
+            headers = {"ngrok-skip-browser-warning": "true"}
+            if config.get("api_key"):
+                headers["Authorization"] = f"Bearer {config.get('api_key')}"
             resp = requests.get(url, headers=headers, timeout=10)
             resp.raise_for_status()
         elif account_type == "gs":
@@ -114,6 +116,45 @@ def perform_connection_test(account_type: str, config: dict):
         return True, "Credentials verified"
     except Exception as e:
         return False, str(e)
+
+
+def fetch_ai_models(config: dict):
+    base_url = (config.get("base_url") or "").rstrip("/")
+    if not base_url:
+        raise ValueError("Base URL is required")
+
+    headers = {"ngrok-skip-browser-warning": "true"}
+    api_key = config.get("api_key")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    resp = requests.get(f"{base_url}/models", headers=headers, timeout=15)
+    resp.raise_for_status()
+    payload = resp.json()
+    models = payload.get("data")
+    if not isinstance(models, list):
+        raise ValueError("AI models response does not contain a data list")
+
+    result = []
+    seen = set()
+    for model in models:
+        if not isinstance(model, dict):
+            continue
+        model_id = model.get("id")
+        if not isinstance(model_id, str) or not model_id.strip() or model_id in seen:
+            continue
+        seen.add(model_id)
+        result.append(
+            {
+                "id": model_id,
+                "name": model.get("name") or model_id,
+                "owned_by": model.get("owned_by"),
+                "context_length": model.get("context_length"),
+                "type": model.get("type"),
+            }
+        )
+
+    return result
 
 
 def fetch_wp_categories(config: dict):

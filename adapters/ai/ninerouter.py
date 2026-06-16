@@ -20,7 +20,7 @@ CINEMATIC_NATURALISM_STYLE_PROMPT = (
     "no teal-orange look, no heavy shadows, no dramatic dark tone."
 )
 TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
-DEFAULT_AI_REQUEST_TIMEOUT = 180
+DEFAULT_AI_REQUEST_TIMEOUT = 300
 AI_MAX_ATTEMPTS = 2
 TRANSLATION_MAX_RETRIES = 4
 TRANSLATION_RETRY_DELAYS = (2, 5, 10)
@@ -46,17 +46,25 @@ def _build_styled_image_prompt(image_prompt: str) -> str:
     return CINEMATIC_NATURALISM_STYLE_PROMPT
 
 
-def _get_ai_request_timeout() -> int:
+def _normalize_ai_request_timeout(value) -> int:
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        timeout = DEFAULT_AI_REQUEST_TIMEOUT
+    return max(30, min(timeout, 900))
+
+
+def _get_ai_request_timeout(default_timeout: int = DEFAULT_AI_REQUEST_TIMEOUT) -> int:
     raw_timeout = os.getenv("AI_REQUEST_TIMEOUT")
     if not raw_timeout:
-        return DEFAULT_AI_REQUEST_TIMEOUT
+        return _normalize_ai_request_timeout(default_timeout)
 
     try:
         timeout = int(raw_timeout)
     except ValueError:
-        return DEFAULT_AI_REQUEST_TIMEOUT
+        return _normalize_ai_request_timeout(default_timeout)
 
-    return timeout if timeout > 0 else DEFAULT_AI_REQUEST_TIMEOUT
+    return _normalize_ai_request_timeout(timeout)
 
 
 def _clean_translation_output(text: str) -> str:
@@ -285,6 +293,18 @@ def _normalize_translation_max_concurrency(value) -> int:
     return max(1, min(concurrency, 8))
 
 
+def _normalize_translation_chunk_size(value) -> int:
+    try:
+        chunk_size = int(value)
+    except (TypeError, ValueError):
+        chunk_size = TRANSLATION_CHUNK_SIZE
+    return max(1000, min(chunk_size, 30000))
+
+
+def _format_seconds(seconds: float) -> str:
+    return f"{seconds:.2f}s"
+
+
 def _has_required_story_keys(value) -> bool:
     return isinstance(value, dict) and all(k in value for k in REQUIRED_STORY_KEYS)
 
@@ -454,6 +474,8 @@ class NineRouterAI(BaseAI):
         base_url="http://localhost:20128/v1",
         translation_mode=DEFAULT_TRANSLATION_MODE,
         translation_max_concurrency=DEFAULT_TRANSLATION_MAX_CONCURRENCY,
+        ai_request_timeout=DEFAULT_AI_REQUEST_TIMEOUT,
+        translation_chunk_size=TRANSLATION_CHUNK_SIZE,
     ):
         self.api_key = api_key
         self.text_model = text_model
@@ -463,13 +485,22 @@ class NineRouterAI(BaseAI):
         self.translation_max_concurrency = _normalize_translation_max_concurrency(
             translation_max_concurrency
         )
+        self.ai_request_timeout = _normalize_ai_request_timeout(ai_request_timeout)
+        self.translation_chunk_size = _normalize_translation_chunk_size(
+            translation_chunk_size
+        )
 
     def _post_json(self, url: str, headers: dict, data: dict):
         last_error = None
 
         for attempt in range(1, AI_MAX_ATTEMPTS + 1):
             try:
-                response = requests.post(url, headers=headers, json=data, timeout=_get_ai_request_timeout())
+                response = requests.post(
+                    url,
+                    headers=headers,
+                    json=data,
+                    timeout=_get_ai_request_timeout(self.ai_request_timeout),
+                )
             except requests.RequestException as e:
                 last_error = e
             else:
@@ -631,7 +662,7 @@ class NineRouterAI(BaseAI):
         progress_callback=None,
     ) -> dict:
         translated_title = self._translate_text_with_retry(title, language, article_title=title)
-        chunks = _split_text_chunks(content)
+        chunks = _split_text_chunks(content, max_chars=self.translation_chunk_size)
         total_words = _word_count(content)
         translated_chunks = self._translate_chunks(
             chunks,
@@ -660,6 +691,11 @@ class NineRouterAI(BaseAI):
         previous_translation_context = ""
         translated_words = 0
         for index, chunk in enumerate(chunks, start=1):
+            started_at = time.monotonic()
+            if progress_callback:
+                progress_callback(
+                    f"Step 2: chunk{index} start ({_word_count(chunk)} words)"
+                )
             translated_chunk = self._translate_text_with_retry(
                 chunk,
                 language,
@@ -672,8 +708,9 @@ class NineRouterAI(BaseAI):
 
             if progress_callback and total_words:
                 percent = min(100, round((translated_words / total_words) * 100))
+                elapsed = _format_seconds(time.monotonic() - started_at)
                 progress_callback(
-                    f"Step 2: chunk{index} done {percent}% ({translated_words}/{total_words} words)"
+                    f"Step 2: chunk{index} done in {elapsed} {percent}% ({translated_words}/{total_words} words)"
                 )
 
         return translated_chunks
@@ -703,6 +740,11 @@ class NineRouterAI(BaseAI):
             futures = {}
             for index, chunk in enumerate(chunks, start=1):
                 previous_source_context = _tail_paragraph_context(chunks[index - 2]) if index > 1 else ""
+                if progress_callback:
+                    progress_callback(
+                        f"Step 2: chunk{index} start ({_word_count(chunk)} words)"
+                    )
+                started_at = time.monotonic()
                 future = executor.submit(
                     self._translate_chunk_parallel_job,
                     index,
@@ -711,18 +753,19 @@ class NineRouterAI(BaseAI):
                     translated_title,
                     previous_source_context,
                 )
-                futures[future] = (index, chunk)
+                futures[future] = (index, chunk, started_at)
 
             for future in as_completed(futures):
-                index, chunk = futures[future]
+                index, chunk, started_at = futures[future]
                 result_index, translated_chunk = future.result()
                 translated_chunks[result_index - 1] = translated_chunk
                 completed_words += _word_count(chunk)
 
                 if progress_callback and total_words:
                     percent = min(100, round((completed_words / total_words) * 100))
+                    elapsed = _format_seconds(time.monotonic() - started_at)
                     progress_callback(
-                        f"Step 2: chunk{index} done {percent}% ({completed_words}/{total_words} words)"
+                        f"Step 2: chunk{index} done in {elapsed} {percent}% ({completed_words}/{total_words} words)"
                     )
 
         return translated_chunks

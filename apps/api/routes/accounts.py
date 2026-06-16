@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from apps.api import schemas
-from application.account_service import AccountService, fetch_wp_categories, perform_connection_test
+from application.account_service import (
+    AccountService,
+    fetch_ai_models,
+    fetch_wp_categories,
+    perform_connection_test,
+)
 from infrastructure.db.session import get_db
 
 
@@ -68,3 +73,13 @@ def get_wp_categories(config: dict):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to fetch categories: {str(e)}")
+
+
+@router.post("/accounts/ai-models")
+def get_ai_models(config: dict):
+    try:
+        return fetch_ai_models(config)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch AI models: {str(e)}")

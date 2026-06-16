@@ -43,7 +43,8 @@ class ProgressTranslatingAI(TranslatingAI):
     ):
         self.translation_calls.append((title, content, image_url, language))
         if progress_callback:
-            progress_callback("Step 2: chunk1 done 100% (2/2 words)")
+            progress_callback("Step 2: chunk1 start (2 words)")
+            progress_callback("Step 2: chunk1 done in 1.25s 100% (2/2 words)")
         return {
             "title": f"{title} translated",
             "content": f"{content} translated",
@@ -58,6 +59,14 @@ def test_extract_wp_post_id_from_rest_link_and_shortlink():
 
     html = '<link rel="shortlink" href="https://source.test/?p=123">'
     assert extract_wp_post_id(html, "https://source.test/story") == "123"
+
+
+def test_extract_wp_post_id_from_post_class_fallbacks():
+    html = '<body class="post-template-default single single-post postid-21279">'
+    assert extract_wp_post_id(html, "https://source.test/story") == "21279"
+
+    html = '<article id="post-59423" class="post-59423 post type-post">'
+    assert extract_wp_post_id(html, "https://source.test/story") == "59423"
 
 
 def test_parse_wp_post_payload_prefers_embedded_image():
@@ -196,7 +205,8 @@ def test_extract_article_from_url_logs_translation_progress_when_supported():
 
     assert log_messages == [
         "Step 2: Translating article via AI...",
-        "Step 2: chunk1 done 100% (2/2 words)",
+        "Step 2: chunk1 start (2 words)",
+        "Step 2: chunk1 done in 1.25s 100% (2/2 words)",
     ]
 
 
@@ -298,6 +308,71 @@ def test_extract_article_from_url_falls_back_to_post_id_when_slug_lookup_misses(
             "https://source.test/rest-image.jpg",
             "Italian",
         )
+    ]
+
+
+@responses.activate
+def test_extract_article_from_url_retries_post_id_when_slug_lookup_returns_cached_post():
+    responses.add(
+        responses.GET,
+        "https://source.test/category/article",
+        body="""
+        <html>
+          <head>
+            <link rel="alternate" type="application/json" href="https://source.test/wp-json/wp/v2/posts/59423">
+          </head>
+          <body><article><h1>HTML title</h1></article></body>
+        </html>
+        """,
+        status=200,
+        content_type="text/html",
+    )
+    responses.add(
+        responses.GET,
+        "https://source.test/wp-json/wp/v2/posts?slug=article&_embed=1",
+        json=[{
+            "id": 11,
+            "slug": "cached-other-article",
+            "link": "https://source.test/cached-other-article/",
+            "title": {"rendered": "Cached Title"},
+            "content": {"rendered": "<p>Cached paragraph.</p>"},
+        }],
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        "https://source.test/wp-json/wp/v2/posts/59423?_embed=1",
+        json={
+            "id": 59423,
+            "slug": "article",
+            "link": "https://source.test/category/article/",
+            "title": {"rendered": "Correct REST Title"},
+            "content": {"rendered": "<p>Correct paragraph.</p>"},
+            "_embedded": {"wp:featuredmedia": [{"source_url": "https://source.test/correct.jpg"}]},
+        },
+        status=200,
+    )
+    ai = TranslatingAI()
+    log_messages = []
+
+    article = extract_article_from_url(
+        "https://source.test/category/article",
+        ai,
+        language="Italian",
+        log_callback=log_messages.append,
+    )
+
+    assert article["source_url"] == "https://source.test/category/article"
+    assert article["title"] == "Correct REST Title translated"
+    assert article["content"] == "Correct paragraph. translated"
+    assert article["image_url"] == "https://source.test/correct.jpg"
+    assert ai.calls == []
+    assert ai.translation_calls == [
+        ("Correct REST Title", "Correct paragraph.", "https://source.test/correct.jpg", "Italian")
+    ]
+    assert log_messages == [
+        "Step 2: WordPress slug lookup returned a different post; retrying by post ID.",
+        "Step 2: Translating article via AI...",
     ]
 
 

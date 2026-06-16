@@ -22,6 +22,14 @@ export interface Account {
   config: AccountConfig;
 }
 
+export interface AIModel {
+  id: string;
+  name?: string;
+  owned_by?: string;
+  context_length?: number;
+  type?: string;
+}
+
 export interface Pipeline {
   id: string;
   name: string;
@@ -45,6 +53,8 @@ export interface Language {
 export interface AppSettings {
   translation_mode: "sequential" | "parallel";
   translation_max_concurrency: number;
+  ai_request_timeout: number;
+  translation_chunk_size: number;
 }
 
 export interface Job {

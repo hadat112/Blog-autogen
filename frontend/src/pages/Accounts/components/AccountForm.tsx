@@ -1,7 +1,7 @@
-import { CheckCircle, RefreshCw, X, XCircle } from "lucide-react";
+import { CheckCircle, RefreshCw, Search, X, XCircle } from "lucide-react";
 import React, { useEffect, useState } from "react";
-import { testAccount } from "../../../api/client";
-import { Account, AccountConfig } from "../../../api/types";
+import { getAIModels, testAccount } from "../../../api/client";
+import { Account, AccountConfig, AIModel } from "../../../api/types";
 import { Button } from "../../../components/ui/Button";
 import {
   Card,
@@ -31,6 +31,9 @@ const AccountForm: React.FC<AccountFormProps> = ({
     config: {},
   });
   const [testing, setTesting] = useState(false);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [modelOptions, setModelOptions] = useState<AIModel[]>([]);
+  const [modelFetchError, setModelFetchError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{
     success: boolean;
     message: string;
@@ -79,6 +82,90 @@ const AccountForm: React.FC<AccountFormProps> = ({
       },
     });
   };
+
+  const fetchModels = async () => {
+    const baseUrl = (formData.config?.base_url || "").trim();
+    if (!baseUrl) {
+      setModelFetchError("Enter Base URL first.");
+      return;
+    }
+
+    setLoadingModels(true);
+    setModelFetchError(null);
+    try {
+      const { data } = await getAIModels({
+        base_url: baseUrl,
+        api_key: formData.config?.api_key,
+      });
+      setModelOptions(data);
+      if (data.length === 0) {
+        setModelFetchError("No models returned from this endpoint.");
+      }
+    } catch (error: any) {
+      setModelFetchError(
+        error.response?.data?.detail || error.message || "Failed to fetch models.",
+      );
+    } finally {
+      setLoadingModels(false);
+    }
+  };
+
+  const modelLabel = (model: AIModel) => {
+    const name = model.name && model.name !== model.id ? `${model.name} - ` : "";
+    const context = model.context_length
+      ? ` (${model.context_length.toLocaleString()} ctx)`
+      : "";
+    return `${name}${model.id}${context}`;
+  };
+
+  const renderModelField = (
+    label: string,
+    key: "text_model" | "image_model",
+    fallback: string,
+  ) => (
+    <div className="space-y-1">
+      <label className="text-sm font-medium text-content-primary">
+        {label}
+      </label>
+      <div className="flex space-x-2">
+        {modelOptions.length > 0 ? (
+          <Select
+            className="flex-1"
+            value={formData.config?.[key] || fallback}
+            onChange={(e) => handleConfigChange(key, e.target.value)}
+          >
+            {modelOptions.map((model) => (
+              <option key={model.id} value={model.id}>
+                {modelLabel(model)}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <Input
+            type="text"
+            required
+            className="flex-1"
+            value={formData.config?.[key] || fallback}
+            onChange={(e) => handleConfigChange(key, e.target.value)}
+          />
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={fetchModels}
+          disabled={loadingModels}
+          title="Fetch models from Base URL"
+        >
+          {loadingModels ? (
+            <RefreshCw size={16} className="animate-spin" />
+          ) : (
+            <Search size={16} />
+          )}
+        </Button>
+      </div>
+    </div>
+  );
 
   const renderConfigFields = () => {
     switch (formData.type) {
@@ -145,33 +232,17 @@ const AccountForm: React.FC<AccountFormProps> = ({
                 value={formData.config?.base_url || "http://localhost:20128/v1"}
                 onChange={(e) => handleConfigChange("base_url", e.target.value)}
               />
+              {modelFetchError && (
+                <p className="text-xs text-status-danger">{modelFetchError}</p>
+              )}
+              {modelOptions.length > 0 && (
+                <p className="text-xs text-content-secondary">
+                  Loaded {modelOptions.length} models.
+                </p>
+              )}
             </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-content-primary">
-                Text Model
-              </label>
-              <Input
-                type="text"
-                required
-                value={formData.config?.text_model || "gpt-4o"}
-                onChange={(e) =>
-                  handleConfigChange("text_model", e.target.value)
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-content-primary">
-                Image Model
-              </label>
-              <Input
-                type="text"
-                required
-                value={formData.config?.image_model || "dall-e-3"}
-                onChange={(e) =>
-                  handleConfigChange("image_model", e.target.value)
-                }
-              />
-            </div>
+            {renderModelField("Text Model", "text_model", "gpt-4o")}
+            {renderModelField("Image Model", "image_model", "dall-e-3")}
           </>
         );
       case "fb":

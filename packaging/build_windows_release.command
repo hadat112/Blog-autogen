@@ -22,6 +22,7 @@ cp -R frontend/dist release/StoryAutogen-Windows/frontend/
 
 find release/StoryAutogen-Windows -type d -name "__pycache__" -prune -exec rm -rf {} +
 find release/StoryAutogen-Windows -type f -name "*.pyc" -delete
+find release/StoryAutogen-Windows -type f -name ".DS_Store" -delete
 
 cd release
 zip -r StoryAutogen-Windows.zip StoryAutogen-Windows >/dev/null

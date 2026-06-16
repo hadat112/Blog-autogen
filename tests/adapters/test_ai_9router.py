@@ -21,16 +21,45 @@ assert CINEMATIC_NATURALISM_STYLE_PROMPT == EXPECTED_STYLE_PROMPT
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
 
-def test_ai_request_timeout_defaults_to_180_seconds(monkeypatch):
+def test_ai_request_timeout_defaults_to_300_seconds(monkeypatch):
     monkeypatch.delenv("AI_REQUEST_TIMEOUT", raising=False)
 
-    assert _get_ai_request_timeout() == 180
+    assert _get_ai_request_timeout() == 300
 
 
 def test_ai_request_timeout_can_be_overridden(monkeypatch):
     monkeypatch.setenv("AI_REQUEST_TIMEOUT", "300")
 
     assert _get_ai_request_timeout() == 300
+
+
+def test_ai_request_timeout_uses_config_default(monkeypatch):
+    monkeypatch.delenv("AI_REQUEST_TIMEOUT", raising=False)
+
+    assert _get_ai_request_timeout(450) == 450
+
+
+def test_translate_article_fields_uses_configured_chunk_size(monkeypatch):
+    ai = NineRouterAI(
+        "test_key",
+        "gpt-4o",
+        "dall-e-3",
+        translation_chunk_size=1200,
+    )
+    translated_texts = []
+
+    def fake_translate(text, language, **kwargs):
+        translated_texts.append(text)
+        if text == "Source title":
+            return "Translated title"
+        return f"translated:{len(text)}"
+
+    monkeypatch.setattr(ai, "_translate_text_with_retry", fake_translate)
+    content = "a" * 1300
+
+    ai.translate_article_fields("Source title", content, language="Italian")
+
+    assert translated_texts[1:] == ["a" * 1200, "a" * 100]
 
 
 def _load_raw_content(filename: str) -> str:
@@ -435,10 +464,12 @@ def test_translate_article_fields_uses_previous_translation_for_later_chunks():
     )
 
     assert article["content"] == "Translated first chunk\n\nTranslated second chunk"
-    assert progress_messages == [
-        "Step 2: chunk1 done 33% (3/9 words)",
-        "Step 2: chunk2 done 100% (9/9 words)",
-    ]
+    assert progress_messages[0] == "Step 2: chunk1 start (3 words)"
+    assert progress_messages[1].startswith("Step 2: chunk1 done in ")
+    assert progress_messages[1].endswith(" 33% (3/9 words)")
+    assert progress_messages[2] == "Step 2: chunk2 start (6 words)"
+    assert progress_messages[3].startswith("Step 2: chunk2 done in ")
+    assert progress_messages[3].endswith(" 100% (9/9 words)")
     second_payload = json.loads(responses.calls[2].request.body.decode("utf-8"))
     second_prompt = second_payload["messages"][1]["content"]
     assert "Previous translated context already written in Italian" in second_prompt

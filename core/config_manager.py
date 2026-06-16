@@ -14,6 +14,8 @@ DISABLED_STEP_CHOICES = [
 TRANSLATION_MODE_CHOICES = ["sequential", "parallel"]
 DEFAULT_TRANSLATION_MODE = "sequential"
 DEFAULT_TRANSLATION_MAX_CONCURRENCY = 2
+DEFAULT_AI_REQUEST_TIMEOUT = 300
+DEFAULT_TRANSLATION_CHUNK_SIZE = 6000
 
 
 def _normalize_disabled_steps(value):
@@ -55,6 +57,22 @@ def _normalize_translation_max_concurrency(value):
     return max(1, min(concurrency, 8))
 
 
+def _normalize_ai_request_timeout(value):
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        timeout = DEFAULT_AI_REQUEST_TIMEOUT
+    return max(30, min(timeout, 900))
+
+
+def _normalize_translation_chunk_size(value):
+    try:
+        chunk_size = int(value)
+    except (TypeError, ValueError):
+        chunk_size = DEFAULT_TRANSLATION_CHUNK_SIZE
+    return max(1000, min(chunk_size, 30000))
+
+
 class ConfigManager:
     def __init__(self, config_path="config.yaml"):
         self.config_path = config_path
@@ -65,6 +83,12 @@ class ConfigManager:
         )
         self.config["translation_max_concurrency"] = _normalize_translation_max_concurrency(
             self.config.get("translation_max_concurrency")
+        )
+        self.config["ai_request_timeout"] = _normalize_ai_request_timeout(
+            self.config.get("ai_request_timeout")
+        )
+        self.config["translation_chunk_size"] = _normalize_translation_chunk_size(
+            self.config.get("translation_chunk_size")
         )
         self.config.pop("enable_image_generation", None)
         self.config.pop("telegram_commands", None)
@@ -258,6 +282,22 @@ class ConfigManager:
         self.config["translation_max_concurrency"] = _normalize_translation_max_concurrency(
             self.config.get("translation_max_concurrency")
         )
+        self._apply_field_update(
+            "ai_request_timeout",
+            "AI request timeout seconds:",
+            default_val_override=str(DEFAULT_AI_REQUEST_TIMEOUT),
+        )
+        self.config["ai_request_timeout"] = _normalize_ai_request_timeout(
+            self.config.get("ai_request_timeout")
+        )
+        self._apply_field_update(
+            "translation_chunk_size",
+            "Translation chunk size characters:",
+            default_val_override=str(DEFAULT_TRANSLATION_CHUNK_SIZE),
+        )
+        self.config["translation_chunk_size"] = _normalize_translation_chunk_size(
+            self.config.get("translation_chunk_size")
+        )
 
     def _update_disabled_steps_category(self):
         current_disabled_steps = set(_effective_disabled_steps(self.config))
@@ -378,6 +418,12 @@ class ConfigManager:
         self.config["translation_mode"] = _normalize_translation_mode(self.config.get("translation_mode"))
         self.config["translation_max_concurrency"] = _normalize_translation_max_concurrency(
             self.config.get("translation_max_concurrency")
+        )
+        self.config["ai_request_timeout"] = _normalize_ai_request_timeout(
+            self.config.get("ai_request_timeout")
+        )
+        self.config["translation_chunk_size"] = _normalize_translation_chunk_size(
+            self.config.get("translation_chunk_size")
         )
         current_disabled_steps = set(_effective_disabled_steps(self.config))
         disabled_step_choices = [

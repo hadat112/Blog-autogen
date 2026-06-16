@@ -54,6 +54,8 @@ class Orchestrator:
                 "base_url": config.get("ninerouter_base_url", "http://localhost:20128/v1"),
                 "translation_mode": config.get("translation_mode", "sequential"),
                 "translation_max_concurrency": config.get("translation_max_concurrency", 2),
+                "ai_request_timeout": config.get("ai_request_timeout", 300),
+                "translation_chunk_size": config.get("translation_chunk_size", 6000),
             }
             wp_config = {
                 "url": config.get("wordpress_url"),
@@ -102,6 +104,8 @@ class Orchestrator:
             base_url=ai_config.get("base_url", "http://localhost:20128/v1"),
             translation_mode=ai_config.get("translation_mode", "sequential"),
             translation_max_concurrency=ai_config.get("translation_max_concurrency", 2),
+            ai_request_timeout=ai_config.get("ai_request_timeout", 300),
+            translation_chunk_size=ai_config.get("translation_chunk_size", 6000),
         ) if ai_config else None
 
         self.sheets = GoogleSheetsProvider(

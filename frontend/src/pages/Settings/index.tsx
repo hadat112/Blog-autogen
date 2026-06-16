@@ -53,6 +53,8 @@ const Settings = () => {
   const [settingsForm, setSettingsForm] = useState<AppSettings>({
     translation_mode: 'sequential',
     translation_max_concurrency: 2,
+    ai_request_timeout: 300,
+    translation_chunk_size: 6000,
   });
 
   const { data: languages = [], isLoading } = useQuery({
@@ -70,6 +72,8 @@ const Settings = () => {
       const settings = {
         translation_mode: data.translation_mode || 'sequential',
         translation_max_concurrency: data.translation_max_concurrency || 2,
+        ai_request_timeout: data.ai_request_timeout || 300,
+        translation_chunk_size: data.translation_chunk_size || 6000,
       } as AppSettings;
       setSettingsForm(settings);
       return settings;
@@ -157,6 +161,14 @@ const Settings = () => {
       translation_max_concurrency: Math.min(
         8,
         Math.max(1, Number(settingsForm.translation_max_concurrency) || 2),
+      ),
+      ai_request_timeout: Math.min(
+        900,
+        Math.max(30, Number(settingsForm.ai_request_timeout) || 300),
+      ),
+      translation_chunk_size: Math.min(
+        30000,
+        Math.max(1000, Number(settingsForm.translation_chunk_size) || 6000),
       ),
     });
   };
@@ -320,6 +332,47 @@ const Settings = () => {
                         </Button>
                       ))}
                     </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-content-primary">
+                      AI Timeout
+                    </label>
+                    <Input
+                      type="number"
+                      min={30}
+                      max={900}
+                      value={settingsForm.ai_request_timeout}
+                      onChange={(event) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          ai_request_timeout: Number(event.target.value),
+                        })
+                      }
+                    />
+                    <p className="text-xs leading-5 text-content-secondary">
+                      Seconds to wait for each AI text request before retrying.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-content-primary">
+                      Text Per Chunk
+                    </label>
+                    <Input
+                      type="number"
+                      min={1000}
+                      max={30000}
+                      step={500}
+                      value={settingsForm.translation_chunk_size}
+                      onChange={(event) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          translation_chunk_size: Number(event.target.value),
+                        })
+                      }
+                    />
+                    <p className="text-xs leading-5 text-content-secondary">
+                      Maximum characters sent in each translated article chunk.
+                    </p>
                   </div>
                 </div>
                 <div className="flex justify-end">

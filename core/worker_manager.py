@@ -63,6 +63,8 @@ class WorkerManager:
             ai_config = dict(account_configs["ai"])
             ai_config["translation_mode"] = app_config.get("translation_mode", "sequential")
             ai_config["translation_max_concurrency"] = app_config.get("translation_max_concurrency", 2)
+            ai_config["ai_request_timeout"] = app_config.get("ai_request_timeout", 300)
+            ai_config["translation_chunk_size"] = app_config.get("translation_chunk_size", 6000)
         wp_config = dict(account_configs.get("wp") or {})
         wp_config.pop("category_id", None)
         pipeline_settings = pipeline.settings if isinstance(pipeline.settings, dict) else {}
@@ -95,11 +97,17 @@ class WorkerManager:
                     db_job.current_step = step_name
                     db_job.progress = step_progress
 
+                    detail_text = str(detail or "")
+                    detail_lower = detail_text.lower()
+                    is_chunk_log = "chunk" in detail_lower and (
+                        " start" in detail_lower or " done" in detail_lower
+                    )
                     event = "failed" if "error" in step_name.lower() else "info"
                     should_log = (
                         event == "failed"
                         or step_progress == 100
-                        or (detail and detail != "working" and ("success" in detail.lower() or "error" in detail.lower() or "failed" in detail.lower()))
+                        or is_chunk_log
+                        or (detail and detail != "working" and ("success" in detail_lower or "error" in detail_lower or "failed" in detail_lower))
                     )
                     if should_log:
                         logs = list(db_job.logs or [])

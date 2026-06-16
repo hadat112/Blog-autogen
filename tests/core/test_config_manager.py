@@ -104,6 +104,17 @@ def test_config_manager_init_migrates_legacy_image_key(tmp_path):
     assert "enable_image_generation" not in manager.config
 
 
+def test_config_manager_normalizes_ai_timeout_and_chunk_size(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    with open(config_file, "w") as f:
+        yaml.dump({"ai_request_timeout": "9999", "translation_chunk_size": "500"}, f)
+
+    manager = ConfigManager(config_path=str(config_file))
+
+    assert manager.config["ai_request_timeout"] == 900
+    assert manager.config["translation_chunk_size"] == 1000
+
+
 def test_update_mode_only_updates_telegram_notification_credentials(tmp_path, mocker):
     config_file = tmp_path / "config.yaml"
     initial = {

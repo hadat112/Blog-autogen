@@ -192,3 +192,58 @@ def test_verify_account_ai_success(mocker):
 
     response = client.post("/accounts/test", json={"id": account_id})
     assert response.status_code == 200
+
+
+def test_fetch_ai_models(mocker):
+    mock_get = mocker.patch("requests.get")
+    mock_get.return_value.status_code = 200
+    mock_get.return_value.json.return_value = {
+        "object": "list",
+        "data": [
+            {
+                "id": "gemini-cli/gemini-2.0-flash",
+                "name": "Gemini 2.0 Flash",
+                "owned_by": "gemini-cli",
+                "context_length": 1048576,
+            },
+            {
+                "id": "oc/deepseek-v4-flash-free",
+                "name": "DeepSeek V4 Flash Free",
+                "owned_by": "opencode",
+                "context_length": 1000000,
+            },
+        ],
+    }
+
+    response = client.post(
+        "/accounts/ai-models",
+        json={
+            "base_url": "http://localhost:20128/v1",
+            "api_key": "test_key",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": "gemini-cli/gemini-2.0-flash",
+            "name": "Gemini 2.0 Flash",
+            "owned_by": "gemini-cli",
+            "context_length": 1048576,
+            "type": None,
+        },
+        {
+            "id": "oc/deepseek-v4-flash-free",
+            "name": "DeepSeek V4 Flash Free",
+            "owned_by": "opencode",
+            "context_length": 1000000,
+            "type": None,
+        },
+    ]
+    mock_get.assert_called_once()
+    args, kwargs = mock_get.call_args
+    assert args[0] == "http://localhost:20128/v1/models"
+    assert kwargs["headers"] == {
+        "ngrok-skip-browser-warning": "true",
+        "Authorization": "Bearer test_key",
+    }

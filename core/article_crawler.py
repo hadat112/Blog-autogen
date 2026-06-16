@@ -150,6 +150,10 @@ def extract_wp_post_id(html: str, final_url: str = ""):
         if query_id and query_id.isdigit():
             return query_id
 
+    match = re.search(r"\b(?:post|postid)-(\d+)\b", html or "", re.IGNORECASE)
+    if match:
+        return match.group(1)
+
     return None
 
 
@@ -163,6 +167,21 @@ def _wp_api_base(final_url: str):
 def _slug_from_url(final_url: str):
     path_parts = [part for part in urlparse(final_url).path.split("/") if part]
     return path_parts[-1] if path_parts else ""
+
+
+def _wp_post_matches_slug(post_json: dict, expected_slug: str) -> bool:
+    if not post_json or not expected_slug:
+        return True
+
+    returned_slug = (post_json.get("slug") or "").strip("/")
+    if returned_slug:
+        return returned_slug == expected_slug
+
+    returned_link_slug = _slug_from_url(post_json.get("link") or "")
+    if returned_link_slug:
+        return returned_link_slug == expected_slug
+
+    return True
 
 
 def fetch_wp_post_json(origin_api: str, post_id: str):
@@ -271,8 +290,13 @@ def _extract_wp_article_from_response(
 
     post_json = None
     try:
-        post_json = fetch_wp_post_by_slug(origin_api, _slug_from_url(response.url))
+        requested_slug = _slug_from_url(response.url)
+        post_json = fetch_wp_post_by_slug(origin_api, requested_slug)
         post_id = extract_wp_post_id(response.text, response.url)
+        if post_json and not _wp_post_matches_slug(post_json, requested_slug):
+            if log_callback:
+                log_callback("Step 2: WordPress slug lookup returned a different post; retrying by post ID.")
+            post_json = None
         if not post_json and post_id:
             post_json = fetch_wp_post_json(origin_api, post_id)
     except Exception:
