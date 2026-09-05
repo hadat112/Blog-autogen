@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-05
 
-**Status:** Ready for user review
+**Status:** Approved for implementation
 
 **Supersedes as implementation source:** `docs/spec-1.md`, `docs/spec-2.md`, and `docs/spec-3.md`
 
@@ -490,9 +490,9 @@ All automated AI and WordPress calls use fakes/mocks. Tests never publish extern
 
 ### 13.3 Frontend tests
 
-Add Vitest and React Testing Library for profile forms, controlled editors, validation, draft recovery, pattern actions, workflow progress, publish confirmation, and Copy buttons.
+Do not add a frontend unit-test framework. Keep the frontend verification surface intentionally small: ESLint and the production TypeScript/Vite build are required on every task, while behavior is covered through Playwright journeys with mocked APIs and backend contract tests.
 
-Continue requiring ESLint and production build. Add Playwright journeys with mocked APIs for:
+Add Playwright journeys with mocked APIs for:
 
 - Rewrite failure, resume, edit, publish, Copy Caption, and Copy Link.
 - Pattern filter/detail/retry/delete and Theme Rule CRUD.
