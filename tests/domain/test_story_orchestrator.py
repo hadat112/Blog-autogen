@@ -1,0 +1,328 @@
+import pytest
+from unittest.mock import MagicMock, patch, mock_open
+import os
+from app.domain.story_orchestrator import StoryOrchestrator
+
+@pytest.fixture
+def mock_config():
+    return {
+        "ninerouter_api_key": "test_key",
+        "ninerouter_text_model": "text_model",
+        "ninerouter_image_model": "image_model",
+        "ninerouter_base_url": "http://localhost:20128/v1",
+        "wordpress_url": "https://test.wp",
+        "wordpress_username": "user",
+        "wordpress_password": "pass",
+        "telegram_bot_token": "bot_token",
+        "telegram_chat_id": "chat_id",
+        "facebook_page_id": "123",
+        "facebook_page_access_token": "EAAB_TOKEN",
+        "facebook_graph_version": "v23.0",
+    }
+
+@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.WordPressPublisher")
+@patch("app.domain.story_orchestrator.FacebookPagePublisher")
+def test_story_orchestrator_init(mock_fb, mock_wp, mock_ai, mock_config):
+    orch = StoryOrchestrator(config=mock_config)
+
+    assert mock_ai.call_count == 1
+    assert mock_ai.call_args.kwargs["api_key"] == "test_key"
+    assert mock_ai.call_args.kwargs["text_model"] == "text_model"
+    assert mock_ai.call_args.kwargs["image_model"] == "image_model"
+    assert mock_ai.call_args.kwargs["base_url"] == "http://localhost:20128/v1"
+    mock_wp.assert_called_once_with(
+        url="https://test.wp",
+        username="user",
+        app_password="pass"
+    )
+    mock_fb.assert_called_once_with(
+        page_id="123",
+        access_token="EAAB_TOKEN",
+        graph_version="v23.0"
+    )
+    assert orch.disabled_steps == set()
+
+@patch("app.domain.story_orchestrator.send_telegram_msg")
+@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.WordPressPublisher")
+@patch("app.domain.story_orchestrator.FacebookPagePublisher")
+def test_process_prompt_success(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
+    orch = StoryOrchestrator(config=mock_config)
+    
+    # Mock AI responses
+    orch.ai.generate_story.return_value = {
+        "title": "Test Title",
+        "content": "Test Content",
+        "caption": "Test Caption",
+        "image_prompt": "Test Image Prompt"
+    }
+    orch.ai.generate_image.return_value = "https://image.url"
+    orch.wp.publish.return_value = "https://wp.url/story"
+    
+    result = orch.process_prompt("Test Prompt")
+    
+    assert result["status"] == "success"
+    assert result["title"] == "Test Title"
+    assert result["url"] == "https://wp.url/story"
+    
+    story_prompt = orch.ai.generate_story.call_args.args[0]
+    assert "Target language: Ukrainian" in story_prompt
+    assert "title, content, and caption in Ukrainian only" in story_prompt
+    assert story_prompt.endswith("Test Prompt")
+    orch.ai.generate_image.assert_called_once_with("Test Image Prompt")
+    orch.wp.publish.assert_called_once_with("Test Title", "Test Content", "https://image.url", category_id=None)
+    orch.fb.publish_photo_caption.assert_called_once()
+    orch.fb.comment_on_post.assert_called_once_with(
+        orch.fb.publish_photo_caption.return_value,
+        "Đọc chi tiết tại link sau: https://wp.url/story"
+    )
+    mock_telegram.assert_called_once()
+
+@patch("app.domain.story_orchestrator.send_telegram_msg")
+@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.WordPressPublisher")
+@patch("app.domain.story_orchestrator.FacebookPagePublisher")
+def test_process_prompt_failure(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
+    orch = StoryOrchestrator(config=mock_config)
+    
+    orch.ai.generate_story.side_effect = Exception("AI Error")
+    
+    result = orch.process_prompt("Test Prompt")
+    
+    assert result["status"] == "error"
+    assert "AI Error" in result["error"]
+    
+    mock_telegram.assert_called_once()
+
+@patch("app.domain.story_orchestrator.os.path.exists")
+@patch("app.domain.story_orchestrator.ThreadPoolExecutor")
+@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.WordPressPublisher")
+@patch("app.domain.story_orchestrator.FacebookPagePublisher")
+def test_story_orchestrator_run(mock_fb, mock_wp, mock_ai, mock_executor, mock_exists, mock_config):
+    mock_exists.return_value = True
+    orch = StoryOrchestrator(config=mock_config)
+
+    # Mock prompts file content
+    m = mock_open(read_data="prompt1\nprompt2\n")
+    with patch("builtins.open", m):
+        orch.run("prompts.txt")
+
+    # Verify ThreadPoolExecutor was used
+    mock_executor.assert_called_once_with(max_workers=5)
+    executor_instance = mock_executor.return_value.__enter__.return_value
+    assert executor_instance.submit.call_count == 2
+
+@patch("app.domain.story_orchestrator.send_telegram_msg")
+@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.WordPressPublisher")
+@patch("app.domain.story_orchestrator.FacebookPagePublisher")
+def test_process_prompt_skips_image_when_disabled(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
+    orch = StoryOrchestrator(config=mock_config, disabled_steps=["ai_image_generation"])
+
+    orch.ai.generate_story.return_value = {
+        "title": "Test Title",
+        "content": "Test Content",
+        "caption": "Test Caption",
+        "image_prompt": "Test Image Prompt"
+    }
+    orch.wp.publish.return_value = "https://wp.url/story"
+
+    result = orch.process_prompt("Test Prompt")
+
+    assert result["status"] == "success"
+    orch.ai.generate_image.assert_not_called()
+
+@patch("app.domain.story_orchestrator.send_telegram_msg")
+@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.WordPressPublisher")
+@patch("app.domain.story_orchestrator.FacebookPagePublisher")
+def test_process_prompt_generates_image_when_enabled(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
+    orch = StoryOrchestrator(config=mock_config, disabled_steps=[])
+
+    orch.ai.generate_story.return_value = {
+        "title": "Test Title",
+        "content": "Test Content",
+        "caption": "Test Caption",
+        "image_prompt": "Test Image Prompt"
+    }
+    orch.ai.generate_image.return_value = "https://image.url"
+    orch.wp.publish.return_value = "https://wp.url/story"
+
+    result = orch.process_prompt("Test Prompt")
+
+    assert result["status"] == "success"
+    orch.ai.generate_image.assert_called_once_with("Test Image Prompt")
+
+
+@patch("app.domain.story_orchestrator.send_telegram_msg")
+@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.WordPressPublisher")
+@patch("app.domain.story_orchestrator.FacebookPagePublisher")
+def test_debug_saves_image_response_on_success(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
+    orch = StoryOrchestrator(config=mock_config, debug=True, disabled_steps=[])
+
+    orch.ai.generate_story.return_value = {
+        "title": "Test Title",
+        "content": "Test Content",
+        "caption": "Test Caption",
+        "image_prompt": "Test Image Prompt"
+    }
+    orch.ai.generate_image.return_value = "https://image.url"
+    orch.wp.publish.return_value = "https://wp.url/story"
+
+    with patch.object(orch, "save_debug_file") as mock_save_debug:
+        result = orch.process_prompt("Test Prompt")
+
+    assert result["status"] == "success"
+    assert any(call.kwargs.get("prefix") == "image" for call in mock_save_debug.call_args_list)
+
+
+@patch("app.domain.story_orchestrator.send_telegram_msg")
+@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.WordPressPublisher")
+@patch("app.domain.story_orchestrator.FacebookPagePublisher")
+def test_debug_saves_image_response_on_failure(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
+    orch = StoryOrchestrator(config=mock_config, debug=True, disabled_steps=[])
+
+    orch.ai.generate_story.return_value = {
+        "title": "Test Title",
+        "content": "Test Content",
+        "caption": "Test Caption",
+        "image_prompt": "Test Image Prompt"
+    }
+    orch.ai.generate_image.side_effect = Exception("image failed")
+    orch.wp.publish.return_value = "https://wp.url/story"
+
+    with patch.object(orch, "save_debug_file") as mock_save_debug:
+        result = orch.process_prompt("Test Prompt")
+
+    assert result["status"] == "success"
+    assert any(call.kwargs.get("prefix") == "image_fail" for call in mock_save_debug.call_args_list)
+
+
+@patch("app.domain.story_orchestrator.send_telegram_msg")
+@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.WordPressPublisher")
+@patch("app.domain.story_orchestrator.FacebookPagePublisher")
+def test_process_article_data_starts_at_publishing_steps(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
+    orch = StoryOrchestrator(config=mock_config)
+    orch.wp.publish.return_value = "https://wp.url/article"
+
+    result = orch.process_article_data({
+        "title": "Crawled Title",
+        "content": "Crawled content with enough words for publishing",
+        "caption": "Crawled caption",
+        "image_url": "https://source.test/image.jpg",
+        "source_url": "https://source.test/article",
+    })
+
+    assert result["status"] == "success"
+    assert result["title"] == "Crawled Title"
+    assert result["url"] == "https://wp.url/article"
+    assert result["outputs"]["wordpress_url"] == "https://wp.url/article"
+    assert result["outputs"]["facebook_comment_state"] == "success"
+    orch.ai.generate_story.assert_not_called()
+    orch.ai.generate_image.assert_not_called()
+    orch.wp.publish.assert_called_once_with(
+        "Crawled Title",
+        "Crawled content with enough words for publishing",
+        "https://source.test/image.jpg",
+        category_id=None,
+    )
+    fb_caption = orch.fb.publish_photo_caption.call_args.args[0]
+    assert fb_caption.startswith("Crawled content with enough words for publishing")
+    assert fb_caption.endswith("...")
+    assert "Click the link" not in fb_caption
+    orch.fb.publish_photo_caption.assert_called_once_with(fb_caption, "https://source.test/image.jpg")
+    orch.fb.comment_on_post.assert_called_once_with(
+        orch.fb.publish_photo_caption.return_value,
+        "Đọc chi tiết tại link sau: https://wp.url/article",
+    )
+    mock_telegram.assert_called_once()
+
+
+
+@patch("app.domain.story_orchestrator.send_telegram_msg")
+@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.WordPressPublisher")
+@patch("app.domain.story_orchestrator.FacebookPagePublisher")
+def test_process_article_data_debug_saves_crawled_article_response(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
+    orch = StoryOrchestrator(config=mock_config, debug=True)
+    orch.wp.publish.return_value = "https://wp.url/article"
+    article = {
+        "title": "Crawled Title",
+        "content": "Crawled content",
+        "caption": "Crawled caption",
+        "image_url": "https://source.test/image.jpg",
+        "source_url": "https://source.test/article",
+    }
+
+    with patch.object(orch, "save_debug_file") as mock_save_debug:
+        result = orch.process_article_data(article)
+
+    assert result["status"] == "success"
+    mock_save_debug.assert_called_once_with(article, prefix="crawl")
+
+
+
+@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.WordPressPublisher")
+@patch("app.domain.story_orchestrator.FacebookPagePublisher")
+def test_create_teaser_caption_does_not_inject_wrong_language_cta(mock_fb, mock_wp, mock_ai, mock_config):
+    orch = StoryOrchestrator(config=mock_config, language="Vietnamese")
+    content = " ".join(f"word{i}" for i in range(700))
+
+    caption = orch.create_teaser_caption(content)
+
+    assert caption.endswith("...")
+    assert "Click the link" not in caption
+    assert len(caption.split()) >= 400
+    assert "word315" in caption
+
+
+@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.WordPressPublisher")
+@patch("app.domain.story_orchestrator.FacebookPagePublisher")
+def test_language_text_is_inserted_into_prompt_unchanged(
+    mock_fb,
+    mock_wp,
+    mock_ai,
+    mock_config,
+):
+    orch = StoryOrchestrator(config=mock_config, language="abc")
+
+    assert orch.apply_language_to_prompt("Write in {language}") == "Write in abc"
+    reinforced = orch.enforce_story_language("Original request")
+    assert "Target language: abc" in reinforced
+    assert "title, content, and caption in abc only" in reinforced
+    assert reinforced.endswith("Original request")
+
+
+@patch("app.domain.article_importer.extract_article_from_url")
+@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.WordPressPublisher")
+@patch("app.domain.story_orchestrator.FacebookPagePublisher")
+def test_process_crawl_empty_language_reposts_original(
+    mock_fb,
+    mock_wp,
+    mock_ai,
+    mock_extract_article,
+    mock_config,
+):
+    orch = StoryOrchestrator(config=mock_config, language="")
+    mock_extract_article.return_value = {
+        "title": "Original",
+        "content": "Original content",
+        "caption": "",
+        "image_url": "",
+        "source_url": "https://source.test/story",
+    }
+    orch.wp.publish.return_value = "https://wp.url/original"
+
+    result = orch.process_crawl("https://source.test/story")
+
+    assert result["status"] == "success"
+    mock_extract_article.assert_called_once()
+    assert mock_extract_article.call_args.kwargs["translate"] is False

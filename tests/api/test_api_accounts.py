@@ -3,8 +3,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from infrastructure.db.session import Base, get_db
-from apps.api.main import app
+from app.db.session import Base, get_db
+from app.api.main import app
 import uuid
 
 # Test database setup

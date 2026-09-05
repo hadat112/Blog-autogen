@@ -12,7 +12,7 @@ def open_browser():
 
 def main():
     threading.Thread(target=open_browser, daemon=True).start()
-    uvicorn.run("apps.api.main:app", host="127.0.0.1", port=8000, reload=False)
+    uvicorn.run("app.api.main:app", host="127.0.0.1", port=8000, reload=False)
 
 
 if __name__ == "__main__":

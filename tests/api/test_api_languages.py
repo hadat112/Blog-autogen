@@ -5,8 +5,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from apps.api.main import app
-from infrastructure.db.session import Base, get_db
+from app.api.main import app
+from app.db.session import Base, get_db
 
 
 TEST_DB_PATH = "./test_api_languages.db"

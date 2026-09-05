@@ -15,7 +15,7 @@ echo "Creating Windows release..."
 rm -rf release/StoryAutogen-Windows release/StoryAutogen-Windows.zip
 mkdir -p release/StoryAutogen-Windows/frontend
 
-cp -R adapters application apps config core infrastructure release/StoryAutogen-Windows/
+cp -R app config release/StoryAutogen-Windows/
 cp prompts.txt pyproject.toml release/StoryAutogen-Windows/
 cp packaging/windows/README_WINDOWS.txt packaging/windows/install_windows.bat packaging/windows/run.bat packaging/app_launcher.py release/StoryAutogen-Windows/
 cp -R frontend/dist release/StoryAutogen-Windows/frontend/

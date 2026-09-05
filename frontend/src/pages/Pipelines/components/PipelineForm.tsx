@@ -32,7 +32,6 @@ const defaultFormData: Partial<Pipeline> = {
     ai: "",
     wp: "",
     fb: "",
-    gs: "",
     tg: "",
   },
   settings: {},
@@ -136,7 +135,6 @@ const PipelineForm: React.FC<PipelineFormProps> = ({
   const selectedWpAccount = accounts.find(
     (account: Account) => account.id === formData.step_accounts?.wp,
   );
-
   const fetchCategoriesForAccount = async (account: Account) => {
     setFetchingCats(true);
     try {
@@ -349,27 +347,6 @@ const PipelineForm: React.FC<PipelineFormProps> = ({
                     <option value="">-- Select FB --</option>
                     {accounts
                       .filter((a) => a.type === "fb")
-                      .map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}
-                        </option>
-                      ))}
-                  </Select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-content-primary">
-                    Google Sheets (Log)
-                  </label>
-                  <Select
-                    value={formData.step_accounts?.gs || ""}
-                    onChange={(e) =>
-                      handleStepAccountChange("gs", e.target.value)
-                    }
-                  >
-                    <option value="">-- Select Sheets --</option>
-                    {accounts
-                      .filter((a) => a.type === "gs")
                       .map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.name}

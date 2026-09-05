@@ -1,8 +1,8 @@
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from infrastructure.db.session import Base, get_db
-from apps.api.main import app
+from app.db.session import Base, get_db
+from app.api.main import app
 import pytest
 import os
 
@@ -41,7 +41,7 @@ def test_run_pipeline_fail_404(client):
     assert response.status_code == 404
 
 def test_run_pipeline_success(client, db_session):
-    from infrastructure.db import models
+    from app.db import models
     # 1. Create a dummy pipeline
     pipeline = models.Pipeline(
         id="test-pipeline",
@@ -70,8 +70,8 @@ def test_run_pipeline_success(client, db_session):
 
 
 def test_run_original_crawl_pipeline_returns_running(client, db_session, monkeypatch):
-    from application import pipeline_service
-    from infrastructure.db import models
+    from app.services import pipeline_service
+    from app.db import models
 
     pipeline = models.Pipeline(
         id="original-run-pipeline",
@@ -87,7 +87,7 @@ def test_run_original_crawl_pipeline_returns_running(client, db_session, monkeyp
         assert pipeline_id == "original-run-pipeline"
         return "original-job"
 
-    monkeypatch.setattr(pipeline_service.worker_manager, "start_pipeline_run", fake_start_pipeline_run)
+    monkeypatch.setattr(pipeline_service.job_runner, "start_pipeline_run", fake_start_pipeline_run)
 
     response = client.post(
         "/pipelines/original-run-pipeline/run",
@@ -103,7 +103,7 @@ def test_list_jobs(client, db_session):
     assert isinstance(response.json(), list)
 
 def test_get_job_status(client, db_session):
-    from infrastructure.db import models
+    from app.db import models
     job = models.Job(id="test-job", pipeline_id="test-pipeline", status="running")
     db_session.add(job)
     db_session.commit()
@@ -114,8 +114,8 @@ def test_get_job_status(client, db_session):
     assert response.json()["status"] == "running"
 
 def test_rerun_failed_job_marks_original(client, db_session, monkeypatch):
-    from application import pipeline_service
-    from infrastructure.db import models
+    from app.services import pipeline_service
+    from app.db import models
 
     pipeline = models.Pipeline(
         id="rerun-pipeline",
@@ -141,7 +141,7 @@ def test_rerun_failed_job_marks_original(client, db_session, monkeypatch):
         assert prompt == "https://example.com/story"
         return "new-rerun-job"
 
-    monkeypatch.setattr(pipeline_service.worker_manager, "start_pipeline_run", fake_start_pipeline_run)
+    monkeypatch.setattr(pipeline_service.job_runner, "start_pipeline_run", fake_start_pipeline_run)
 
     response = client.post(
         "/pipelines/rerun-pipeline/run",
@@ -159,13 +159,13 @@ def test_rerun_failed_job_marks_original(client, db_session, monkeypatch):
     assert job.rerun_at is not None
 
 def test_cancel_running_job(client, monkeypatch):
-    from application import job_service
+    from app.services import job_service
 
     async def fake_cancel_job(job_id):
         assert job_id == "running-job"
         return {"status": "cancelled"}
 
-    monkeypatch.setattr(job_service.worker_manager, "cancel_job", fake_cancel_job)
+    monkeypatch.setattr(job_service.job_runner, "cancel_job", fake_cancel_job)
 
     response = client.post("/jobs/running-job/cancel")
 

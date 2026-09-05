@@ -3,32 +3,32 @@
 Runtime shape:
 
 1. Entry layer receives a prompt, URL, or API request.
-2. `application/` services coordinate DB access and execution.
-3. `Orchestrator` prepares normalized input and adapter instances.
+2. `app/services/` services coordinate DB access and execution.
+3. `StoryOrchestrator` prepares normalized input and adapter instances.
 4. `PipelineCore` runs ordered plugins.
 5. Each plugin owns one external arm and writes its output into `PipelineState`.
 6. The final result exposes stable top-level compatibility fields plus detailed `outputs`.
 
 ## Top-Level Layout
 
-- `apps/api/`: FastAPI app, schemas, and route modules.
-- `application/`: use-case services called by API or future entrypoints.
-- `core/`: business flow, pipeline contracts, language/crawl/story orchestration.
-- `core/pipeline/steps/`: one plugin file per pipeline step.
-- `adapters/`: external integrations such as AI, WordPress, Facebook, Sheets, storage.
-- `infrastructure/db/`: SQLAlchemy session and database models.
-- `tests/`: grouped by `api`, `adapters`, and `core`.
+- `app/api/`: FastAPI app, schemas, and route modules.
+- `app/services/`: use-case services called by API or future entrypoints.
+- `app/domain/`: business flow, pipeline contracts, language/crawl/story orchestration.
+- `app/domain/pipeline/steps/`: one plugin file per pipeline step.
+- `app/integrations/`: external integrations such as AI, WordPress, Facebook, and notifications.
+- `app/db/`: SQLAlchemy session and database models.
+- `tests/`: grouped by `api`, `integrations`, and `domain`.
 
 ## Core
 
-`core/pipeline/` contains the shared runtime contract:
+`app/domain/pipeline/` contains the shared runtime contract:
 
 - `context.py`: normalized input, mutable state, injected ports, progress emitter.
 - `result.py`: status/output/error emitted by one plugin.
 - `executor.py`: sequential plugin runner.
 - `registry.py`: step registration and creation by `step_id`.
 
-The pipeline core does not know about FastAPI, CLI arguments, SQLite, or account forms.
+The pipeline core does not know about FastAPI, SQLite, or account forms.
 
 ## Plugins
 
@@ -40,7 +40,7 @@ Current publication plugins:
 - `FacebookPublishPlugin`: posts caption/image and optional comment.
 - `TelegramNotifyPlugin`: sends final notification only; no listener or polling loop.
 
-Each plugin lives in `core/pipeline/steps/<step>.py` and registers itself with:
+Each plugin lives in `app/domain/pipeline/steps/<step>.py` and registers itself with:
 
 ```python
 @register_step("wordpress_publish")

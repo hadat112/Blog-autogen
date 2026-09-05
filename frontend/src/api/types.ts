@@ -6,11 +6,10 @@ export interface AccountConfig {
   api_key?: string;
   base_url?: string;
   text_model?: string;
+  fallback_text_model?: string;
   image_model?: string;
   page_id?: string;
   access_token?: string;
-  spreadsheet_id?: string;
-  credentials_path?: string;
   bot_token?: string;
   chat_id?: string;
 }
@@ -18,7 +17,7 @@ export interface AccountConfig {
 export interface Account {
   id: string;
   name: string;
-  type: "wp" | "ai" | "fb" | "gs" | "tg";
+  type: "wp" | "ai" | "fb" | "tg";
   config: AccountConfig;
 }
 

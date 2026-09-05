@@ -11,9 +11,6 @@ requires-python = ">=3.9"
 dependencies = [
     "requests",
     "pyyaml",
-    "questionary",
-    "gspread",
-    "google-auth",
     "tqdm",
     "sqlalchemy",
     "fastapi",
@@ -21,18 +18,13 @@ dependencies = [
     "python-multipart",
 ]
 
-[tool.setuptools]
-py-modules = ["main"]
-
 [tool.setuptools.packages.find]
-include = ["adapters*", "application*", "apps*", "core*", "infrastructure*"]
-
-[project.scripts]
-blog-autogen = "main:main"
+include = ["app*"]
 
 [project.optional-dependencies]
 dev = [
     "pytest",
     "pytest-mock",
     "responses",
+    "httpx",
 ]

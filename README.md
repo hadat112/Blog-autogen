@@ -34,15 +34,14 @@
 ### 🛠 Modular "Plugin-First" Architecture
 - **Flexible Pipeline:** Enable or disable steps (Image Gen, Facebook, WordPress) on the fly.
 - **Atomicity:** Each step is independent. A failure in social posting won't roll back a successful WordPress publication.
-- **Extensible:** Easily add new publishing adapters (e.g., LinkedIn, Twitter, Medium) by implementing the `BaseStep` interface.
+- **Extensible:** Easily add new publishing integrations (e.g., LinkedIn, Twitter, Medium) by implementing the `BaseStep` interface.
 
 ### 🏢 Multi-Account & Multi-Platform
 - **WordPress Integration:** Full support for WordPress REST API including media uploads and category management.
 - **Facebook Pages:** Automated posting to multiple Facebook pages with custom captioning and image support.
 - **Centralized Management:** A modern Web UI to manage multiple accounts, API keys, and job statuses.
 
-### 📊 Business Auditing & Alerts
-- **Google Sheets Integration:** Live reporting of every published post (Title, URL, Status, Timestamp) for easy performance tracking.
+### 📊 Alerts
 - **Telegram Notifications:** Real-time alerts sent to your Telegram Bot after each job completion.
 
 ---
@@ -51,10 +50,10 @@
 
 The project follows a clean separation of concerns:
 
-- **Entry Layer:** Supports both an interactive CLI and a FastAPI-powered Web UI.
+- **Entry Layer:** React Web UI backed by FastAPI.
 - **Application Services:** Coordinates database models (SQLAlchemy) and execution logic.
-- **Orchestrator:** Manages state, thread-safe concurrency, and the normalized injection of adapters.
-- **Pipeline Core:** A sequential runner that executes registered plugins (`core/pipeline/steps/`).
+- **StoryOrchestrator:** Manages state, thread-safe concurrency, and normalized integration injection.
+- **Pipeline Core:** A sequential runner that executes registered plugins (`app/domain/pipeline/steps/`).
 - **Adapter Layer:** Isolates external dependencies (AI Models, Social APIs, Storage) from the business logic.
 
 ### System Architecture Flow
@@ -62,13 +61,12 @@ The project follows a clean separation of concerns:
 ```mermaid
 graph TD
     subgraph "Entry Layer"
-        CLI[Interactive CLI]
         WebUI[React Frontend]
         API[FastAPI Backend]
     end
 
     subgraph "Core Engine"
-        ORC[Orchestrator]
+        ORC[StoryOrchestrator]
         DB[(SQLite/SQLAlchemy)]
         PL[Pipeline Executor]
     end
@@ -78,30 +76,26 @@ graph TD
         P2[Image Gen]
         P3[WP Publish]
         P4[FB Publish]
-        P5[GS Log]
-        P6[TG Notify]
+        P5[TG Notify]
     end
 
     subgraph "External Adapters"
         AI[9Router/OpenAI]
         WP[WordPress REST]
         FB[Meta Graph API]
-        GS[Google Sheets API]
         TG[Telegram Bot API]
     end
 
     WebUI <--> API
     API <--> DB
-    CLI --> ORC
     API --> ORC
     ORC --> PL
-    PL --> P1 & P2 & P3 & P4 & P5 & P6
+    PL --> P1 & P2 & P3 & P4 & P5
 
     P1 & P2 --> AI
     P3 --> WP
     P4 --> FB
-    P5 --> GS
-    P6 --> TG
+    P5 --> TG
 ```
 
 ---
@@ -111,7 +105,7 @@ graph TD
 ### 💪 Strengths
 - **High Throughput:** Native multithreading support allows processing hundreds of stories simultaneously.
 - **Resilience:** Built-in error handling ensures that one failed API call doesn't stop the entire batch.
-- **Hybrid Interface:** Power users can use the CLI for batch automation, while managers use the Web UI for configuration.
+- **Focused Web Workflow:** Operators manage accounts, pipelines, and job history from one dashboard.
 - **Clean Codebase:** Type-hinted Python 3 and a modern React 19 frontend with Tailwind CSS 4.
 
 ### ⚠️ Considerations (Weaknesses)
@@ -125,6 +119,7 @@ graph TD
 
 ### Prerequisites
 - **Python:** 3.9 or higher
+- **uv:** Python package and environment manager for development
 - **Node.js:** 20.19+ or 22.12+ for development/building the Web UI
 - **API Keys:** 9Router or compatible AI provider, plus any publishing integrations you plan to use.
 
@@ -132,23 +127,23 @@ graph TD
 
 #### macOS / Linux
 ```bash
-# Clone and run setup
-chmod +x packaging/legacy/setup.sh && ./packaging/legacy/setup.sh
-
-# Link the runner (Optional)
-sudo ln -sf $(pwd)/blog-autogen-runner /usr/local/bin/blog-autogen
+uv sync --extra dev
+cd frontend && pnpm install
+cd ..
+./dev.sh
 ```
 
 #### Windows
 ```powershell
-.\packaging\legacy\setup.bat
+uv sync --extra dev
+cd frontend
+pnpm install
+cd ..
+.\dev.bat
 ```
 
 ### Configuration
-Run the tool for the first time to launch the interactive onboarding wizard:
-```bash
-blog-autogen --update
-```
+Start the dashboard and add service accounts from the Accounts screen.
 
 ---
 
@@ -258,7 +253,7 @@ packaging/PACKAGING_GUIDE.md
 
 ## ⚙️ Configuration Details
 
-The legacy CLI uses a `config.yaml` file. The Web UI stores accounts, pipelines, and job history in local SQLite.
+The Web UI stores accounts, pipelines, and job history in local SQLite. Global translation settings are stored in `config.yaml`.
 
 Local Web UI database:
 
@@ -273,25 +268,14 @@ Key integration groups include:
 | **AI (9Router)** | `api_key`, `base_url`, `model` | Used for story generation and captioning. |
 | **WordPress** | `url`, `username`, `app_password` | Requires "Application Password" for REST API access. |
 | **Facebook** | `page_id`, `access_token` | Meta Graph API credentials for page posting. |
-| **Google Sheets** | `spreadsheet_id`, `credentials_json` | Service account JSON required for logging. |
 | **Telegram** | `bot_token`, `chat_id` | Used for real-time status notifications. |
 
 ---
 
 ## 📖 Usage Guide
 
-### Mode A: High-Performance CLI
-Ideal for batch processing from a `prompts.txt` file.
-```bash
-# Run with 10 stories and 5 parallel threads
-blog-autogen --limit 10 --threads 5
-
-# Process a specific article by URL
-blog-autogen --crawl-url "https://example.com/article"
-```
-
-### Mode B: Modern Web UI
-Ideal for managing accounts and monitoring job progress visually.
+### Web UI
+Use the dashboard to manage accounts, configure pipelines, run prompts/URLs, and monitor job progress.
 ```bash
 # Start both Backend and Frontend in development
 ./dev.sh
@@ -325,19 +309,15 @@ http://127.0.0.1:8000
 - **Cause:** Expired Page Access Token or insufficient permissions.
 - **Fix:** Use the Meta for Developers "Graph API Explorer" to generate a Page Access Token with `pages_manage_posts` and `pages_read_engagement` permissions.
 
-### 3. Google Sheets "Permission Denied"
-- **Cause:** Service account email not invited to the spreadsheet.
-- **Fix:** Open your Google Sheet, click **Share**, and add the service account email found in your credentials JSON as an **Editor**.
-
-### 4. Frontend Build Fails
+### 3. Frontend Build Fails
 - **Cause:** Node.js is too old.
 - **Fix:** Use Node 20.19+ or 22.12+. This repo includes `.nvmrc`.
 
-### 5. Windows Cannot Find Python
+### 4. Windows Cannot Find Python
 - **Cause:** Python is missing or was installed without PATH.
 - **Fix:** Install Python 3.9+ and tick **Add Python to PATH**.
 
-### 6. macOS Blocks `.command` Files
+### 5. macOS Blocks `.command` Files
 - **Cause:** Gatekeeper blocks downloaded command files.
 - **Fix:** Right-click the command file, click **Open**, then confirm.
 
@@ -355,8 +335,14 @@ http://127.0.0.1:8000
 
 Contributions are welcome! To set up the development environment:
 ```bash
-pip install -e ".[dev]"
-pytest
+uv sync --extra dev
+uv run pytest
+```
+
+Run the backend and frontend dev servers together:
+
+```bash
+./dev.sh
 ```
 
 Frontend type check:

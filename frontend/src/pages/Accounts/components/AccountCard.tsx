@@ -72,7 +72,6 @@ const AccountCard: React.FC<AccountCardProps> = ({ account, onEdit, onDelete }) 
           {account.type === 'wp' && <p className="truncate">URL: {account.config.url}</p>}
           {account.type === 'ai' && <p className="truncate">Model: {account.config.text_model}</p>}
           {account.type === 'fb' && <p className="truncate">Page: {account.config.page_id}</p>}
-          {account.type === 'gs' && <p className="truncate">Sheet ID: {account.config.spreadsheet_id}</p>}
           {account.type === 'tg' && <p className="truncate">Chat ID: {account.config.chat_id}</p>}
         </div>
 

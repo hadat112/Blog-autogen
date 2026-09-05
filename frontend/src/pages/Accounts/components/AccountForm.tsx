@@ -120,8 +120,9 @@ const AccountForm: React.FC<AccountFormProps> = ({
 
   const renderModelField = (
     label: string,
-    key: "text_model" | "image_model",
+    key: "text_model" | "fallback_text_model" | "image_model",
     fallback: string,
+    required = true,
   ) => (
     <div className="space-y-1">
       <label className="text-sm font-medium text-content-primary">
@@ -134,6 +135,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
             value={formData.config?.[key] || fallback}
             onChange={(e) => handleConfigChange(key, e.target.value)}
           >
+            {!required && <option value="">-- No fallback --</option>}
             {modelOptions.map((model) => (
               <option key={model.id} value={model.id}>
                 {modelLabel(model)}
@@ -143,7 +145,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
         ) : (
           <Input
             type="text"
-            required
+            required={required}
             className="flex-1"
             value={formData.config?.[key] || fallback}
             onChange={(e) => handleConfigChange(key, e.target.value)}
@@ -242,6 +244,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
               )}
             </div>
             {renderModelField("Text Model", "text_model", "gpt-4o")}
+            {renderModelField("Fallback Text Model", "fallback_text_model", "", false)}
             {renderModelField("Image Model", "image_model", "dall-e-3")}
           </>
         );
@@ -269,40 +272,6 @@ const AccountForm: React.FC<AccountFormProps> = ({
                 value={formData.config?.access_token || ""}
                 onChange={(e) =>
                   handleConfigChange("access_token", e.target.value)
-                }
-              />
-            </div>
-          </>
-        );
-      case "gs":
-        return (
-          <>
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-content-primary">
-                Spreadsheet ID
-              </label>
-              <Input
-                type="text"
-                required
-                value={formData.config?.spreadsheet_id || ""}
-                onChange={(e) =>
-                  handleConfigChange("spreadsheet_id", e.target.value)
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-content-primary">
-                Credentials JSON Path
-              </label>
-              <Input
-                type="text"
-                required
-                value={
-                  (formData.config?.credentials_path as any) ||
-                  "credentials.json"
-                }
-                onChange={(e) =>
-                  handleConfigChange("credentials_path" as any, e.target.value)
                 }
               />
             </div>
@@ -397,7 +366,6 @@ const AccountForm: React.FC<AccountFormProps> = ({
                 <option value="wp">WordPress</option>
                 <option value="fb">Facebook Page</option>
                 <option value="ai">AI (9router)</option>
-                <option value="gs">Google Sheets</option>
                 <option value="tg">Telegram</option>
               </Select>
             </div>

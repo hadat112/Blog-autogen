@@ -55,7 +55,6 @@ const Accounts = () => {
     { id: 'wp', label: 'WordPress' },
     { id: 'ai', label: 'AI (9router)' },
     { id: 'fb', label: 'Facebook' },
-    { id: 'gs', label: 'Google Sheets' },
     { id: 'tg', label: 'Telegram' },
   ];
 

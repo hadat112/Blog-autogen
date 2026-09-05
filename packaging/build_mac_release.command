@@ -15,7 +15,7 @@ echo "Creating Mac release..."
 rm -rf release
 mkdir -p release/StoryAutogen-Mac/frontend
 
-cp -R adapters application apps config core infrastructure release/StoryAutogen-Mac/
+cp -R app config release/StoryAutogen-Mac/
 cp prompts.txt pyproject.toml release/StoryAutogen-Mac/
 cp packaging/mac/README_MAC.txt packaging/mac/install_mac.command packaging/mac/run_mac.command packaging/app_launcher.py release/StoryAutogen-Mac/
 cp -R frontend/dist release/StoryAutogen-Mac/frontend/

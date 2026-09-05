@@ -114,11 +114,11 @@ Notes:
 Included:
 
 ```text
-adapters/
-application/
-apps/
-core/
-infrastructure/
+app/integrations/
+app/services/
+app/api/
+app/domain/
+app/db/
 frontend/dist/
 prompts.txt
 pyproject.toml
