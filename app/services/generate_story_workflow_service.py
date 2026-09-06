@@ -44,7 +44,13 @@ class GenerateStoryWorkflowService:
                 draft.error = None
                 draft.version += 1
                 db.commit()
-                jobs.complete(job_id, {"draft_id": draft.id, "tool_calls": result["tool_calls"]})
+                warnings = [] if result["caption_matches_prefix"] else ["Caption differs from story opening"]
+                jobs.complete(job_id, {
+                    "draft_id": draft.id,
+                    "tool_calls": result["tool_calls"],
+                    "caption_matches_prefix": result["caption_matches_prefix"],
+                    "warnings": warnings,
+                })
             except InterruptedError:
                 if draft.state == "generating":
                     draft.state = "generation_failed"

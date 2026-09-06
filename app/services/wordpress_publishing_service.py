@@ -49,8 +49,6 @@ class WordPressPublishingService:
                 raise ValueError("Publishing now requires explicit confirmation")
             if not draft.title.strip() or not draft.content.strip():
                 raise ValueError("Title and content are required")
-            if draft.caption and not draft.content.startswith(draft.caption):
-                raise ValueError("Caption must be an exact prefix of content")
             _, account = self._profile_and_account(draft)
             gateway = self.gateway_factory(account.config or {})
             draft.state = "publishing"

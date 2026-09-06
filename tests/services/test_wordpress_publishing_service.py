@@ -57,3 +57,21 @@ def test_ambiguous_result_is_terminal_until_reconciled(db):
     assert db.get(models.ContentDraft, "draft").state == "publish_unknown"
     with pytest.raises(ValueError, match="ambiguous"):
         WordPressPublishingService(db, Gateway).publish("draft")
+
+
+def test_non_prefix_caption_does_not_block_wordpress_publication(db):
+    Gateway.posts.clear()
+    db.add(models.ContentDraft(
+        id="draft",
+        kind="manual",
+        pipeline_id="profile",
+        title="Title",
+        content="Story opening",
+        caption="Independent social caption",
+        wp_status="draft",
+        state="ready_for_review",
+    ))
+    db.commit()
+
+    result = WordPressPublishingService(db, Gateway).publish("draft")
+    assert result.state == "wordpress_created"

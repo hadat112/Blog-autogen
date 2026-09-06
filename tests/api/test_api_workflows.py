@@ -94,6 +94,7 @@ def test_theme_rules_patterns_and_collection_sources():
     assert rule.json()["keywords"] == ["mother", "father"]
     source = client.get("/pattern-collection-sources").json()[0]
     assert source["collect_patterns"] is False
+    assert source["can_analyze"] is True
     assert client.put(f"/pattern-collection-sources/{profile['id']}", json={"collect_patterns": True}).json()["collect_patterns"] is True
     with TestingSession() as db:
         db.add(models.Article(source_url="https://source.test/a", original_title="A", theme_tags=["family"], word_count=12, analysis_status="failed"))
@@ -102,6 +103,24 @@ def test_theme_rules_patterns_and_collection_sources():
     assert summary == {"total": 1, "completed": 0, "recoverable": 1, "distinct_themes": 1}
     assert client.get("/patterns", params={"q": "source.test"}).json()["total"] == 1
     assert client.delete(f"/theme-rules/{rule.json()['id']}").status_code == 200
+
+
+def test_pattern_sources_report_ai_eligibility_and_retry_revalidates_it():
+    valid = create_profile("rewrite")
+    with TestingSession() as db:
+        db.add_all([
+            models.Pipeline(id="missing-ai", name="Missing AI", type="crawl", language="English", step_accounts={}),
+            models.Pipeline(id="inactive", name="Inactive", type="crawl", language="English", step_accounts={"ai": "ai1"}, is_active=False),
+            models.Article(id="article", source_url="https://source.test/retry", original_title="Retry", analysis_status="failed"),
+        ])
+        db.commit()
+
+    sources = {item["pipeline_id"]: item for item in client.get("/pattern-collection-sources").json()}
+    assert sources[valid["id"]]["can_analyze"] is True
+    assert sources["missing-ai"]["can_analyze"] is False
+    assert sources["inactive"]["can_analyze"] is False
+    assert client.post("/patterns/article/retry-analysis", params={"pipeline_id": "missing-ai"}).status_code == 400
+    assert client.post("/patterns/article/retry-analysis", params={"pipeline_id": "inactive"}).status_code == 400
 
 
 def test_job_api_exposes_structured_capabilities_and_legacy_url_fallback():

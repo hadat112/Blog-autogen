@@ -41,6 +41,11 @@ class WorkflowRunner:
         if not task:
             return None
         task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        self._mark_cancelled(job_id)
         return {"status": "cancelled"}
 
 

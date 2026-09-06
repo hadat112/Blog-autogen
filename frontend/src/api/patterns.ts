@@ -14,7 +14,7 @@ export const createThemeRule = (data: Omit<ThemeRule, 'id' | 'created_at' | 'upd
 export const updateThemeRule = (id: string, data: Omit<ThemeRule, 'id' | 'created_at' | 'updated_at'>) => client.put<ThemeRule>(`/theme-rules/${id}`, data);
 export const deleteThemeRule = (id: string) => client.delete(`/theme-rules/${id}`);
 
-export interface CollectionSource { pipeline_id: string; name: string; type: string; collect_patterns: boolean }
+export interface CollectionSource { pipeline_id: string; name: string; type: string; collect_patterns: boolean; can_analyze: boolean }
 export const getCollectionSources = () => client.get<CollectionSource[]>('/pattern-collection-sources');
 export const updateCollectionSource = (id: string, collect_patterns: boolean) =>
   client.put(`/pattern-collection-sources/${id}`, { collect_patterns });

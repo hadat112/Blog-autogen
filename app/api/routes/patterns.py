@@ -62,12 +62,17 @@ def retry_pattern(article_id: str, pipeline_id: str, db: Session = Depends(get_d
     pipeline = db.query(models.Pipeline).filter(
         models.Pipeline.id == pipeline_id,
         models.Pipeline.type.in_(("crawl", "rewrite")),
+        models.Pipeline.is_active.is_(True),
     ).first()
     if not pipeline:
         raise HTTPException(status_code=400, detail="An eligible collection source is required")
     ai_account_id = (pipeline.step_accounts or {}).get("ai")
-    if not ai_account_id:
-        raise HTTPException(status_code=400, detail="Collection source has no AI account")
+    ai_account = db.query(models.Account.id).filter(
+        models.Account.id == ai_account_id,
+        models.Account.type == "ai",
+    ).first()
+    if not ai_account:
+        raise HTTPException(status_code=400, detail="Collection source has no valid AI account")
     try:
         job = PatternCollectionService(db).retry(article_id, pipeline_id, ai_account_id)
     except ValueError as exc:

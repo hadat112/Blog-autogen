@@ -83,6 +83,11 @@ class JobService:
             if result is None:
                 job.status = "cancelled"
                 job.end_time = datetime.utcnow()
+                if job.draft_id:
+                    draft = self.db.query(models.ContentDraft).filter(models.ContentDraft.id == job.draft_id).first()
+                    if draft and draft.state == "generating":
+                        draft.state = "generation_failed"
+                        draft.error = "Generation was cancelled"
                 self.db.commit()
                 return {"status": "cancelled"}
             return result

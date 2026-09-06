@@ -65,7 +65,11 @@ class RewriteWorkflowService:
                 draft.error = None
                 draft.version += 1
                 db.commit()
-                jobs.complete(job_id, {"draft_id": draft.id, "warnings": result["warnings"]})
+                jobs.complete(job_id, {
+                    "draft_id": draft.id,
+                    "caption_matches_prefix": result["caption_matches_prefix"],
+                    "warnings": result["warnings"],
+                })
             except InterruptedError:
                 if draft.state == "generating":
                     draft.state = "generation_failed"

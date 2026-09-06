@@ -15,15 +15,21 @@ def _eligible_query(db):
 
 @router.get("")
 def list_sources(db: Session = Depends(get_db)):
-    return [
-        {
+    sources = []
+    for pipeline in _eligible_query(db).order_by(models.Pipeline.name.asc()).all():
+        ai_account_id = (pipeline.step_accounts or {}).get("ai")
+        has_ai_account = bool(db.query(models.Account.id).filter(
+            models.Account.id == ai_account_id,
+            models.Account.type == "ai",
+        ).first())
+        sources.append({
             "pipeline_id": pipeline.id,
             "name": pipeline.name,
             "type": pipeline.type,
             "collect_patterns": bool((pipeline.settings or {}).get("collect_patterns", False)),
-        }
-        for pipeline in _eligible_query(db).order_by(models.Pipeline.name.asc()).all()
-    ]
+            "can_analyze": bool(pipeline.is_active and has_ai_account),
+        })
+    return sources
 
 
 @router.put("/{pipeline_id}")

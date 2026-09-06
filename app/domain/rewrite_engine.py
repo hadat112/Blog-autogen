@@ -1,4 +1,4 @@
-from app.domain.content_validation import parse_json_object, validate_caption_prefix
+from app.domain.content_validation import caption_matches_prefix, parse_json_object
 from app.integrations.ai.openai_compatible import _split_text_chunks
 
 
@@ -13,8 +13,10 @@ REWRITE_SYSTEM_PROMPT = (
 def _history_messages(system_prompt, rewritten_chunks):
     messages = [{"role": "system", "content": system_prompt}]
     for index, rewritten in enumerate(rewritten_chunks):
-        if index:
-            messages.append({"role": "user", "content": "Continue."})
+        messages.append({
+            "role": "user",
+            "content": "Begin the rewritten story." if index == 0 else "Continue.",
+        })
         messages.append({"role": "assistant", "content": rewritten})
     return messages
 
@@ -63,8 +65,18 @@ class RewriteEngine:
         caption = str(metadata.get("caption") or "").strip()
         if not new_title:
             raise ValueError("AI returned an empty rewritten title")
-        validate_caption_prefix(story, caption)
+        if not caption:
+            raise ValueError("AI returned an empty rewritten caption")
+        caption_match = caption_matches_prefix(story, caption)
         original_words = max(1, len((content or "").split()))
         ratio = len(story.split()) / original_words
         warnings = [] if 0.7 <= ratio <= 1.3 else ["Rewritten length is outside 70%–130% of the source"]
-        return {"title": new_title, "content": story, "caption": caption, "warnings": warnings}
+        if not caption_match:
+            warnings.append("Caption differs from story opening")
+        return {
+            "title": new_title,
+            "content": story,
+            "caption": caption,
+            "caption_matches_prefix": caption_match,
+            "warnings": warnings,
+        }
