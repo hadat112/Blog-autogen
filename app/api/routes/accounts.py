@@ -65,7 +65,10 @@ def update_account(id: str, account: schemas.AccountCreate, db: Session = Depend
 
 @router.delete("/accounts/{id}")
 def delete_account(id: str, db: Session = Depends(get_db)):
-    deleted = AccountService(db).delete_account(id)
+    try:
+        deleted = AccountService(db).delete_account(id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not deleted:
         raise HTTPException(status_code=404, detail="Account not found")
     return {"status": "ok"}

@@ -6,7 +6,7 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 
-from app.integrations.ai.ninerouter import NineRouterAI
+from app.integrations.ai.openai_compatible import OpenAICompatibleAIClient
 from app.integrations.publishers.wordpress import WordPressPublisher
 from app.integrations.publishers.facebook_page import FacebookPagePublisher
 from app.integrations.notifiers.telegram import send_telegram_msg
@@ -39,7 +39,8 @@ class StoryOrchestrator:
                  language="Ukrainian",
                  debug=False,
                  disabled_steps=None,
-                 progress_callback=None):
+                 progress_callback=None,
+                 source_article_callback=None):
 
         # For backwards compatibility, if a single config object is passed
         if config and not any([ai_config, wp_config, fb_config, tg_config]):
@@ -84,9 +85,10 @@ class StoryOrchestrator:
             if isinstance(step, str) and step.strip()
         }
         self.progress_callback = progress_callback
+        self.source_article_callback = source_article_callback
 
         # Initialize providers
-        self.ai = NineRouterAI(
+        self.ai = OpenAICompatibleAIClient(
             api_key=ai_config.get("api_key"),
             text_model=ai_config.get("text_model"),
             image_model=ai_config.get("image_model"),
@@ -290,6 +292,7 @@ class StoryOrchestrator:
                 language=self.language,
                 log_callback=crawl_log,
                 translate=bool((self.language or "").strip()),
+                source_callback=self.source_article_callback,
             )
 
             self._emit_log(f"{log_task_id} Extraction Success: Title='{article_data.get('title', '')[:30]}...'", 1, "Extract article from URL", 100, task_id=task_id)

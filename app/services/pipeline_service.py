@@ -11,10 +11,19 @@ class PipelineService:
         self.db = db
 
     def list_pipelines(self):
-        return self.db.query(models.Pipeline).all()
+        return self.db.query(models.Pipeline).filter(
+            ~models.Pipeline.type.in_({"rewrite", "generate_story", "wp_publish"})
+        ).all()
 
     def get_pipeline(self, pipeline_id: str):
-        return self.db.query(models.Pipeline).filter(models.Pipeline.id == pipeline_id).first()
+        return self.db.query(models.Pipeline).filter(
+            models.Pipeline.id == pipeline_id,
+            ~models.Pipeline.type.in_({"rewrite", "generate_story", "wp_publish"}),
+        ).first()
+
+    def _validate_legacy_type(self, pipeline_type):
+        if pipeline_type in {"rewrite", "generate_story", "wp_publish"}:
+            raise ValueError("Workflow profiles must be managed from their dedicated screen")
 
     def _settings_from_pipeline_data(self, pipeline_data):
         settings = dict(pipeline_data.settings or {})
@@ -30,6 +39,7 @@ class PipelineService:
         return language
 
     def create_pipeline(self, pipeline_data):
+        self._validate_legacy_type(pipeline_data.type)
         language_name = self._language_value(pipeline_data.language, pipeline_data.type)
         pipeline = models.Pipeline(
             name=pipeline_data.name,
@@ -45,6 +55,7 @@ class PipelineService:
         return pipeline
 
     def update_pipeline(self, pipeline_id: str, pipeline_data):
+        self._validate_legacy_type(pipeline_data.type)
         pipeline = self.get_pipeline(pipeline_id)
         if not pipeline:
             return None

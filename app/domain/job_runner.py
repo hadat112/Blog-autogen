@@ -7,6 +7,7 @@ from app.db.models import Job, Pipeline
 from app.domain.account_config_resolver import resolve_accounts_for_pipeline
 from app.domain.story_orchestrator import StoryOrchestrator
 from app.db.session import SessionLocal
+from app.services.pattern_collection_service import PatternCollectionService
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,19 @@ class JobRunner:
         if wp_category_id:
             wp_config["category_id"] = wp_category_id
 
+        source_article_callback = None
+        if pipeline_settings.get("collect_patterns"):
+            ai_account_id = (pipeline.step_accounts or {}).get("ai")
+
+            def source_article_callback(article_data):
+                with SessionLocal() as pattern_db:
+                    PatternCollectionService(pattern_db).collect(
+                        article_data,
+                        pipeline_id=pipeline_id,
+                        parent_job_id=job_id,
+                        ai_account_id=ai_account_id,
+                    )
+
         # 3. Auto-detect disabled steps based on missing accounts
         disabled_steps = []
         if not account_configs.get("ai"):
@@ -130,7 +144,8 @@ class JobRunner:
             num_threads=1,
             language=pipeline.language,
             disabled_steps=disabled_steps,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            source_article_callback=source_article_callback,
         )
 
         # 5. Run in background. Translated/AI jobs use the lock so only one pipeline

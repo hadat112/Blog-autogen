@@ -25,7 +25,7 @@ def test_story_orchestrator_initialization_with_configs():
         "chat_id": "test_tg_chat_id"
     }
 
-    with patch("app.domain.story_orchestrator.NineRouterAI") as MockAI, \
+    with patch("app.domain.story_orchestrator.OpenAICompatibleAIClient") as MockAI, \
          patch("app.domain.story_orchestrator.WordPressPublisher") as MockWP, \
          patch("app.domain.story_orchestrator.FacebookPagePublisher") as MockFB:
 
@@ -65,7 +65,7 @@ def test_story_orchestrator_initialization_with_configs():
         assert story_orchestrator.tg_config == tg_config
 
 def test_story_orchestrator_initialization_with_none_configs():
-    with patch("app.domain.story_orchestrator.NineRouterAI") as MockAI, \
+    with patch("app.domain.story_orchestrator.OpenAICompatibleAIClient") as MockAI, \
          patch("app.domain.story_orchestrator.WordPressPublisher") as MockWP, \
          patch("app.domain.story_orchestrator.FacebookPagePublisher") as MockFB:
 

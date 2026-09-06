@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, JSON, DateTime, Boolean, Integer, ForeignKey
+from sqlalchemy import Column, String, JSON, DateTime, Boolean, Integer, ForeignKey, Index, Text
 from datetime import datetime
 from .session import Base
 
@@ -52,3 +52,74 @@ class Job(Base):
     logs = Column(JSON, default=list)
     rerun_at = Column(DateTime, nullable=True)
     rerun_job_id = Column(String, nullable=True)
+    workflow_type = Column(String, nullable=False, default="legacy", server_default="legacy")
+    parent_job_id = Column(String, ForeignKey("jobs.id"), nullable=True)
+    draft_id = Column(String, ForeignKey("content_drafts.id"), nullable=True)
+    outputs = Column(JSON, default=dict, nullable=False)
+
+    __table_args__ = (
+        Index("ix_jobs_workflow_status", "workflow_type", "status"),
+        Index("ix_jobs_parent_job_id", "parent_job_id"),
+    )
+
+
+class ContentDraft(Base):
+    __tablename__ = "content_drafts"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    kind = Column(String, nullable=False)
+    pipeline_id = Column(String, ForeignKey("pipelines.id"), nullable=True)
+    source_url = Column(String, nullable=True)
+    language = Column(String, nullable=True)
+    title = Column(String, default="", nullable=False)
+    content = Column(Text, default="", nullable=False)
+    caption = Column(Text, nullable=True)
+    image_kind = Column(String, nullable=True)
+    image_source = Column(String, nullable=True)
+    content_format = Column(String, default="plain", nullable=False)
+    category_id = Column(String, nullable=True)
+    wp_status = Column(String, default="draft", nullable=False)
+    state = Column(String, default="generating", nullable=False)
+    wp_media_id = Column(String, nullable=True)
+    wp_post_id = Column(String, nullable=True)
+    wp_url = Column(String, nullable=True)
+    error = Column(Text, nullable=True)
+    version = Column(Integer, default=1, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    wordpress_created_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("ix_content_drafts_kind_state", "kind", "state"),
+        Index("ix_content_drafts_updated_at", "updated_at"),
+    )
+
+
+class Article(Base):
+    __tablename__ = "articles"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    source_url = Column(String, nullable=False, unique=True)
+    original_title = Column(String, default="", nullable=False)
+    theme_tags = Column(JSON, default=list, nullable=False)
+    structure = Column(JSON, nullable=True)
+    word_count = Column(Integer, default=0, nullable=False)
+    analysis_status = Column(String, default="pending", nullable=False)
+    analysis_error = Column(Text, nullable=True)
+    processed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_articles_analysis_processed", "analysis_status", "processed_at"),
+    )
+
+
+class ThemeRule(Base):
+    __tablename__ = "theme_rules"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    tag = Column(String, nullable=False, unique=True)
+    keywords = Column(JSON, default=list, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

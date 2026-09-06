@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List, Any, Dict
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 class AccountBase(BaseModel):
     name: str
@@ -11,11 +11,9 @@ class AccountCreate(AccountBase):
     pass
 
 class AccountResponse(AccountBase):
+    model_config = ConfigDict(from_attributes=True)
     id: str
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 class LanguageBase(BaseModel):
     display_name: str = Field(min_length=1)
@@ -28,10 +26,8 @@ class LanguageUpdate(LanguageBase):
     pass
 
 class LanguageResponse(LanguageCreate):
+    model_config = ConfigDict(from_attributes=True)
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 class AppSettings(BaseModel):
     translation_mode: str = Field(default="sequential")
@@ -52,11 +48,9 @@ class PipelineCreate(PipelineBase):
     pass
 
 class PipelineResponse(PipelineBase):
+    model_config = ConfigDict(from_attributes=True)
     id: str
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 class QuickRunInput(BaseModel):
     prompts_file: Optional[str] = None
@@ -64,7 +58,7 @@ class QuickRunInput(BaseModel):
     rerun_from_job_id: Optional[str] = None
 
 class JobBase(BaseModel):
-    pipeline_id: str
+    pipeline_id: Optional[str] = None
     pipeline_name: Optional[str] = None
     input_text: Optional[str] = None
     input_type: Optional[str] = None
@@ -74,13 +68,17 @@ class JobBase(BaseModel):
     logs: List[Any] = Field(default_factory=list)
     rerun_at: Optional[datetime] = None
     rerun_job_id: Optional[str] = None
+    workflow_type: str = "legacy"
+    parent_job_id: Optional[str] = None
+    draft_id: Optional[str] = None
+    outputs: Dict[str, Any] = Field(default_factory=dict)
+    capabilities: Dict[str, bool] = Field(default_factory=dict)
 
 class JobCreate(JobBase):
     pass
 
 class JobResponse(JobBase):
+    model_config = ConfigDict(from_attributes=True)
     id: str
     start_time: datetime
-
-    class Config:
-        from_attributes = True
+    end_time: Optional[datetime] = None

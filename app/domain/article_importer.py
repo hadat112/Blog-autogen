@@ -283,6 +283,7 @@ def _extract_wp_article_from_response(
     language: str,
     log_callback=None,
     translate: bool = True,
+    source_callback=None,
 ):
     origin_api = _wp_api_base(response.url)
     if not origin_api:
@@ -308,6 +309,12 @@ def _extract_wp_article_from_response(
     fields = parse_wp_post_payload(post_json, original_html=response.text, origin_api=origin_api)
     if not fields["title"] or not fields["content"]:
         return None
+
+    if source_callback:
+        try:
+            source_callback({**fields, "source_url": response.url})
+        except Exception:
+            pass
 
     if not translate:
         if log_callback:
@@ -344,6 +351,7 @@ def extract_article_from_url(
     language: str = "Ukrainian",
     log_callback=None,
     translate: bool = True,
+    source_callback=None,
 ) -> dict:
     response = requests.get(
         article_url,
@@ -362,6 +370,7 @@ def extract_article_from_url(
         language,
         log_callback=log_callback,
         translate=translate,
+        source_callback=source_callback,
     )
     if article is None and not translate:
         raise ValueError("Repost original requires a WordPress REST article with title and content.")

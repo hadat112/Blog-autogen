@@ -20,7 +20,7 @@ def mock_config():
         "facebook_graph_version": "v23.0",
     }
 
-@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.OpenAICompatibleAIClient")
 @patch("app.domain.story_orchestrator.WordPressPublisher")
 @patch("app.domain.story_orchestrator.FacebookPagePublisher")
 def test_story_orchestrator_init(mock_fb, mock_wp, mock_ai, mock_config):
@@ -44,7 +44,7 @@ def test_story_orchestrator_init(mock_fb, mock_wp, mock_ai, mock_config):
     assert orch.disabled_steps == set()
 
 @patch("app.domain.story_orchestrator.send_telegram_msg")
-@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.OpenAICompatibleAIClient")
 @patch("app.domain.story_orchestrator.WordPressPublisher")
 @patch("app.domain.story_orchestrator.FacebookPagePublisher")
 def test_process_prompt_success(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
@@ -80,7 +80,7 @@ def test_process_prompt_success(mock_fb, mock_wp, mock_ai, mock_telegram, mock_c
     mock_telegram.assert_called_once()
 
 @patch("app.domain.story_orchestrator.send_telegram_msg")
-@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.OpenAICompatibleAIClient")
 @patch("app.domain.story_orchestrator.WordPressPublisher")
 @patch("app.domain.story_orchestrator.FacebookPagePublisher")
 def test_process_prompt_failure(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
@@ -97,7 +97,7 @@ def test_process_prompt_failure(mock_fb, mock_wp, mock_ai, mock_telegram, mock_c
 
 @patch("app.domain.story_orchestrator.os.path.exists")
 @patch("app.domain.story_orchestrator.ThreadPoolExecutor")
-@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.OpenAICompatibleAIClient")
 @patch("app.domain.story_orchestrator.WordPressPublisher")
 @patch("app.domain.story_orchestrator.FacebookPagePublisher")
 def test_story_orchestrator_run(mock_fb, mock_wp, mock_ai, mock_executor, mock_exists, mock_config):
@@ -115,7 +115,7 @@ def test_story_orchestrator_run(mock_fb, mock_wp, mock_ai, mock_executor, mock_e
     assert executor_instance.submit.call_count == 2
 
 @patch("app.domain.story_orchestrator.send_telegram_msg")
-@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.OpenAICompatibleAIClient")
 @patch("app.domain.story_orchestrator.WordPressPublisher")
 @patch("app.domain.story_orchestrator.FacebookPagePublisher")
 def test_process_prompt_skips_image_when_disabled(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
@@ -135,7 +135,7 @@ def test_process_prompt_skips_image_when_disabled(mock_fb, mock_wp, mock_ai, moc
     orch.ai.generate_image.assert_not_called()
 
 @patch("app.domain.story_orchestrator.send_telegram_msg")
-@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.OpenAICompatibleAIClient")
 @patch("app.domain.story_orchestrator.WordPressPublisher")
 @patch("app.domain.story_orchestrator.FacebookPagePublisher")
 def test_process_prompt_generates_image_when_enabled(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
@@ -157,7 +157,7 @@ def test_process_prompt_generates_image_when_enabled(mock_fb, mock_wp, mock_ai, 
 
 
 @patch("app.domain.story_orchestrator.send_telegram_msg")
-@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.OpenAICompatibleAIClient")
 @patch("app.domain.story_orchestrator.WordPressPublisher")
 @patch("app.domain.story_orchestrator.FacebookPagePublisher")
 def test_debug_saves_image_response_on_success(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
@@ -180,7 +180,7 @@ def test_debug_saves_image_response_on_success(mock_fb, mock_wp, mock_ai, mock_t
 
 
 @patch("app.domain.story_orchestrator.send_telegram_msg")
-@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.OpenAICompatibleAIClient")
 @patch("app.domain.story_orchestrator.WordPressPublisher")
 @patch("app.domain.story_orchestrator.FacebookPagePublisher")
 def test_debug_saves_image_response_on_failure(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
@@ -203,7 +203,7 @@ def test_debug_saves_image_response_on_failure(mock_fb, mock_wp, mock_ai, mock_t
 
 
 @patch("app.domain.story_orchestrator.send_telegram_msg")
-@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.OpenAICompatibleAIClient")
 @patch("app.domain.story_orchestrator.WordPressPublisher")
 @patch("app.domain.story_orchestrator.FacebookPagePublisher")
 def test_process_article_data_starts_at_publishing_steps(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
@@ -245,7 +245,7 @@ def test_process_article_data_starts_at_publishing_steps(mock_fb, mock_wp, mock_
 
 
 @patch("app.domain.story_orchestrator.send_telegram_msg")
-@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.OpenAICompatibleAIClient")
 @patch("app.domain.story_orchestrator.WordPressPublisher")
 @patch("app.domain.story_orchestrator.FacebookPagePublisher")
 def test_process_article_data_debug_saves_crawled_article_response(mock_fb, mock_wp, mock_ai, mock_telegram, mock_config):
@@ -267,7 +267,7 @@ def test_process_article_data_debug_saves_crawled_article_response(mock_fb, mock
 
 
 
-@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.OpenAICompatibleAIClient")
 @patch("app.domain.story_orchestrator.WordPressPublisher")
 @patch("app.domain.story_orchestrator.FacebookPagePublisher")
 def test_create_teaser_caption_does_not_inject_wrong_language_cta(mock_fb, mock_wp, mock_ai, mock_config):
@@ -282,7 +282,7 @@ def test_create_teaser_caption_does_not_inject_wrong_language_cta(mock_fb, mock_
     assert "word315" in caption
 
 
-@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.OpenAICompatibleAIClient")
 @patch("app.domain.story_orchestrator.WordPressPublisher")
 @patch("app.domain.story_orchestrator.FacebookPagePublisher")
 def test_language_text_is_inserted_into_prompt_unchanged(
@@ -301,7 +301,7 @@ def test_language_text_is_inserted_into_prompt_unchanged(
 
 
 @patch("app.domain.article_importer.extract_article_from_url")
-@patch("app.domain.story_orchestrator.NineRouterAI")
+@patch("app.domain.story_orchestrator.OpenAICompatibleAIClient")
 @patch("app.domain.story_orchestrator.WordPressPublisher")
 @patch("app.domain.story_orchestrator.FacebookPagePublisher")
 def test_process_crawl_empty_language_reposts_original(
@@ -321,7 +321,8 @@ def test_process_crawl_empty_language_reposts_original(
     }
     orch.wp.publish.return_value = "https://wp.url/original"
 
-    result = orch.process_crawl("https://source.test/story")
+    with patch("app.domain.story_orchestrator.send_telegram_msg"):
+        result = orch.process_crawl("https://source.test/story")
 
     assert result["status"] == "success"
     mock_extract_article.assert_called_once()

@@ -54,6 +54,13 @@ class AccountService:
         if not account:
             return False
 
+        referenced_by = [
+            pipeline.name for pipeline in self.db.query(models.Pipeline).all()
+            if account_id in (pipeline.step_accounts or {}).values()
+        ]
+        if referenced_by:
+            raise ValueError(f"Account is used by profile or pipeline: {referenced_by[0]}")
+
         self.db.delete(account)
         self.db.commit()
         return True

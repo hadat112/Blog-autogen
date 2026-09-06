@@ -3,40 +3,18 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
-from sqlalchemy import inspect, text
-
-from app.api.routes import accounts, jobs, languages, pipelines, settings
+from app.api.routes import accounts, content_drafts, generation_jobs, jobs, languages, pattern_collection_sources, patterns, pipelines, rewrite_jobs, settings, theme_rules, workflow_profiles
 from app.services.language_service import LanguageService
 from app.db.session import Base, engine
 from app.db.session import SessionLocal
+from app.db.migrations import run_migrations
+from app.services.workflow_job_service import WorkflowJobService
 
 
-Base.metadata.create_all(bind=engine)
-
-language_columns = [
-    column["name"] for column in inspect(engine).get_columns("languages")
-]
-if "prompt_name" in language_columns:
-    with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE languages DROP COLUMN prompt_name"))
-
+run_migrations(engine, Base.metadata)
 with SessionLocal() as db:
     LanguageService(db).ensure_defaults()
-
-if "settings" not in [column["name"] for column in inspect(engine).get_columns("pipelines")]:
-    with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE pipelines ADD COLUMN settings JSON DEFAULT '{}'"))
-
-job_columns = [column["name"] for column in inspect(engine).get_columns("jobs")]
-with engine.begin() as conn:
-    if "input_text" not in job_columns:
-        conn.execute(text("ALTER TABLE jobs ADD COLUMN input_text VARCHAR"))
-    if "input_type" not in job_columns:
-        conn.execute(text("ALTER TABLE jobs ADD COLUMN input_type VARCHAR"))
-    if "rerun_at" not in job_columns:
-        conn.execute(text("ALTER TABLE jobs ADD COLUMN rerun_at DATETIME"))
-    if "rerun_job_id" not in job_columns:
-        conn.execute(text("ALTER TABLE jobs ADD COLUMN rerun_job_id VARCHAR"))
+    WorkflowJobService(db).recover_interrupted()
 
 app = FastAPI(title="Story Autogen API")
 
@@ -53,6 +31,13 @@ app.include_router(pipelines.router)
 app.include_router(jobs.router)
 app.include_router(languages.router)
 app.include_router(settings.router)
+app.include_router(workflow_profiles.router)
+app.include_router(content_drafts.router)
+app.include_router(patterns.router)
+app.include_router(theme_rules.router)
+app.include_router(pattern_collection_sources.router)
+app.include_router(rewrite_jobs.router)
+app.include_router(generation_jobs.router)
 
 
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -72,7 +57,11 @@ def read_root():
 
 @app.get("/{path:path}", include_in_schema=False)
 def serve_frontend(path: str):
-    if path.startswith(("accounts", "pipelines", "jobs", "languages", "settings")):
+    if path.startswith((
+        "accounts", "pipelines", "jobs", "languages", "settings",
+        "workflow-profiles", "content-drafts", "patterns", "theme-rules",
+        "rewrite-jobs", "generation-jobs", "pattern-collection-sources",
+    )):
         return {"status": "not_found"}
 
     requested_file = FRONTEND_DIST / path
