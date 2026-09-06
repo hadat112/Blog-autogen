@@ -215,7 +215,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
           <>
             <div className="space-y-1">
               <label className="text-sm font-medium text-content-primary">
-                9router API Key
+                AI Provider API Key
               </label>
               <Input
                 type="password"
@@ -365,7 +365,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
               >
                 <option value="wp">WordPress</option>
                 <option value="fb">Facebook Page</option>
-                <option value="ai">AI (9router)</option>
+                <option value="ai">AI Provider</option>
                 <option value="tg">Telegram</option>
               </Select>
             </div>

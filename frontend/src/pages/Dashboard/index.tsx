@@ -7,6 +7,7 @@ import JobDetailsModal from './components/JobDetailsModal';
 import DashboardSkeleton from './components/DashboardSkeleton';
 import { History, Activity } from 'lucide-react';
 import { Job } from '../../api/types';
+import { Select } from '../../components/ui/Select';
 
 const getJobInput = (job: Job) => {
   if (job.input_text?.trim()) return job.input_text.trim();
@@ -29,6 +30,7 @@ const Dashboard = () => {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [rerunningJobId, setRerunningJobId] = useState<string | null>(null);
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
+  const [workflowFilter, setWorkflowFilter] = useState('all');
 
   const { data: jobs = [], isLoading, refetch } = useQuery({
     queryKey: ['jobs'],
@@ -68,8 +70,9 @@ const Dashboard = () => {
     onSettled: () => setCancellingJobId(null),
   });
 
-  const runningJobs = jobs.filter(j => j.status === 'running' || j.status === 'queued');
-  const pastJobs = jobs.filter(j => j.status !== 'running' && j.status !== 'queued').slice(0, 10);
+  const visibleJobs = workflowFilter === 'all' ? jobs : jobs.filter(job => (job.workflow_type || 'legacy') === workflowFilter);
+  const runningJobs = visibleJobs.filter(j => j.status === 'running' || j.status === 'queued');
+  const pastJobs = visibleJobs.filter(j => j.status !== 'running' && j.status !== 'queued').slice(0, 10);
   const selectedJob = jobs.find(j => j.id === selectedJobId);
 
   if (isLoading && jobs.length === 0) {
@@ -79,6 +82,8 @@ const Dashboard = () => {
   return (
     <div className="space-y-8">
       <QuickRun onRunStarted={() => refetch()} />
+
+      <div className="flex justify-end"><label className="w-full max-w-xs text-sm font-medium text-content-secondary">Workflow filter<Select className="mt-1" value={workflowFilter} onChange={event => setWorkflowFilter(event.target.value)}><option value="all">All workflows</option><option value="legacy">Legacy pipelines</option><option value="rewrite">Rewrite</option><option value="generate_story">Generate Story</option><option value="pattern_analysis">Pattern Analysis</option><option value="wp_publish">WordPress Publisher</option></Select></label></div>
 
       <div className="space-y-4">
         <h3 className="text-xl font-bold text-content-primary flex items-center space-x-2">

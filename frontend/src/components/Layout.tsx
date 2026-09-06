@@ -15,7 +15,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
 
   // Extract the current path without the leading slash to use as the title
-  const activeTab = location.pathname.substring(1) || 'dashboard';
+  const titleByPath: Record<string, string> = {
+    dashboard: 'Dashboard', accounts: 'Accounts', pipelines: 'Pipelines', settings: 'Settings',
+    rewrite: 'Rewrite Article', 'generate-story': 'Generate Story', 'pattern-library': 'Pattern Library',
+    'wordpress-publisher': 'WordPress Publisher',
+  };
+  const pathKey = location.pathname.substring(1) || 'dashboard';
+  const activeTab = titleByPath[pathKey] || pathKey;
 
   useEffect(() => {
     // Check local storage first, then system preference
@@ -62,7 +68,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             >
               <Menu size={24} />
             </button>
-            <h2 className="text-lg md:text-xl font-bold text-content-primary capitalize truncate">
+            <h2 className="text-lg md:text-xl font-bold text-content-primary truncate">
               {activeTab}
             </h2>
           </div>

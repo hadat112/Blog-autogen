@@ -4,6 +4,7 @@ import { Job } from '../../../api/types';
 import { Card, CardHeader, CardContent } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { cn } from '../../../lib/utils';
+import { Link } from 'react-router-dom';
 
 interface JobExtended extends Job {
   pipeline_name?: string;
@@ -31,7 +32,10 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
   const isPartialSuccess = job.status === 'partial_success';
   const isFailed = job.status === 'failed';
   const isCancelled = job.status === 'cancelled';
-  const canCancel = isQueued || isRunning;
+  const canCancel = job.capabilities?.can_cancel ?? (isQueued || isRunning);
+  const canRerun = job.capabilities?.can_rerun ?? isFailed;
+  const outputUrl = typeof job.outputs?.wp_url === 'string' ? job.outputs.wp_url : '';
+  const recoveryPath = job.workflow_type === 'rewrite' ? '/rewrite' : job.workflow_type === 'generate_story' ? '/generate-story' : job.workflow_type === 'wp_publish' ? '/wordpress-publisher' : job.workflow_type === 'pattern_analysis' ? '/pattern-library' : '';
 
   const formatTime = (isoString: string) => {
     if (!isoString) return '--:--';
@@ -50,13 +54,13 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
     : inputLog?.url || stepOneLog?.detail?.split('Step 1: Extracting article from ')[1]?.trim() || '';
   const hasBeenRerun = Boolean(job.rerun_job_id || job.rerun_at);
 
-  const handleCopy = async (event: React.MouseEvent) => {
+  const handleCopy = async (event: React.MouseEvent, value: string) => {
     event.stopPropagation();
     try {
-      await navigator.clipboard.writeText(inputUrl);
+      await navigator.clipboard.writeText(value);
     } catch (error) {
       const textarea = document.createElement('textarea');
-      textarea.value = inputUrl;
+      textarea.value = value;
       document.body.appendChild(textarea);
       textarea.select();
       document.execCommand('copy');
@@ -66,7 +70,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
 
   const handleRerun = (event: React.MouseEvent) => {
     event.stopPropagation();
-    if (!onRerun || hasBeenRerun || isRerunning) return;
+    if (!onRerun || !canRerun || hasBeenRerun || isRerunning) return;
     onRerun();
   };
 
@@ -80,7 +84,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
     <Card 
       onClick={onClick}
       className={cn(
-        "cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] active:scale-[0.99] border-border-default",
+        "cursor-pointer transition-shadow duration-200 hover:shadow-md border-border-default",
         isQueued && "border-status-warning/50 bg-status-warning/5",
         isRunning && "border-accent/50 bg-accent/5",
         isFailed && "border-status-danger/50"
@@ -102,6 +106,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
                 {job.status.replace('_', ' ')}
               </span>
               <span className="text-[10px] text-content-tertiary font-mono">#{job.id.slice(0, 8)}</span>
+              <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-content-secondary">{(job.workflow_type || 'legacy').replaceAll('_', ' ')}</span>
             </div>
             <h4 className="font-bold text-content-primary truncate mt-1 text-sm">{job.pipeline_name || 'Pipeline Run'}</h4>
           </div>
@@ -136,7 +141,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
                 variant="ghost"
                 size="icon"
                 className="h-5 w-5 text-content-tertiary hover:text-content-primary"
-                onClick={handleCopy}
+                onClick={(event) => handleCopy(event, inputUrl)}
               >
                 <Copy size={10} />
               </Button>
@@ -152,6 +157,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
             </div>
           </div>
         )}
+        {outputUrl && <div className="mt-2 flex min-w-0 items-center gap-1 rounded border border-status-success/30 bg-status-success/5 p-1.5"><span className="min-w-0 flex-1 truncate text-[10px] font-mono text-status-success" title={outputUrl}>{outputUrl}</span><Button variant="ghost" size="icon" className="h-6 w-6" title="Copy WordPress link" onClick={(event) => handleCopy(event, outputUrl)}><Copy size={11} /></Button><a href={outputUrl} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()} className="flex h-6 w-6 items-center justify-center rounded text-status-success hover:bg-status-success/10" title="Open WordPress link"><ExternalLink size={11} /></a></div>}
       </CardHeader>
 
       <CardContent className="p-5 pt-0 space-y-4">
@@ -195,7 +201,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
           </div>
         )}
 
-        {isFailed && (
+        {isFailed && canRerun && (
           <div className="flex items-center justify-between gap-3 pt-1">
             {hasBeenRerun ? (
               <span className="text-[10px] font-bold uppercase tracking-wider text-content-tertiary">
@@ -219,6 +225,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
             </Button>
           </div>
         )}
+        {isFailed && !canRerun && recoveryPath && <div className="flex justify-end"><Link to={recoveryPath} onClick={event => event.stopPropagation()} className="rounded-md border border-border-default bg-surface px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/10">Open workflow to recover</Link></div>}
       </CardContent>
     </Card>
   );

@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, GitBranch, Settings, X, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Users, GitBranch, Settings, X, Zap, ChevronLeft, ChevronRight, WandSparkles, Sparkles, LibraryBig, Send } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -10,11 +10,21 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, isCollapsed = false, toggleCollapse }) => {
-  const menuItems = [
-    { id: 'dashboard', path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
-    { id: 'accounts', path: '/accounts', label: 'Accounts', icon: <Users size={20} /> },
-    { id: 'pipelines', path: '/pipelines', label: 'Pipelines', icon: <GitBranch size={20} /> },
-    { id: 'settings', path: '/settings', label: 'Settings', icon: <Settings size={20} /> },
+  const menuSections = [
+    { label: 'Overview', items: [
+      { id: 'dashboard', path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
+    ] },
+    { label: 'Content workflows', items: [
+      { id: 'rewrite', path: '/rewrite', label: 'Rewrite Article', icon: <WandSparkles size={20} /> },
+      { id: 'generate-story', path: '/generate-story', label: 'Generate Story', icon: <Sparkles size={20} /> },
+      { id: 'pattern-library', path: '/pattern-library', label: 'Pattern Library', icon: <LibraryBig size={20} /> },
+      { id: 'wordpress-publisher', path: '/wordpress-publisher', label: 'WP Publisher', icon: <Send size={20} /> },
+    ] },
+    { label: 'Configuration', items: [
+      { id: 'accounts', path: '/accounts', label: 'Accounts', icon: <Users size={20} /> },
+      { id: 'pipelines', path: '/pipelines', label: 'Pipelines', icon: <GitBranch size={20} /> },
+      { id: 'settings', path: '/settings', label: 'Settings', icon: <Settings size={20} /> },
+    ] },
   ];
 
   const handleTabClick = () => {
@@ -53,16 +63,21 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, isCollapsed = fals
           </button>
         </div>
 
-        <nav className="flex-1 mt-6 overflow-hidden">
-          <ul className={`space-y-2 transition-all duration-150 ${isCollapsed ? 'lg:px-3 px-4' : 'px-4'}`}>
-            {menuItems.map((item) => (
+        <nav className="mt-2 flex-1 overflow-y-auto overflow-x-hidden pb-4">
+          {menuSections.map((section) => (
+            <div key={section.label} className="mb-5">
+              <p className={`mb-2 px-7 text-[10px] font-bold uppercase tracking-[0.18em] text-content-tertiary transition-opacity ${isCollapsed ? 'lg:opacity-0' : ''}`}>
+                {section.label}
+              </p>
+          <ul className={`space-y-1 transition-all duration-150 ${isCollapsed ? 'lg:px-3 px-4' : 'px-4'}`}>
+            {section.items.map((item) => (
               <li key={item.id}>
                 <NavLink
                   to={item.path}
                   onClick={handleTabClick}
                   title={item.label}
                   className={({ isActive }) =>
-                    `w-full flex items-center ${isCollapsed ? 'lg:justify-center justify-start' : 'space-x-3'} p-3 rounded-lg transition-all ${
+                    `w-full flex cursor-pointer items-center ${isCollapsed ? 'lg:justify-center justify-start' : 'space-x-3'} p-3 rounded-lg transition-colors duration-200 ${
                       isActive
                         ? 'bg-[var(--button-primary-bg)] text-[var(--button-primary-text)] shadow-sm'
                         : 'text-content-secondary hover:bg-surface-subtle hover:text-content-primary'
@@ -77,6 +92,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, isCollapsed = fals
               </li>
             ))}
           </ul>
+            </div>
+          ))}
         </nav>
 
         <div className={`mt-auto p-4 border-t border-border-subtle flex items-center transition-all duration-150 ${isCollapsed ? 'justify-center' : 'justify-between'}`}>

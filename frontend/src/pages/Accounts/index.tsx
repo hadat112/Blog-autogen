@@ -53,7 +53,7 @@ const Accounts = () => {
   const types = [
     { id: 'all', label: 'All' },
     { id: 'wp', label: 'WordPress' },
-    { id: 'ai', label: 'AI (9router)' },
+    { id: 'ai', label: 'AI Provider' },
     { id: 'fb', label: 'Facebook' },
     { id: 'tg', label: 'Telegram' },
   ];

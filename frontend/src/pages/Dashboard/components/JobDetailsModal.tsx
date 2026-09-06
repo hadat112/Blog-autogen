@@ -56,6 +56,7 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ job, onClose }) => {
   const inputUrl = job.input_type === 'url'
     ? job.input_text || ''
     : inputLog?.url || stepOneLog?.detail?.split('Step 1: Extracting article from ')[1]?.trim() || '';
+  const outputUrl = typeof job.outputs?.wp_url === 'string' ? job.outputs.wp_url : '';
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center p-0 sm:p-4">
@@ -157,6 +158,8 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ job, onClose }) => {
               </div>
             </div>
           </div>
+
+          {outputUrl && <div className="rounded-xl border border-status-success/30 bg-status-success/10 p-4"><p className="text-xs font-bold uppercase tracking-wider text-status-success">WordPress output</p><div className="mt-2 flex items-center gap-2"><a href={outputUrl} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-sm font-medium text-accent hover:underline">{outputUrl}</a><button type="button" onClick={() => handleCopy(outputUrl)} className="rounded-md border border-border-default bg-surface p-2 text-content-secondary hover:text-content-primary" title="Copy WordPress link"><Copy size={15} /></button><a href={outputUrl} target="_blank" rel="noreferrer" className="rounded-md border border-border-default bg-surface p-2 text-content-secondary hover:text-content-primary" title="Open WordPress link"><ExternalLink size={15} /></a></div></div>}
 
           {/* Detailed Logs */}
           <div className="space-y-4">
