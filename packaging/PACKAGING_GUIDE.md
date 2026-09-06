@@ -127,6 +127,8 @@ install/run script
 user README
 ```
 
+At runtime the app creates `var/uploads/` for pending featured images and `var/backups/` for pre-migration SQLite backups. Release archives must include neither the developer's runtime files nor credentials.
+
 Excluded:
 
 ```text
@@ -137,6 +139,8 @@ tests/
 config.yaml
 credentials.json
 var/story_autogen.db
+var/uploads/
+var/backups/
 *.log
 ```
 
@@ -173,3 +177,7 @@ Port 8000 is already in use:
 1. Close any terminal currently running the app.
 2. Run the app again.
 3. Restart the computer if the issue remains.
+
+## 9. Release Verification
+
+Before creating archives, run backend tests, frontend lint/build, and mocked Playwright journeys (`pnpm test:e2e`; run `pnpm test:e2e:install` once on a new build machine). Automated tests must not use production AI or WordPress accounts. After packaging, smoke-test legacy pipelines plus all four dedicated workflow routes with non-production accounts.

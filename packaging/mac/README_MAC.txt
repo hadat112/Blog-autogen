@@ -22,8 +22,14 @@ Notes:
 - Keep the Terminal window open while using the tool.
 - Your local data is stored in var/story_autogen.db.
 - Add accounts in the Accounts screen.
-- Create pipelines in the Pipelines screen.
+- Create legacy pipelines in the Pipelines screen.
+- Use Rewrite Article, Generate Story, Pattern Library, and WP Publisher from their dedicated sidebar screens.
 - Run jobs from the Dashboard screen.
+- AI accounts accept any OpenAI-compatible endpoint, API key, and model.
+- Sequential AI mode reduces rate-limit pressure; Parallel mode uses the configured concurrency per AI account.
+- Before the first database upgrade, a backup is saved under var/backups.
+- Pending local images live under var/uploads and are removed after successful publishing or draft cleanup.
+- If a draft says publish_unknown, verify WordPress before trying again to avoid duplicate posts.
 
 If the app does not start:
 

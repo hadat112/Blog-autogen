@@ -41,6 +41,13 @@
 - **Facebook Pages:** Automated posting to multiple Facebook pages with custom captioning and image support.
 - **Centralized Management:** A modern Web UI to manage multiple accounts, API keys, and job statuses.
 
+### ✍️ Review-First Content Workflows
+- **Rewrite Article:** Rework a WordPress reference into a new localized story, then review before publishing.
+- **Pattern Library:** Collect themes and narrative structures in local SQLite with independent background analysis.
+- **Generate Story:** Let a bounded tool-calling agent choose stored patterns and prepare a reviewable draft.
+- **WordPress Publisher:** Compose manual title/content/category/image input and publish to WordPress from one dedicated screen.
+- **Safe handoff:** Published Rewrite/Generate items expose caption and link copy actions; manual publishing exposes link only.
+
 ### 📊 Alerts
 - **Telegram Notifications:** Real-time alerts sent to your Telegram Bot after each job completion.
 
@@ -80,7 +87,7 @@ graph TD
     end
 
     subgraph "External Adapters"
-        AI[9Router/OpenAI]
+        AI[OpenAI-compatible endpoint]
         WP[WordPress REST]
         FB[Meta Graph API]
         TG[Telegram Bot API]
@@ -109,7 +116,7 @@ graph TD
 - **Clean Codebase:** Type-hinted Python 3 and a modern React 19 frontend with Tailwind CSS 4.
 
 ### ⚠️ Considerations (Weaknesses)
-- **Configuration Overhead:** Requires several external API integrations (9Router, WordPress, Meta Graph API, Google Cloud, Telegram).
+- **Configuration Overhead:** Requires external integrations such as an OpenAI-compatible API endpoint, WordPress, Meta Graph API, and Telegram.
 - **Dependency on LLMs:** Quality is highly dependent on the prompt engineering and the stability of the chosen AI provider.
 - **Infrastructure:** Requires a stable Python environment and modern Node.js for development builds.
 
@@ -121,7 +128,7 @@ graph TD
 - **Python:** 3.9 or higher
 - **uv:** Python package and environment manager for development
 - **Node.js:** 20.19+ or 22.12+ for development/building the Web UI
-- **API Keys:** 9Router or compatible AI provider, plus any publishing integrations you plan to use.
+- **API Keys:** An OpenAI-compatible AI provider, plus any publishing integrations you plan to use.
 
 ### Quick Setup
 
@@ -265,7 +272,7 @@ Key integration groups include:
 
 | Group | Key Fields | Description |
 |-------|------------|-------------|
-| **AI (9Router)** | `api_key`, `base_url`, `model` | Used for story generation and captioning. |
+| **AI Provider** | `api_key`, `base_url`, `text_model`, optional fallback/image models | Any OpenAI-compatible endpoint used for generation and localization. |
 | **WordPress** | `url`, `username`, `app_password` | Requires "Application Password" for REST API access. |
 | **Facebook** | `page_id`, `access_token` | Meta Graph API credentials for page posting. |
 | **Telegram** | `bot_token`, `chat_id` | Used for real-time status notifications. |
@@ -275,13 +282,21 @@ Key integration groups include:
 ## 📖 Usage Guide
 
 ### Web UI
-Use the dashboard to manage accounts, configure pipelines, run prompts/URLs, and monitor job progress.
+Use the dashboard to manage accounts, configure legacy pipelines, run prompts/URLs, and monitor every job. Dedicated sidebar screens own Rewrite, Generate Story, Pattern Library, and manual WordPress publishing profiles and drafts.
 ```bash
 # Start both Backend and Frontend in development
 ./dev.sh
 ```
 - **Backend:** `http://localhost:8000`
 - **Frontend:** `http://localhost:5173`
+
+### AI concurrency and recovery
+
+- `translation_mode=sequential` admits one AI request per AI account.
+- `translation_mode=parallel` admits up to `translation_max_concurrency` requests per account; background Pattern Analysis has lower priority.
+- New Rewrite, Pattern Analysis, and Generate Story calls make one attempt and never silently switch models.
+- Before the first schema upgrade, file-based SQLite installs create a timestamped backup under `var/backups/`.
+- A `publish_unknown` draft means WordPress may have created the post after a timeout. Verify WordPress before attempting any manual reconciliation; the app does not automatically retry and risk a duplicate.
 
 ### Mode C: Packaged Local Web App
 Ideal for non-technical users.
@@ -357,6 +372,14 @@ Frontend build:
 ```bash
 cd frontend
 pnpm build
+```
+
+Mocked browser journeys (no production AI or WordPress calls):
+
+```bash
+cd frontend
+pnpm test:e2e:install  # first run only
+pnpm test:e2e
 ```
 
 ---
