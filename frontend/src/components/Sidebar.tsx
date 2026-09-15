@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, GitBranch, Settings, X, Zap, ChevronLeft, ChevronRight, WandSparkles, Sparkles, LibraryBig, Send } from 'lucide-react';
+import { LayoutDashboard, Users, GitBranch, Settings, X, Zap, ChevronLeft, ChevronRight, Sparkles, LibraryBig, Send } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -15,10 +15,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, isCollapsed = fals
       { id: 'dashboard', path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
     ] },
     { label: 'Content workflows', items: [
-      { id: 'rewrite', path: '/rewrite', label: 'Rewrite Article', icon: <WandSparkles size={20} /> },
       { id: 'generate-story', path: '/generate-story', label: 'Generate Story', icon: <Sparkles size={20} /> },
-      { id: 'pattern-library', path: '/pattern-library', label: 'Pattern Library', icon: <LibraryBig size={20} /> },
       { id: 'wordpress-publisher', path: '/wordpress-publisher', label: 'WP Publisher', icon: <Send size={20} /> },
+      { id: 'pattern-library', path: '/pattern-library', label: 'Pattern Library', icon: <LibraryBig size={20} /> },
     ] },
     { label: 'Configuration', items: [
       { id: 'accounts', path: '/accounts', label: 'Accounts', icon: <Users size={20} /> },
@@ -98,7 +97,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, isCollapsed = fals
 
         <div className={`mt-auto p-4 border-t border-border-subtle flex items-center transition-all duration-150 ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
           <div className={`text-[10px] uppercase tracking-widest text-content-tertiary font-bold whitespace-nowrap overflow-hidden transition-all duration-150 ${isCollapsed ? 'w-0 opacity-0' : 'w-auto opacity-100'}`}>
-            v1.0.0-beta
+            v1.1.2
           </div>
           <button
             onClick={toggleCollapse}

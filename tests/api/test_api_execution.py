@@ -100,7 +100,30 @@ def test_run_original_crawl_pipeline_returns_running(client, db_session, monkeyp
 def test_list_jobs(client, db_session):
     response = client.get("/jobs")
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    assert isinstance(response.json()["items"], list)
+    assert response.json()["page"] == 1
+    assert response.json()["page_size"] == 10
+
+def test_list_jobs_paginates_and_filters_before_limiting(client, db_session):
+    from app.db import models
+
+    db_session.add_all([
+        models.Job(id=f"rewrite-{index}", workflow_type="rewrite", status="success", progress=100)
+        for index in range(12)
+    ] + [
+        models.Job(id="legacy-only", workflow_type="legacy", status="success", progress=100),
+    ])
+    db_session.commit()
+
+    first_page = client.get("/jobs", params={"page": 1, "page_size": 10, "workflow_type": "rewrite"})
+    assert first_page.status_code == 200
+    assert first_page.json()["total"] == 12
+    assert first_page.json()["total_pages"] == 2
+    assert len(first_page.json()["items"]) == 10
+
+    second_page = client.get("/jobs", params={"page": 2, "page_size": 10, "workflow_type": "rewrite"})
+    assert len(second_page.json()["items"]) == 2
+    assert all(item["workflow_type"] == "rewrite" for item in second_page.json()["items"])
 
 def test_get_job_status(client, db_session):
     from app.db import models

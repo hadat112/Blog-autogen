@@ -543,7 +543,15 @@ class OpenAICompatibleAIClient(BaseAI):
             raise last_error
         raise requests.HTTPError(f"AI request failed after {AI_MAX_ATTEMPTS} attempts: {last_error}")
 
-    def chat(self, messages, tools=None, *, priority="foreground", temperature=0.2):
+    def chat(
+        self,
+        messages,
+        tools=None,
+        *,
+        priority="foreground",
+        temperature=0.2,
+        response_format=None,
+    ):
         """Single-attempt chat request for new workflows."""
         if not isinstance(messages, list) or not messages:
             raise ValueError("At least one chat message is required")
@@ -556,6 +564,8 @@ class OpenAICompatibleAIClient(BaseAI):
         if tools is not None:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
+        if response_format is not None:
+            payload["response_format"] = response_format
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",

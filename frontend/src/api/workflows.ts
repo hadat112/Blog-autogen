@@ -1,21 +1,13 @@
 import client from './client';
-import type { ContentDraft, WorkflowProfile, WorkflowType } from './types';
-
-export type WorkflowProfilePayload = Omit<WorkflowProfile, 'id' | 'created_at'>;
-
-export const getWorkflowProfiles = (type: WorkflowType) =>
-  client.get<WorkflowProfile[]>('/workflow-profiles', { params: { type } });
-export const createWorkflowProfile = (data: WorkflowProfilePayload) =>
-  client.post<WorkflowProfile>('/workflow-profiles', data);
-export const updateWorkflowProfile = (id: string, data: WorkflowProfilePayload) =>
-  client.put<WorkflowProfile>(`/workflow-profiles/${id}`, data);
-export const deleteWorkflowProfile = (id: string) => client.delete(`/workflow-profiles/${id}`);
-export const getWorkflowCategories = (id: string) =>
-  client.get<Array<{ id: string | number; name: string; count: number }>>(`/workflow-profiles/${id}/wp-categories`);
+import type { ContentDraft } from './types';
 
 export const getDrafts = (params?: { kind?: string; pipeline_id?: string }) =>
   client.get<ContentDraft[]>('/content-drafts', { params });
+export const getPipelineCategories = (id: string) =>
+  client.get<Array<{ id: string | number; name: string; count: number }>>(`/pipelines/${id}/wp-categories`);
 export const getDraft = (id: string) => client.get<ContentDraft>(`/content-drafts/${id}`);
+export const getDraftCategories = (id: string) =>
+  client.get<Array<{ id: string | number; name: string; count: number }>>(`/content-drafts/${id}/wp-categories`);
 export const createDraft = (data: Partial<ContentDraft>) => client.post<ContentDraft>('/content-drafts', data);
 export const updateDraft = (id: string, data: Partial<ContentDraft> & { version: number }) =>
   client.put<ContentDraft>(`/content-drafts/${id}`, data);
@@ -28,7 +20,7 @@ export const uploadDraftImage = (id: string, image: File) => {
 export const publishDraft = (id: string, confirmed: boolean) =>
   client.post<ContentDraft>(`/content-drafts/${id}/publish`, { confirmed });
 
-export const startRewrite = (profileId: string, sourceUrl: string) =>
-  client.post<{ job_id: string; draft_id: string; status: string }>('/rewrite-jobs', { profile_id: profileId, source_url: sourceUrl });
-export const startGeneration = (profileId: string) =>
-  client.post<{ job_id: string; draft_id: string; status: string }>('/generation-jobs', { profile_id: profileId });
+export const startRewrite = (pipelineId: string, sourceUrl: string) =>
+  client.post<{ job_id: string; draft_id: string; status: string }>('/rewrite-jobs', { pipeline_id: pipelineId, source_url: sourceUrl });
+export const startGeneration = (pipelineId: string) =>
+  client.post<{ job_id: string; draft_id: string; status: string }>('/generation-jobs', { pipeline_id: pipelineId });

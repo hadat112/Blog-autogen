@@ -8,6 +8,7 @@ from app.domain.account_config_resolver import resolve_accounts_for_pipeline
 from app.domain.story_orchestrator import StoryOrchestrator
 from app.db.session import SessionLocal
 from app.services.pattern_collection_service import PatternCollectionService
+from app.services.job_retention_service import JobRetentionService
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ class JobRunner:
         db.add(job)
         db.commit()
         db.refresh(job)
+        JobRetentionService(db).prune()
         job_id = job.id
 
         # 2. Resolve Accounts

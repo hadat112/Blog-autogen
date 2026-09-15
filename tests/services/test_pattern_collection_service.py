@@ -10,10 +10,10 @@ def test_collection_creates_child_job_without_changing_parent(monkeypatch):
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     db = sessionmaker(bind=engine)()
-    profile = models.Pipeline(id="p", name="Crawl", type="crawl", language="English", step_accounts={"ai": "ai"})
+    pipeline = models.Pipeline(id="p", name="Crawl", type="crawl", language="English", step_accounts={"ai": "ai"})
     parent = models.Job(id="parent", pipeline_id="p", status="success", progress=100)
     rule = models.ThemeRule(tag="family", keywords=["mother"], is_active=True)
-    db.add_all([profile, parent, rule]); db.commit()
+    db.add_all([pipeline, parent, rule]); db.commit()
     started = []
     monkeypatch.setattr("app.services.pattern_collection_service.threading.Thread.start", lambda self: started.append(True))
     article, child = PatternCollectionService(db).collect(

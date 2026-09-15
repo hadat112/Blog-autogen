@@ -10,20 +10,19 @@ class PipelineService:
     def __init__(self, db: Session):
         self.db = db
 
-    def list_pipelines(self):
+    def list_pipelines(self, include_workflows=False):
         return self.db.query(models.Pipeline).filter(
-            ~models.Pipeline.type.in_({"rewrite", "generate_story", "wp_publish"})
-        ).all()
+            models.Pipeline.is_active.is_(True)
+        ).order_by(models.Pipeline.created_at.desc()).all()
 
     def get_pipeline(self, pipeline_id: str):
         return self.db.query(models.Pipeline).filter(
             models.Pipeline.id == pipeline_id,
-            ~models.Pipeline.type.in_({"rewrite", "generate_story", "wp_publish"}),
         ).first()
 
     def _validate_legacy_type(self, pipeline_type):
-        if pipeline_type in {"rewrite", "generate_story", "wp_publish"}:
-            raise ValueError("Workflow profiles must be managed from their dedicated screen")
+        if not pipeline_type:
+            raise ValueError("Pipeline type is required")
 
     def _settings_from_pipeline_data(self, pipeline_data):
         settings = dict(pipeline_data.settings or {})
@@ -34,7 +33,7 @@ class PipelineService:
     def _language_value(self, language: str, pipeline_type: str):
         if not isinstance(language, str):
             raise ValueError("Language is required")
-        if pipeline_type != "crawl" and not language.strip():
+        if pipeline_type not in {"crawl", "wp_publish"} and not language.strip():
             raise ValueError("Language is required")
         return language
 

@@ -26,3 +26,22 @@ def test_chat_returns_tool_calls_without_requiring_text():
     client = OpenAICompatibleAIClient("key", "model", "image", base_url="https://ai.test/v1")
     responses.add(responses.POST, "https://ai.test/v1/chat/completions", json={"choices": [{"message": {"content": None, "tool_calls": [{"id": "1"}]}}]}, status=200)
     assert client.chat([{"role": "user", "content": "hello"}], tools=[])["tool_calls"][0]["id"] == "1"
+
+
+@responses.activate
+def test_chat_includes_json_response_format_when_requested():
+    client = OpenAICompatibleAIClient("key", "model", "image", base_url="https://ai.test/v1")
+    responses.add(
+        responses.POST,
+        "https://ai.test/v1/chat/completions",
+        json={"choices": [{"message": {"content": "{}"}}]},
+        status=200,
+    )
+
+    client.chat(
+        [{"role": "user", "content": "hello"}],
+        tools=[],
+        response_format={"type": "json_object"},
+    )
+
+    assert b'"response_format": {"type": "json_object"}' in responses.calls[0].request.body

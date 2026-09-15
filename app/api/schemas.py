@@ -82,3 +82,10 @@ class JobResponse(JobBase):
     id: str
     start_time: datetime
     end_time: Optional[datetime] = None
+
+class JobPageResponse(BaseModel):
+    items: List[JobResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

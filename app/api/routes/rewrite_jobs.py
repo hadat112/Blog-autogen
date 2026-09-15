@@ -17,29 +17,30 @@ router = APIRouter(prefix="/rewrite-jobs", tags=["rewrite"])
 
 @router.post("", response_model=WorkflowJobCreated)
 async def start_rewrite(data: RewriteJobInput, db: Session = Depends(get_db)):
-    profile = db.query(models.Pipeline).filter(
-        models.Pipeline.id == data.profile_id,
-        models.Pipeline.type == "rewrite",
-        models.Pipeline.is_active.is_(True),
-    ).first()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Active Rewrite profile not found")
+    pipeline = db.query(models.Pipeline).filter(models.Pipeline.id == data.pipeline_id, models.Pipeline.is_active.is_(True)).first()
+    if not pipeline:
+        raise HTTPException(status_code=404, detail="Active pipeline not found")
+    if not (pipeline.step_accounts or {}).get("ai"):
+        raise HTTPException(status_code=400, detail="Selected pipeline has no AI account")
+    if not (pipeline.step_accounts or {}).get("wp"):
+        raise HTTPException(status_code=400, detail="Selected pipeline has no WordPress account")
     try:
         source_url = normalize_source_url(data.source_url)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     draft = models.ContentDraft(
         kind="rewrite",
-        pipeline_id=profile.id,
+        pipeline_id=pipeline.id,
         source_url=source_url,
-        language=profile.language,
-        category_id=(profile.settings or {}).get("wp_category_id"),
+        language=pipeline.language,
+        category_id=(pipeline.settings or {}).get("wp_category_id"),
+        wp_status="publish",
         state="generating",
     )
     db.add(draft)
     db.commit()
     db.refresh(draft)
-    job = WorkflowJobService(db).create(profile.id, "rewrite", draft.id, input_text=source_url)
+    job = WorkflowJobService(db).create(pipeline.id, "rewrite", draft.id, input_text=source_url)
 
     async def operation():
         await asyncio.to_thread(RewriteWorkflowService.execute, job.id, draft.id)

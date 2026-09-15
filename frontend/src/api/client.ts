@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Account, Pipeline, Job, AccountConfig, Language, AppSettings, AIModel } from './types';
+import { Account, Pipeline, Job, JobPage, AccountConfig, Language, AppSettings, AIModel } from './types';
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : window.location.origin),
@@ -14,7 +14,7 @@ export const getWPCategories = (config: AccountConfig) => client.post('/accounts
 export const getAIModels = (config: Pick<AccountConfig, 'base_url' | 'api_key'>) =>
   client.post<AIModel[]>('/accounts/ai-models', config);
 
-export const getPipelines = () => client.get<Pipeline[]>('/pipelines');
+export const getPipelines = (includeWorkflows = false) => client.get<Pipeline[]>('/pipelines', { params: { include_workflows: includeWorkflows } });
 export const createPipeline = (data: Partial<Pipeline>) => client.post<Pipeline>('/pipelines', data);
 export const updatePipeline = (id: string, data: Partial<Pipeline>) => client.put<Pipeline>(`/pipelines/${id}`, data);
 export const deletePipeline = (id: string) => client.delete(`/pipelines/${id}`);
@@ -32,7 +32,8 @@ export const getSettings = () => client.get<AppSettings>('/settings');
 export const updateSettings = (data: AppSettings) =>
   client.put<AppSettings>('/settings', data);
 
-export const getJobs = () => client.get<Job[]>('/jobs');
+export const getJobs = (params?: { page?: number; page_size?: number; workflow_type?: string }) =>
+  client.get<JobPage>('/jobs', { params });
 export const getJob = (id: string) => client.get<Job>(`/jobs/${id}`);
 export const syncJob = (id: string) => client.post(`/jobs/${id}/sync`);
 export const cancelJob = (id: string) => client.post<{ status: string }>(`/jobs/${id}/cancel`);

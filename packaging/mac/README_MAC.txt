@@ -1,38 +1,98 @@
-STORY AUTOGEN - MAC QUICK START
+STORY AUTOGEN - macOS RELEASE GUIDE
 
-For first-time setup:
+This release runs the local dashboard at:
+http://127.0.0.1:8000
 
-1. If Python 3 is not installed, install Python 3.9 or newer from:
-   https://www.python.org/downloads/macos/
+Requirements
+------------
 
-2. Double-click install_mac.command
+- macOS
+- Python 3.9 or newer
+- Internet access for the first installation (PyPI downloads)
+- A web browser
 
-   If macOS blocks it:
-   - Right-click install_mac.command
-   - Click Open
-   - Click Open again
+Install from Finder
+-------------------
 
-3. Double-click run_mac.command
+1. Unzip the timestamped StoryAutogen-Mac-<YYYY-MM-DD-HHMMSS>.zip. Do not move the
+   individual files out of the extracted StoryAutogen-Mac-<YYYY-MM-DD-HHMMSS>
+   folder.
+2. Install Python 3.9+ from https://www.python.org/downloads/macos/ if needed.
+3. In Finder, right-click install_mac.command and choose Open.
+4. If macOS asks for confirmation, choose Open again.
+5. Wait until the installer says "Install complete". It creates or reuses the
+   local .venv folder; no sudo or administrator password is needed.
+6. Right-click run_mac.command and choose Open.
 
-4. The dashboard opens at:
-   http://127.0.0.1:8000
+Run from Terminal to see errors
+--------------------------------
 
-Notes:
+Open Terminal, drag the extracted StoryAutogen-Mac-<YYYY-MM-DD-HHMMSS> folder into
+the Terminal window, press Enter, then run:
 
-- Keep the Terminal window open while using the tool.
-- Your local data is stored in var/story_autogen.db.
-- Add accounts in the Accounts screen.
-- Create legacy pipelines in the Pipelines screen.
-- Use Rewrite Article, Generate Story, Pattern Library, and WP Publisher from their dedicated sidebar screens.
-- Run jobs from the Dashboard screen.
-- AI accounts accept any OpenAI-compatible endpoint, API key, and model.
-- Sequential AI mode reduces rate-limit pressure; Parallel mode uses the configured concurrency per AI account.
-- Before the first database upgrade, a backup is saved under var/backups.
-- Pending local images live under var/uploads and are removed after successful publishing or draft cleanup.
-- If a draft says publish_unknown, verify WordPress before trying again to avoid duplicate posts.
+  ./install_mac.command
+  ./run_mac.command
 
-If the app does not start:
+If macOS says permission is denied, run this once from that folder:
 
-- Re-run install_mac.command.
-- Make sure Python 3 is installed.
-- Do not move files out of this folder.
+  chmod +x install_mac.command run_mac.command
+
+The Terminal window must remain open while the app is running. Press Ctrl+C to
+stop it cleanly. The run script keeps the window open after an error so the
+message can be read.
+
+Gatekeeper
+----------
+
+Downloaded .command files may be blocked. Do not double-click repeatedly:
+right-click the file, choose Open, then confirm Open. If it is still blocked,
+open System Settings > Privacy & Security, look for the blocked application
+message, choose Allow Anyway, and then right-click the file and choose Open.
+
+Internet or PyPI errors
+-----------------------
+
+The installer needs PyPI only to download Python packages. If it reports
+"INSTALL FAILED", installation is not complete and the app must not be run.
+Check that the Mac can browse the Internet, disable a VPN/proxy temporarily if
+appropriate, then run install_mac.command again. A firewall or corporate
+network may need to allow pypi.org and files.pythonhosted.org. Do not use sudo.
+
+Port 8000 is already in use
+---------------------------
+
+The launcher will show the process using port 8000 and stop without starting a
+second server. Close the other local app, or stop its Terminal with Ctrl+C,
+then run run_mac.command again. The app intentionally does not switch to a
+different port because its documented URL is http://127.0.0.1:8000.
+
+Confirm the app is running
+--------------------------
+
+The Terminal should show the URL above and remain open. A browser should open
+automatically. You can confirm manually by opening:
+
+  http://127.0.0.1:8000
+
+The Story Autogen dashboard should load. If the browser shows a connection
+error, read the Terminal output first and run the installer again if it reports
+missing dependencies.
+
+Included application notes
+--------------------------
+
+- Local data is stored in var/story_autogen.db.
+- Pending local images live under var/uploads.
+- Database migration backups are stored under var/backups.
+- Configure AI, WordPress, Facebook, and Telegram accounts in the dashboard.
+
+Developer smoke test
+--------------------
+
+From the project root, run:
+
+  python3 packaging/smoke_test.py
+
+This creates a temporary clean virtual environment, installs the project,
+imports the main dependencies, starts the server, verifies GET / returns HTTP
+200, and removes the server and temporary environment afterward.

@@ -3,18 +3,20 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
-from app.api.routes import accounts, content_drafts, generation_jobs, jobs, languages, pattern_collection_sources, patterns, pipelines, rewrite_jobs, settings, theme_rules, workflow_profiles
+from app.api.routes import accounts, content_drafts, generation_jobs, jobs, languages, pattern_collection_sources, patterns, pipelines, rewrite_jobs, settings, theme_rules
 from app.services.language_service import LanguageService
 from app.db.session import Base, engine
 from app.db.session import SessionLocal
 from app.db.migrations import run_migrations
 from app.services.workflow_job_service import WorkflowJobService
+from app.services.job_retention_service import JobRetentionService
 
 
 run_migrations(engine, Base.metadata)
 with SessionLocal() as db:
     LanguageService(db).ensure_defaults()
     WorkflowJobService(db).recover_interrupted()
+    JobRetentionService(db).prune()
 
 app = FastAPI(title="Story Autogen API")
 
@@ -31,7 +33,6 @@ app.include_router(pipelines.router)
 app.include_router(jobs.router)
 app.include_router(languages.router)
 app.include_router(settings.router)
-app.include_router(workflow_profiles.router)
 app.include_router(content_drafts.router)
 app.include_router(patterns.router)
 app.include_router(theme_rules.router)
@@ -59,7 +60,7 @@ def read_root():
 def serve_frontend(path: str):
     if path.startswith((
         "accounts", "pipelines", "jobs", "languages", "settings",
-        "workflow-profiles", "content-drafts", "patterns", "theme-rules",
+        "content-drafts", "patterns", "theme-rules",
         "rewrite-jobs", "generation-jobs", "pattern-collection-sources",
     )):
         return {"status": "not_found"}

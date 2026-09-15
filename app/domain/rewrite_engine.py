@@ -10,12 +10,17 @@ REWRITE_SYSTEM_PROMPT = (
 )
 
 
-def _history_messages(system_prompt, rewritten_chunks):
+def _history_messages(system_prompt, turns):
+    """Build the complete rewrite conversation, including every source chunk."""
     messages = [{"role": "system", "content": system_prompt}]
-    for index, rewritten in enumerate(rewritten_chunks):
+    for source_chunk, rewritten in turns:
         messages.append({
             "role": "user",
-            "content": "Begin the rewritten story." if index == 0 else "Continue.",
+            "content": (
+                "Rewrite the following source chunk as the next continuous part of the new story. "
+                "Output only the rewritten chunk.\n\n<source_chunk>\n"
+                f"{source_chunk}\n</source_chunk>"
+            ),
         })
         messages.append({"role": "assistant", "content": rewritten})
     return messages
@@ -31,11 +36,11 @@ class RewriteEngine:
         if not chunks:
             raise ValueError("Source article has no content")
         system = REWRITE_SYSTEM_PROMPT.format(language=language)
-        rewritten = []
+        turns = []
         for index, chunk in enumerate(chunks, start=1):
             if progress:
                 progress(index, len(chunks), "rewriting")
-            messages = _history_messages(system, rewritten)
+            messages = _history_messages(system, turns)
             messages.append({
                 "role": "user",
                 "content": (
@@ -48,10 +53,12 @@ class RewriteEngine:
             value = (message.get("content") or "").strip()
             if not value:
                 raise ValueError(f"AI returned an empty rewrite for chunk {index}")
-            rewritten.append(value)
+            turns.append((chunk, value))
 
-        story = "\n\n".join(rewritten).strip()
-        final_messages = _history_messages(system, rewritten)
+        story = "\n\n".join(rewritten for _, rewritten in turns).strip()
+        if progress:
+            progress(len(chunks), len(chunks), "metadata")
+        final_messages = _history_messages(system, turns)
         final_messages.append({
             "role": "user",
             "content": (

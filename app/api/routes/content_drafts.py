@@ -6,11 +6,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.workflow_schemas import DraftInput, DraftResponse, DraftUpdate, PublishDraftInput
+from app.db import models
 from app.db.session import get_db
 from app.services.content_draft_service import ContentDraftService, DraftConflictError
 from app.services.workflow_job_service import WorkflowJobService
 from app.services.wordpress_publishing_service import WordPressPublishingService
 from app.integrations.wordpress.destination import ALLOWED_IMAGE_MIME, MAX_IMAGE_BYTES, AmbiguousWordPressResult, validate_image_signature
+from app.services.account_service import fetch_wp_categories
 
 
 router = APIRouter(prefix="/content-drafts", tags=["content drafts"])
@@ -37,6 +39,24 @@ def get_draft(draft_id: str, db: Session = Depends(get_db)):
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
     return draft
+
+
+@router.get("/{draft_id}/wp-categories")
+def get_draft_categories(draft_id: str, db: Session = Depends(get_db)):
+    draft = ContentDraftService(db).get(draft_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    account_id = draft.wp_account_id
+    if not account_id and draft.pipeline_id:
+        pipeline = db.query(models.Pipeline).filter(models.Pipeline.id == draft.pipeline_id).first()
+        account_id = (pipeline.step_accounts or {}).get("wp") if pipeline else None
+    account = db.query(models.Account).filter(models.Account.id == account_id, models.Account.type == "wp").first()
+    if not account:
+        raise HTTPException(status_code=400, detail="WordPress account is unavailable")
+    try:
+        return fetch_wp_categories(account.config or {})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch WordPress categories: {exc}") from exc
 
 
 @router.put("/{draft_id}", response_model=DraftResponse)

@@ -69,6 +69,7 @@ class ContentDraft(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     kind = Column(String, nullable=False)
     pipeline_id = Column(String, ForeignKey("pipelines.id"), nullable=True)
+    wp_account_id = Column(String, ForeignKey("accounts.id"), nullable=True)
     source_url = Column(String, nullable=True)
     language = Column(String, nullable=True)
     title = Column(String, default="", nullable=False)

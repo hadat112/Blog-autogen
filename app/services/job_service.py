@@ -1,4 +1,6 @@
 from datetime import datetime
+from math import ceil
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -11,17 +13,28 @@ class JobService:
     def __init__(self, db: Session):
         self.db = db
 
-    def list_jobs(self, limit: int = 20):
-        results = self.db.query(models.Job, models.Pipeline.name).outerjoin(
+    def list_jobs(self, page: int = 1, page_size: int = 10, workflow_type: Optional[str] = None):
+        jobs_query = self.db.query(models.Job)
+        if workflow_type and workflow_type != "all":
+            jobs_query = jobs_query.filter(models.Job.workflow_type == workflow_type)
+
+        total = jobs_query.count()
+        results = jobs_query.with_entities(models.Job, models.Pipeline.name).outerjoin(
             models.Pipeline, models.Job.pipeline_id == models.Pipeline.id
-        ).order_by(models.Job.start_time.desc()).limit(limit).all()
+        ).order_by(models.Job.start_time.desc(), models.Job.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
         jobs = []
         for job, pipeline_name in results:
             job.pipeline_name = pipeline_name
             self._decorate(job)
             jobs.append(job)
-        return jobs
+        return {
+            "items": jobs,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": ceil(total / page_size) if total else 0,
+        }
 
     def get_job(self, job_id: str):
         result = self.db.query(models.Job, models.Pipeline.name).outerjoin(
@@ -81,7 +94,12 @@ class JobService:
                 return {"status": "not_cancelled", "current_status": job.status}
             result = await workflow_runner.cancel(job_id)
             if result is None:
+                outputs = dict(job.outputs or {})
+                if job.current_step:
+                    outputs["cancelled_step"] = job.current_step
                 job.status = "cancelled"
+                job.current_step = "Cancelled"
+                job.outputs = outputs
                 job.end_time = datetime.utcnow()
                 if job.draft_id:
                     draft = self.db.query(models.ContentDraft).filter(models.ContentDraft.id == job.draft_id).first()

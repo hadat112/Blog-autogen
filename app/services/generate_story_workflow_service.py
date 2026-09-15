@@ -15,13 +15,13 @@ class GenerateStoryWorkflowService:
             job = db.query(models.Job).filter(models.Job.id == job_id).first()
             if not draft or not job or job.status == "cancelled":
                 return
-            profile = db.query(models.Pipeline).filter(
-                models.Pipeline.id == draft.pipeline_id, models.Pipeline.type == "generate_story"
+            pipeline = db.query(models.Pipeline).filter(
+                models.Pipeline.id == draft.pipeline_id, models.Pipeline.is_active.is_(True)
             ).first()
-            account_id = (profile.step_accounts or {}).get("ai") if profile else None
+            account_id = (pipeline.step_accounts or {}).get("ai") if pipeline else None
             account = db.query(models.Account).filter(models.Account.id == account_id, models.Account.type == "ai").first()
-            if not profile or not account:
-                jobs.fail(job_id, "Generate Story profile or AI account is unavailable")
+            if not pipeline or not account:
+                jobs.fail(job_id, "Generate Story pipeline or AI account is unavailable")
                 return
             try:
                 jobs.progress(job_id, "Choose story patterns", 5)
@@ -32,14 +32,14 @@ class GenerateStoryWorkflowService:
                         raise InterruptedError("Generation cancelled")
                     jobs.progress(job_id, f"Agent tool: {name}", min(70, 10 + call_number * 10))
 
-                result = StoryAgent(create_ai_client(account), StoryAgentTools(db)).generate(profile.language, on_tool)
+                result = StoryAgent(create_ai_client(account), StoryAgentTools(db)).generate(pipeline.language, on_tool)
                 db.expire(job)
                 if job.status == "cancelled":
                     raise InterruptedError("Generation cancelled")
                 draft.title = result["title"]
                 draft.content = result["content"]
                 draft.caption = result["caption"]
-                draft.language = profile.language
+                draft.language = pipeline.language
                 draft.state = "ready_for_review"
                 draft.error = None
                 draft.version += 1

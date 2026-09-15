@@ -88,16 +88,18 @@ export interface Job {
   };
 }
 
-export type WorkflowType = 'rewrite' | 'generate_story' | 'wp_publish';
-
-export interface WorkflowProfile extends Pipeline {
-  type: WorkflowType;
-  created_at: string;
+export interface JobPage {
+  items: Job[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
 }
 
 export interface ContentDraft {
   id: string;
   pipeline_id?: string | null;
+  wp_account_id?: string | null;
   kind: 'rewrite' | 'generated' | 'manual';
   source_url?: string | null;
   language?: string | null;

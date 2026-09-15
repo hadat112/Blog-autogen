@@ -16,24 +16,22 @@ router = APIRouter(prefix="/generation-jobs", tags=["generate story"])
 
 @router.post("", response_model=WorkflowJobCreated)
 async def start_generation(data: GenerationJobInput, db: Session = Depends(get_db)):
-    profile = db.query(models.Pipeline).filter(
-        models.Pipeline.id == data.profile_id,
-        models.Pipeline.type == "generate_story",
-        models.Pipeline.is_active.is_(True),
-    ).first()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Active Generate Story profile not found")
+    pipeline = db.query(models.Pipeline).filter(models.Pipeline.id == data.pipeline_id, models.Pipeline.is_active.is_(True)).first()
+    if not pipeline:
+        raise HTTPException(status_code=404, detail="Active pipeline not found")
+    if not (pipeline.step_accounts or {}).get("ai"):
+        raise HTTPException(status_code=400, detail="Selected pipeline has no AI account")
     draft = models.ContentDraft(
         kind="generated",
-        pipeline_id=profile.id,
-        language=profile.language,
-        category_id=(profile.settings or {}).get("wp_category_id"),
+        pipeline_id=pipeline.id,
+        language=pipeline.language,
+        category_id=(pipeline.settings or {}).get("wp_category_id"),
         state="generating",
     )
     db.add(draft)
     db.commit()
     db.refresh(draft)
-    job = WorkflowJobService(db).create(profile.id, "generate_story", draft.id)
+    job = WorkflowJobService(db).create(pipeline.id, "generate_story", draft.id)
 
     async def operation():
         await asyncio.to_thread(GenerateStoryWorkflowService.execute, job.id, draft.id)

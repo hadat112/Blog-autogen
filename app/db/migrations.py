@@ -15,6 +15,7 @@ MIGRATIONS = (
     (2, "content workflow tables and job columns"),
     (3, "seed initial theme rules"),
     (4, "add workflow query indexes"),
+    (5, "add direct WordPress account to content drafts"),
 )
 
 
@@ -121,7 +122,12 @@ def _migration_4(connection):
             connection.execute(text(statement))
 
 
-MIGRATION_FUNCTIONS = {1: _migration_1, 2: _migration_2, 3: _migration_3, 4: _migration_4}
+def _migration_5(connection):
+    if "content_drafts" in set(inspect(connection).get_table_names()):
+        _add_column(connection, "content_drafts", "wp_account_id VARCHAR")
+
+
+MIGRATION_FUNCTIONS = {1: _migration_1, 2: _migration_2, 3: _migration_3, 4: _migration_4, 5: _migration_5}
 
 
 def run_migrations(engine, metadata, backup_dir=None):
@@ -138,6 +144,20 @@ def run_migrations(engine, metadata, backup_dir=None):
         applied = {
             row[0] for row in connection.execute(text("SELECT version FROM schema_migrations"))
         }
+
+        # A database from before schema_migrations is upgraded directly to the
+        # current schema in one bootstrap pass. The individual migration
+        # functions are reused for their idempotent column/index/data checks,
+        # but intermediate versions are not persisted as separate upgrades.
+        if needs_initial_backup:
+            for version, name in MIGRATIONS:
+                MIGRATION_FUNCTIONS[version](connection)
+                connection.execute(
+                    text("INSERT INTO schema_migrations(version, name, applied_at) VALUES (:version, :name, :at)"),
+                    {"version": version, "name": name, "at": datetime.utcnow()},
+                )
+            return backup_path
+
         for version, name in MIGRATIONS:
             if version in applied:
                 continue

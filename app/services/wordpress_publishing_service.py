@@ -23,15 +23,20 @@ class WordPressPublishingService:
         self.db = db
         self.gateway_factory = gateway_factory
 
-    def _profile_and_account(self, draft):
-        profile = self.db.query(models.Pipeline).filter(models.Pipeline.id == draft.pipeline_id).first()
-        if not profile or profile.type not in {"rewrite", "generate_story", "wp_publish"}:
-            raise ValueError("Draft workflow profile is unavailable")
-        account_id = (profile.step_accounts or {}).get("wp")
+    def _pipeline_and_account(self, draft):
+        if draft.wp_account_id:
+            account = self.db.query(models.Account).filter(models.Account.id == draft.wp_account_id, models.Account.type == "wp").first()
+            if not account:
+                raise ValueError("WordPress account is unavailable")
+            return None, account
+        pipeline = self.db.query(models.Pipeline).filter(models.Pipeline.id == draft.pipeline_id).first()
+        if not pipeline or not pipeline.is_active:
+            raise ValueError("Draft pipeline is unavailable")
+        account_id = (pipeline.step_accounts or {}).get("wp")
         account = self.db.query(models.Account).filter(models.Account.id == account_id, models.Account.type == "wp").first()
         if not account:
             raise ValueError("WordPress account is unavailable")
-        return profile, account
+        return pipeline, account
 
     def publish(self, draft_id, confirmed=False):
         lock = _draft_locks[draft_id]
@@ -49,7 +54,7 @@ class WordPressPublishingService:
                 raise ValueError("Publishing now requires explicit confirmation")
             if not draft.title.strip() or not draft.content.strip():
                 raise ValueError("Title and content are required")
-            _, account = self._profile_and_account(draft)
+            _, account = self._pipeline_and_account(draft)
             gateway = self.gateway_factory(account.config or {})
             draft.state = "publishing"
             draft.error = None

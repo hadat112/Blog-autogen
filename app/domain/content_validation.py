@@ -7,6 +7,15 @@ def parse_json_object(value):
     fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
     if fenced:
         text = fenced.group(1)
+    else:
+        # Some models append an explanation after an otherwise valid JSON code
+        # block. Accept only the fenced JSON object; all other malformed output
+        # remains a hard failure.
+        fenced_with_commentary = re.search(
+            r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE
+        )
+        if fenced_with_commentary:
+            text = fenced_with_commentary.group(1)
     parsed = json.loads(text)
     if not isinstance(parsed, dict):
         raise ValueError("AI response must be a JSON object")

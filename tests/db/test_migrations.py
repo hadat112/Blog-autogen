@@ -26,10 +26,11 @@ def test_migration_upgrades_current_schema_backs_up_and_is_repeatable(tmp_path):
     with sqlite3.connect(backup) as backup_connection:
         assert backup_connection.execute("SELECT name FROM pipelines WHERE id='p1'").fetchone() == ("Legacy",)
     assert "workflow_type" in {item["name"] for item in inspect(engine).get_columns("jobs")}
+    assert "wp_account_id" in {item["name"] for item in inspect(engine).get_columns("content_drafts")}
     assert {"content_drafts", "articles", "theme_rules", "schema_migrations"}.issubset(inspect(engine).get_table_names())
     with engine.connect() as connection:
         assert connection.execute(text("SELECT name FROM pipelines WHERE id='p1'")).scalar() == "Legacy"
-        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar() == 4
+        assert connection.execute(text("SELECT COUNT(*) FROM schema_migrations")).scalar() == 5
         assert connection.execute(text("SELECT COUNT(*) FROM theme_rules")).scalar() >= 1
     assert run_migrations(engine, Base.metadata, tmp_path / "backups") is None
     assert len(list((tmp_path / "backups").glob("*.db"))) == 1

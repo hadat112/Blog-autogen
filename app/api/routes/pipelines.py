@@ -4,6 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api import schemas
+from app.api.workflow_schemas import CategoryResponse
+from app.db import models
+from app.services.account_service import fetch_wp_categories
 from app.services.pipeline_service import PipelineService
 from app.db.session import get_db
 
@@ -12,8 +15,8 @@ router = APIRouter()
 
 
 @router.get("/pipelines", response_model=List[schemas.PipelineResponse])
-def get_pipelines(db: Session = Depends(get_db)):
-    return PipelineService(db).list_pipelines()
+def get_pipelines(include_workflows: bool = False, db: Session = Depends(get_db)):
+    return PipelineService(db).list_pipelines(include_workflows=include_workflows)
 
 
 @router.get("/pipelines/{id}", response_model=schemas.PipelineResponse)
@@ -22,6 +25,21 @@ def get_pipeline(id: str, db: Session = Depends(get_db)):
     if not pipeline:
         raise HTTPException(status_code=404, detail="Pipeline not found")
     return pipeline
+
+
+@router.get("/pipelines/{id}/wp-categories", response_model=List[CategoryResponse])
+def get_pipeline_categories(id: str, db: Session = Depends(get_db)):
+    pipeline = db.query(models.Pipeline).filter(models.Pipeline.id == id).first()
+    if not pipeline:
+        raise HTTPException(status_code=404, detail="Pipeline not found")
+    account_id = (pipeline.step_accounts or {}).get("wp")
+    account = db.query(models.Account).filter(models.Account.id == account_id, models.Account.type == "wp").first()
+    if not account:
+        raise HTTPException(status_code=400, detail="WordPress account is unavailable")
+    try:
+        return fetch_wp_categories(account.config or {})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch WordPress categories: {exc}") from exc
 
 
 @router.post("/pipelines", response_model=schemas.PipelineResponse)

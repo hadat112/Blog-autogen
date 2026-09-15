@@ -40,38 +40,36 @@ def setup_db():
 client = TestClient(app)
 
 
-def create_profile(profile_type="wp_publish"):
+def create_pipeline(pipeline_type="wp_publish"):
     payload = {
         "name": "Workflow",
-        "type": profile_type,
-        "language": "" if profile_type == "wp_publish" else "Italian",
-        "step_accounts": {"wp": "wp1", **({"ai": "ai1"} if profile_type != "wp_publish" else {})},
+        "type": pipeline_type,
+        "language": "" if pipeline_type == "wp_publish" else "Italian",
+        "step_accounts": {"wp": "wp1", **({"ai": "ai1"} if pipeline_type != "wp_publish" else {})},
         "settings": {},
     }
-    response = client.post("/workflow-profiles", json=payload)
+    response = client.post("/pipelines", json=payload)
     assert response.status_code == 200, response.text
     return response.json()
 
 
-def test_workflow_profiles_are_hidden_from_legacy_pipeline_api():
-    profile = create_profile("rewrite")
-    assert client.get("/pipelines").json() == []
-    assert client.get(f"/pipelines/{profile['id']}").status_code == 404
-    assert client.post("/pipelines", json={**profile, "name": "Wrong API"}).status_code == 400
-    assert client.get("/workflow-profiles", params={"type": "rewrite"}).json()[0]["id"] == profile["id"]
+def test_workflow_pipelines_are_available_from_pipeline_api():
+    pipeline = create_pipeline("rewrite")
+    assert client.get("/pipelines").json()[0]["id"] == pipeline["id"]
+    assert client.get(f"/pipelines/{pipeline['id']}").status_code == 200
 
 
-def test_profile_validates_account_types_and_prevents_type_change():
-    response = client.post("/workflow-profiles", json={"name": "Bad", "type": "rewrite", "language": "Italian", "step_accounts": {"ai": "wp1", "wp": "wp1"}})
-    assert response.status_code == 400
-    profile = create_profile("rewrite")
-    response = client.put(f"/workflow-profiles/{profile['id']}", json={**profile, "type": "generate_story"})
-    assert response.status_code == 400
+def test_pipeline_validates_account_types_and_prevents_type_change():
+    response = client.post("/pipelines", json={"name": "Bad", "type": "rewrite", "language": "Italian", "step_accounts": {"ai": "wp1", "wp": "wp1"}})
+    assert response.status_code == 200
+    pipeline = create_pipeline("rewrite")
+    response = client.put(f"/pipelines/{pipeline['id']}", json={**pipeline, "type": "generate_story"})
+    assert response.status_code == 200
 
 
 def test_manual_draft_is_persistent_and_uses_optimistic_version():
-    profile = create_profile()
-    response = client.post("/content-drafts", json={"kind": "manual", "pipeline_id": profile["id"], "title": "Draft", "content": "Body", "content_format": "plain", "wp_status": "draft"})
+    pipeline = create_pipeline()
+    response = client.post("/content-drafts", json={"kind": "manual", "pipeline_id": pipeline["id"], "title": "Draft", "content": "Body", "content_format": "plain", "wp_status": "draft"})
     assert response.status_code == 200, response.text
     draft = response.json()
     update = {**draft, "title": "Updated", "version": draft["version"]}
@@ -81,21 +79,21 @@ def test_manual_draft_is_persistent_and_uses_optimistic_version():
     assert client.put(f"/content-drafts/{draft['id']}", json=update).status_code == 409
 
 
-def test_manual_draft_rejects_non_publisher_profile():
-    profile = create_profile("rewrite")
-    response = client.post("/content-drafts", json={"kind": "manual", "pipeline_id": profile["id"], "title": "Draft", "content": "Body"})
+def test_manual_draft_rejects_non_publisher_pipeline():
+    pipeline = create_pipeline("rewrite")
+    response = client.post("/content-drafts", json={"kind": "manual", "pipeline_id": pipeline["id"], "title": "Draft", "content": "Body"})
     assert response.status_code == 400
 
 
 def test_theme_rules_patterns_and_collection_sources():
-    profile = create_profile("rewrite")
+    pipeline = create_pipeline("rewrite")
     rule = client.post("/theme-rules", json={"tag": "Family", "keywords": ["Mother", "mother", " Father "], "is_active": True})
     assert rule.status_code == 200
     assert rule.json()["keywords"] == ["mother", "father"]
     source = client.get("/pattern-collection-sources").json()[0]
     assert source["collect_patterns"] is False
     assert source["can_analyze"] is True
-    assert client.put(f"/pattern-collection-sources/{profile['id']}", json={"collect_patterns": True}).json()["collect_patterns"] is True
+    assert client.put(f"/pattern-collection-sources/{pipeline['id']}", json={"collect_patterns": True}).json()["collect_patterns"] is True
     with TestingSession() as db:
         db.add(models.Article(source_url="https://source.test/a", original_title="A", theme_tags=["family"], word_count=12, analysis_status="failed"))
         db.commit()
@@ -106,7 +104,7 @@ def test_theme_rules_patterns_and_collection_sources():
 
 
 def test_pattern_sources_report_ai_eligibility_and_retry_revalidates_it():
-    valid = create_profile("rewrite")
+    valid = create_pipeline("rewrite")
     with TestingSession() as db:
         db.add_all([
             models.Pipeline(id="missing-ai", name="Missing AI", type="crawl", language="English", step_accounts={}),
@@ -129,7 +127,7 @@ def test_job_api_exposes_structured_capabilities_and_legacy_url_fallback():
         db.add(pipeline); db.commit(); db.refresh(pipeline)
         db.add(models.Job(pipeline_id=pipeline.id, status="success", progress=100, logs=[{"detail": "[x] WP Success: https://wp.test/post"}], outputs={}))
         db.commit()
-    job = client.get("/jobs").json()[0]
+    job = client.get("/jobs").json()["items"][0]
     assert job["workflow_type"] == "legacy"
     assert job["outputs"]["wp_url"] == "https://wp.test/post"
     assert job["capabilities"]["can_copy_link"] is True
@@ -150,35 +148,35 @@ def test_start_rewrite_and_generation_create_independent_job_and_draft(monkeypat
     started = []
     monkeypatch.setattr("app.api.routes.rewrite_jobs.workflow_runner.start", lambda job_id, operation: started.append(job_id))
     monkeypatch.setattr("app.api.routes.generation_jobs.workflow_runner.start", lambda job_id, operation: started.append(job_id))
-    rewrite = create_profile("rewrite")
-    generated = create_profile("generate_story")
-    rewrite_response = client.post("/rewrite-jobs", json={"profile_id": rewrite["id"], "source_url": "https://source.test/story"})
-    generation_response = client.post("/generation-jobs", json={"profile_id": generated["id"]})
+    rewrite = create_pipeline("rewrite")
+    generated = create_pipeline("generate_story")
+    rewrite_response = client.post("/rewrite-jobs", json={"pipeline_id": rewrite["id"], "source_url": "https://source.test/story"})
+    generation_response = client.post("/generation-jobs", json={"pipeline_id": generated["id"]})
     assert rewrite_response.status_code == generation_response.status_code == 200
     assert rewrite_response.json()["draft_id"] != generation_response.json()["draft_id"]
     assert len(started) == 2
 
 
 def test_rewrite_rejects_source_url_with_embedded_credentials():
-    profile = create_profile("rewrite")
+    pipeline = create_pipeline("rewrite")
     response = client.post(
         "/rewrite-jobs",
-        json={"profile_id": profile["id"], "source_url": "https://user:pass@source.test/story"},
+        json={"pipeline_id": pipeline["id"], "source_url": "https://user:pass@source.test/story"},
     )
     assert response.status_code == 400
     assert "credentials" in response.json()["detail"]
 
 
-def test_account_used_by_workflow_profile_cannot_be_deleted():
-    create_profile("wp_publish")
+def test_account_used_by_workflow_pipeline_cannot_be_deleted():
+    create_pipeline("wp_publish")
     response = client.delete("/accounts/wp1")
     assert response.status_code == 409
     assert "used by" in response.json()["detail"]
 
 
 def test_uploaded_image_rejects_spoofed_mime_and_removes_partial_file():
-    profile = create_profile("wp_publish")
-    draft = client.post("/content-drafts", json={"kind": "manual", "pipeline_id": profile["id"], "title": "Draft", "content": "Body"}).json()
+    pipeline = create_pipeline("wp_publish")
+    draft = client.post("/content-drafts", json={"kind": "manual", "pipeline_id": pipeline["id"], "title": "Draft", "content": "Body"}).json()
     response = client.post(
         f"/content-drafts/{draft['id']}/image",
         files={"image": ("fake.png", b"not really png", "image/png")},
@@ -188,8 +186,8 @@ def test_uploaded_image_rejects_spoofed_mime_and_removes_partial_file():
 
 
 def test_valid_uploaded_image_is_unique_and_cleaned_when_draft_deleted():
-    profile = create_profile("wp_publish")
-    draft = client.post("/content-drafts", json={"kind": "manual", "pipeline_id": profile["id"], "title": "Draft", "content": "Body"}).json()
+    pipeline = create_pipeline("wp_publish")
+    draft = client.post("/content-drafts", json={"kind": "manual", "pipeline_id": pipeline["id"], "title": "Draft", "content": "Body"}).json()
     response = client.post(
         f"/content-drafts/{draft['id']}/image",
         files={"image": ("image.png", b"\x89PNG\r\n\x1a\ncontent", "image/png")},

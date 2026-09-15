@@ -27,7 +27,12 @@ class WorkflowRunner:
         with SessionLocal() as db:
             job = db.query(models.Job).filter(models.Job.id == job_id).first()
             if job and job.status in {"queued", "running"}:
+                outputs = dict(job.outputs or {})
+                if job.current_step:
+                    outputs["cancelled_step"] = job.current_step
                 job.status = "cancelled"
+                job.current_step = "Cancelled"
+                job.outputs = outputs
                 job.end_time = datetime.utcnow()
                 if job.draft_id:
                     draft = db.query(models.ContentDraft).filter(models.ContentDraft.id == job.draft_id).first()

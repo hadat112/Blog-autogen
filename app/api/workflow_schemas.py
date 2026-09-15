@@ -1,32 +1,15 @@
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-WorkflowType = Literal["rewrite", "generate_story", "wp_publish"]
 DraftKind = Literal["rewrite", "generated", "manual"]
-
-
-class WorkflowProfileInput(BaseModel):
-    name: str = Field(min_length=1, max_length=120)
-    type: WorkflowType
-    language: str = ""
-    step_accounts: Dict[str, str] = Field(default_factory=dict)
-    settings: Dict[str, Any] = Field(default_factory=dict)
-    wp_category_id: Optional[str] = None
-    is_active: bool = True
-
-
-class WorkflowProfileResponse(WorkflowProfileInput):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str
-    created_at: datetime
 
 
 class DraftInput(BaseModel):
     pipeline_id: Optional[str] = None
+    wp_account_id: Optional[str] = None
     kind: DraftKind = "manual"
     source_url: Optional[str] = None
     language: Optional[str] = None
@@ -77,12 +60,12 @@ class JobCapabilities(BaseModel):
 
 
 class RewriteJobInput(BaseModel):
-    profile_id: str
+    pipeline_id: str
     source_url: str = Field(min_length=8)
 
 
 class GenerationJobInput(BaseModel):
-    profile_id: str
+    pipeline_id: str
 
 
 class WorkflowJobCreated(BaseModel):

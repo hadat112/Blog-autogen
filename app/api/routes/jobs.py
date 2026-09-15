@@ -1,6 +1,6 @@
-from typing import List
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api import schemas
@@ -11,9 +11,14 @@ from app.db.session import get_db
 router = APIRouter()
 
 
-@router.get("/jobs", response_model=List[schemas.JobResponse])
-def get_jobs(limit: int = 20, db: Session = Depends(get_db)):
-    return JobService(db).list_jobs(limit)
+@router.get("/jobs", response_model=schemas.JobPageResponse)
+def get_jobs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    workflow_type: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    return JobService(db).list_jobs(page=page, page_size=page_size, workflow_type=workflow_type)
 
 
 @router.get("/jobs/{id}", response_model=schemas.JobResponse)

@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.db import models
+from app.services.job_retention_service import JobRetentionService
 
 
 class WorkflowJobService:
@@ -25,6 +26,7 @@ class WorkflowJobService:
         self.db.add(job)
         self.db.commit()
         self.db.refresh(job)
+        JobRetentionService(self.db).prune()
         return job
 
     def progress(self, job_id, step, progress, detail=None):
@@ -63,9 +65,13 @@ class WorkflowJobService:
             return None
         if job.status not in {"queued", "running"}:
             return job
+        outputs = dict(job.outputs or {})
+        if job.current_step:
+            outputs["failed_step"] = job.current_step
         job.status = "failed"
         job.current_step = "Failed"
         job.end_time = datetime.utcnow()
+        job.outputs = outputs
         logs = list(job.logs or [])
         logs.append({"timestamp": datetime.utcnow().isoformat(), "step_name": "Failed", "progress": job.progress, "detail": str(error)[:500], "event": "failed"})
         job.logs = logs[-120:]
@@ -78,8 +84,12 @@ class WorkflowJobService:
             models.Job.status.in_(("queued", "running")),
         ).all()
         for job in jobs:
+            outputs = dict(job.outputs or {})
+            if job.current_step:
+                outputs["failed_step"] = job.current_step
             job.status = "failed"
             job.current_step = "Interrupted by restart"
+            job.outputs = outputs
             job.end_time = datetime.utcnow()
             logs = list(job.logs or [])
             logs.append({"timestamp": datetime.utcnow().isoformat(), "step_name": "Interrupted by restart", "progress": job.progress, "detail": "The local app restarted before this workflow finished. Open its workflow screen to recover.", "event": "failed"})

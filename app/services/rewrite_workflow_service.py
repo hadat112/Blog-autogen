@@ -4,6 +4,7 @@ from app.domain.rewrite_engine import RewriteEngine
 from app.integrations.wordpress.source import WordPressSourceGateway
 from app.services.ai_client_factory import create_ai_client
 from app.services.pattern_collection_service import PatternCollectionService
+from app.services.wordpress_publishing_service import WordPressPublishingService
 from app.services.workflow_job_service import WorkflowJobService
 
 
@@ -16,22 +17,22 @@ class RewriteWorkflowService:
             job = db.query(models.Job).filter(models.Job.id == job_id).first()
             if not draft or not job or job.status == "cancelled":
                 return
-            profile = db.query(models.Pipeline).filter(models.Pipeline.id == draft.pipeline_id, models.Pipeline.type == "rewrite").first()
-            if not profile:
-                jobs.fail(job_id, "Rewrite profile is unavailable")
+            pipeline = db.query(models.Pipeline).filter(models.Pipeline.id == draft.pipeline_id, models.Pipeline.is_active.is_(True)).first()
+            if not pipeline:
+                jobs.fail(job_id, "Rewrite pipeline is unavailable")
                 return
-            ai_account_id = (profile.step_accounts or {}).get("ai")
+            ai_account_id = (pipeline.step_accounts or {}).get("ai")
             account = db.query(models.Account).filter(models.Account.id == ai_account_id, models.Account.type == "ai").first()
             if not account:
                 jobs.fail(job_id, "AI account is unavailable")
                 return
             try:
-                jobs.progress(job_id, "Fetch source article", 5)
+                jobs.progress(job_id, "fetch_source", 5, "Fetching source article")
                 source = (source_gateway or WordPressSourceGateway()).fetch(draft.source_url)
                 draft.image_kind = "url" if source.image_url else None
                 draft.image_source = source.image_url or None
                 db.commit()
-                if bool((profile.settings or {}).get("collect_patterns", False)):
+                if bool((pipeline.settings or {}).get("collect_patterns", False)):
                     PatternCollectionService(db).collect(
                         {
                             "source_url": source.source_url,
@@ -39,20 +40,28 @@ class RewriteWorkflowService:
                             "content": source.content,
                             "image_url": source.image_url,
                         },
-                        profile.id,
+                        pipeline.id,
                         parent_job_id=job_id,
                         ai_account_id=ai_account_id,
                     )
 
-                def on_progress(index, total, _):
+                def on_progress(index, total, phase):
                     fresh = db.query(models.Job).filter(models.Job.id == job_id).first()
                     if fresh and fresh.status == "cancelled":
                         raise InterruptedError("Rewrite cancelled")
-                    jobs.progress(job_id, f"Rewrite chunk {index}/{total}", 10 + round(index / total * 70))
+                    if phase == "metadata":
+                        jobs.progress(job_id, "prepare_publish", 90, "Preparing automatic WordPress publication")
+                        return
+                    jobs.progress(
+                        job_id,
+                        "rewrite_story",
+                        10 + round(index / total * 70),
+                        f"Rewriting chunk {index}/{total}",
+                    )
 
                 ai_client = create_ai_client(account)
                 result = RewriteEngine(ai_client, chunk_size=ai_client.translation_chunk_size).rewrite(
-                    source.title, source.content, profile.language, on_progress
+                    source.title, source.content, pipeline.language, on_progress
                 )
                 db.expire(job)
                 if job.status == "cancelled":
@@ -60,13 +69,18 @@ class RewriteWorkflowService:
                 draft.title = result["title"]
                 draft.content = result["content"]
                 draft.caption = result["caption"]
-                draft.language = profile.language
+                draft.language = pipeline.language
                 draft.state = "ready_for_review"
                 draft.error = None
                 draft.version += 1
                 db.commit()
+                jobs.progress(job_id, "publish_wordpress", 95, "Publishing to WordPress")
+                published = WordPressPublishingService(db).publish(draft.id, confirmed=True)
                 jobs.complete(job_id, {
                     "draft_id": draft.id,
+                    "wp_post_id": published.wp_post_id,
+                    "wp_url": published.wp_url,
+                    "wp_status": published.wp_status,
                     "caption_matches_prefix": result["caption_matches_prefix"],
                     "warnings": result["warnings"],
                 })
@@ -78,7 +92,8 @@ class RewriteWorkflowService:
                     db.commit()
                 return
             except Exception as exc:
-                draft.state = "generation_failed"
+                if draft.state not in {"publish_failed", "publish_unknown"}:
+                    draft.state = "generation_failed"
                 draft.error = str(exc)[:500]
                 draft.version += 1
                 db.commit()

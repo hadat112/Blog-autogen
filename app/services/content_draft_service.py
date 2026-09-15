@@ -31,10 +31,18 @@ class ContentDraftService:
     def create(self, data, state=None):
         values = data.model_dump(exclude={"version"}) if hasattr(data, "model_dump") else dict(data)
         pipeline_id = values.get("pipeline_id")
-        profile = self.db.query(models.Pipeline).filter(models.Pipeline.id == pipeline_id).first() if pipeline_id else None
+        wp_account_id = values.get("wp_account_id")
+        pipeline = self.db.query(models.Pipeline).filter(models.Pipeline.id == pipeline_id).first() if pipeline_id else None
         expected_type = {"manual": "wp_publish", "rewrite": "rewrite", "generated": "generate_story"}.get(values.get("kind"))
-        if not profile or profile.type != expected_type:
-            raise ValueError("Draft requires a matching workflow profile")
+        if values.get("kind") == "manual":
+            if wp_account_id:
+                account = self.db.query(models.Account).filter(models.Account.id == wp_account_id, models.Account.type == "wp").first()
+                if not account:
+                    raise ValueError("A valid WordPress account is required")
+            elif not pipeline or pipeline.type != expected_type:
+                raise ValueError("Manual draft requires a WordPress account")
+        elif not pipeline:
+            raise ValueError("Draft requires a pipeline")
         draft = models.ContentDraft(**values, state=state or ("ready_for_review" if values.get("kind") == "manual" else "generating"))
         self.db.add(draft)
         self.db.commit()

@@ -16,20 +16,20 @@ class FakeAI:
         return {"content": "First rewrite" if len(self.calls) == 1 else "Second rewrite"}
 
 
-def test_rewrite_keeps_only_current_original_chunk_and_prior_assistant_output():
+def test_rewrite_keeps_full_source_and_rewritten_message_history():
     ai = FakeAI()
     source = "original-one\n\noriginal-two"
     result = RewriteEngine(ai, chunk_size=12).rewrite("Old", source, "Italian")
     assert result["caption"] == "First rewrite"
     second_messages = ai.calls[1]
     assert any(message["role"] == "assistant" and message["content"] == "First rewrite" for message in second_messages)
-    assert "original-one" not in second_messages[-1]["content"]
+    assert "original-one" in str(second_messages)
     assert "original-two" in second_messages[-1]["content"]
     assert [message["role"] for message in second_messages] == ["system", "user", "assistant", "user"]
     final_roles = [message["role"] for message in ai.calls[-1]]
     assert final_roles == ["system", "user", "assistant", "user", "assistant", "user"]
-    assert "original-one" not in str(ai.calls[-1])
-    assert "original-two" not in str(ai.calls[-1])
+    assert "original-one" in str(ai.calls[-1])
+    assert "original-two" in str(ai.calls[-1])
 
 
 def test_rewrite_keeps_non_prefix_caption_as_review_warning():
@@ -53,3 +53,12 @@ def test_rewrite_still_rejects_empty_caption():
 
     with pytest.raises(ValueError, match="empty rewritten caption"):
         RewriteEngine(EmptyCaptionAI()).rewrite("Old", "source", "English")
+
+
+def test_rewrite_reports_metadata_phase_after_all_chunks():
+    ai = FakeAI()
+    phases = []
+
+    RewriteEngine(ai).rewrite("Old", "source", "English", lambda index, total, phase: phases.append(phase))
+
+    assert phases == ["rewriting", "metadata"]

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ExternalLink, ImagePlus, Save, Send, X } from 'lucide-react';
 import type { ContentDraft } from '../../api/types';
-import { getWorkflowCategories, publishDraft, updateDraft, uploadDraftImage } from '../../api/workflows';
+import { getDraftCategories, getPipelineCategories, publishDraft, updateDraft, uploadDraftImage } from '../../api/workflows';
 import { Button } from '../../components/ui/Button';
 import { CopyButton } from '../../components/ui/CopyButton';
 import { InlineStatus } from '../../components/ui/InlineStatus';
@@ -19,9 +19,9 @@ export function DraftEditor({ draft, manual = false, onUpdated }: { draft: Conte
   const [error, setError] = useState('');
   useEffect(() => setForm(draft), [draft]);
   const categories = useQuery({
-    queryKey: ['workflow-categories', form.pipeline_id],
-    queryFn: async () => (await getWorkflowCategories(form.pipeline_id!)).data,
-    enabled: Boolean(form.pipeline_id), retry: false,
+    queryKey: ['draft-categories', form.id, form.pipeline_id, form.wp_account_id],
+    queryFn: async () => (await (form.pipeline_id ? getPipelineCategories(form.pipeline_id) : getDraftCategories(form.id))).data,
+    enabled: Boolean(form.pipeline_id || form.wp_account_id), retry: false,
   });
   const editable = !['publishing', 'wordpress_created'].includes(form.state);
   const captionValid = !form.caption || form.content.startsWith(form.caption);
@@ -29,7 +29,7 @@ export function DraftEditor({ draft, manual = false, onUpdated }: { draft: Conte
 
   const save = useMutation({
     mutationFn: () => updateDraft(form.id, {
-      pipeline_id: form.pipeline_id, kind: form.kind, source_url: form.source_url, language: form.language,
+      pipeline_id: form.pipeline_id, wp_account_id: form.wp_account_id, kind: form.kind, source_url: form.source_url, language: form.language,
       title: form.title, content: form.content, caption: form.caption,
       image_kind: form.image_kind, image_source: form.image_source,
       content_format: form.content_format, category_id: form.category_id,
