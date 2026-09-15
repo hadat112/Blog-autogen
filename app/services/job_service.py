@@ -7,16 +7,21 @@ from sqlalchemy.orm import Session
 from app.domain.job_runner import job_runner
 from app.domain.workflow_runner import workflow_runner
 from app.db import models
+from app.services.job_retention_service import JobRetentionService
 
 
 class JobService:
     def __init__(self, db: Session):
         self.db = db
 
-    def list_jobs(self, page: int = 1, page_size: int = 10, workflow_type: Optional[str] = None):
+    def list_jobs(self, page: int = 1, page_size: int = 10, workflow_type: Optional[str] = None, status_group: Optional[str] = None):
         jobs_query = self.db.query(models.Job)
         if workflow_type and workflow_type != "all":
             jobs_query = jobs_query.filter(models.Job.workflow_type == workflow_type)
+        if status_group == "active":
+            jobs_query = jobs_query.filter(models.Job.status.in_(("queued", "running")))
+        elif status_group == "history":
+            jobs_query = jobs_query.filter(~models.Job.status.in_(("queued", "running")))
 
         total = jobs_query.count()
         results = jobs_query.with_entities(models.Job, models.Pipeline.name).outerjoin(
@@ -63,7 +68,7 @@ class JobService:
         job.outputs = outputs
         job.capabilities = {
             "can_cancel": job.status in {"queued", "running"},
-            "can_rerun": (job.workflow_type or "legacy") == "legacy" and job.status == "failed",
+            "can_rerun": (job.workflow_type or "legacy") in {"legacy", "rewrite"} and job.status == "failed" and not job.rerun_job_id,
             "can_open_draft": bool(job.draft_id),
             "can_copy_link": bool(outputs.get("wp_url")),
         }
@@ -81,6 +86,7 @@ class JobService:
                     job.status = "success"
                     job.end_time = datetime.utcnow()
                     self.db.commit()
+                    JobRetentionService(self.db).prune()
                     return {"status": "updated", "new_status": "success"}
 
         return {"status": "checked", "current_status": job.status}
@@ -107,6 +113,7 @@ class JobService:
                         draft.state = "generation_failed"
                         draft.error = "Generation was cancelled"
                 self.db.commit()
+                JobRetentionService(self.db).prune()
                 return {"status": "cancelled"}
             return result
         return await job_runner.cancel_job(job_id)

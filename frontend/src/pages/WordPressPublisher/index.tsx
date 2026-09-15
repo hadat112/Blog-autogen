@@ -20,7 +20,7 @@ export default function WordPressPublisher() {
 
   const drafts = useQuery({
     queryKey: ['drafts', 'manual'],
-    queryFn: async () => (await getDrafts({ kind: 'manual' })).data,
+    queryFn: async () => { const data = (await getDrafts({ kind: 'manual', page: 1, page_size: 50 })).data; return Array.isArray(data) ? data : data.items; },
   });
 
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: async () => (await getAccounts()).data });

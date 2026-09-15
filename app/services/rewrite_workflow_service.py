@@ -6,6 +6,7 @@ from app.services.ai_client_factory import create_ai_client
 from app.services.pattern_collection_service import PatternCollectionService
 from app.services.wordpress_publishing_service import WordPressPublishingService
 from app.services.workflow_job_service import WorkflowJobService
+from app.services.error_sanitizer import sanitize_error
 
 
 class RewriteWorkflowService:
@@ -45,18 +46,26 @@ class RewriteWorkflowService:
                         ai_account_id=ai_account_id,
                     )
 
-                def on_progress(index, total, phase):
+                def on_progress(index, total, phase, meta=None):
                     fresh = db.query(models.Job).filter(models.Job.id == job_id).first()
                     if fresh and fresh.status == "cancelled":
                         raise InterruptedError("Rewrite cancelled")
                     if phase == "metadata":
                         jobs.progress(job_id, "prepare_publish", 90, "Preparing automatic WordPress publication")
                         return
+                    meta = meta or {}
+                    event = meta.get("event", "progress")
+                    if event == "start":
+                        detail = f"Chunk {index}/{total} started · {meta.get('word_count', 0):,} words"
+                    elif event == "done":
+                        detail = f"Chunk {index}/{total} completed · {meta.get('word_count', 0):,} words · {meta.get('elapsed_ms', 0):,} ms"
+                    else:
+                        detail = f"Chunk {index}/{total}"
                     jobs.progress(
                         job_id,
                         "rewrite_story",
                         10 + round(index / total * 70),
-                        f"Rewriting chunk {index}/{total}",
+                        detail,
                     )
 
                 ai_client = create_ai_client(account)
@@ -94,7 +103,7 @@ class RewriteWorkflowService:
             except Exception as exc:
                 if draft.state not in {"publish_failed", "publish_unknown"}:
                     draft.state = "generation_failed"
-                draft.error = str(exc)[:500]
+                draft.error = sanitize_error(str(exc))[:500]
                 draft.version += 1
                 db.commit()
                 jobs.fail(job_id, exc)

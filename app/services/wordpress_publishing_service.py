@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db import models
 from app.integrations.wordpress.destination import AmbiguousWordPressResult, WordPressDestinationGateway
+from app.services.error_sanitizer import sanitize_error
 
 
 _draft_locks = defaultdict(threading.Lock)
@@ -80,12 +81,12 @@ class WordPressPublishingService:
                 )
             except AmbiguousWordPressResult as exc:
                 draft.state = "publish_unknown"
-                draft.error = str(exc)
+                draft.error = sanitize_error(str(exc))
                 self.db.commit()
                 raise
             except Exception as exc:
                 draft.state = "publish_failed"
-                draft.error = str(exc)
+                draft.error = sanitize_error(str(exc))
                 self.db.commit()
                 raise
             draft.state = "wordpress_created"

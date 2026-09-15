@@ -25,6 +25,18 @@ class ContentDraftService:
             query = query.filter(models.ContentDraft.pipeline_id == pipeline_id)
         return query.order_by(models.ContentDraft.updated_at.desc()).all()
 
+    def list_page(self, kind=None, pipeline_id=None, page=1, page_size=20):
+        page = max(1, page)
+        page_size = min(100, max(1, page_size))
+        query = self.db.query(models.ContentDraft)
+        if kind:
+            query = query.filter(models.ContentDraft.kind == kind)
+        if pipeline_id:
+            query = query.filter(models.ContentDraft.pipeline_id == pipeline_id)
+        total = query.count()
+        items = query.order_by(models.ContentDraft.updated_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+        return {"items": items, "total": total, "page": page, "page_size": page_size}
+
     def get(self, draft_id):
         return self.db.query(models.ContentDraft).filter(models.ContentDraft.id == draft_id).first()
 

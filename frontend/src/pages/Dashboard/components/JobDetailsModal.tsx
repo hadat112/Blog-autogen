@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { X, CheckCircle, XCircle, Clock, Loader2, FileText, RefreshCw, Copy, ExternalLink } from 'lucide-react';
+import { X, Clock, Loader2, FileText, RefreshCw, Copy, ExternalLink } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { syncJob } from '../../../api/client';
 import { Job } from '../../../api/types';
+import { ProgressTimeline } from '../../../components/ui/ProgressTimeline';
 
 interface JobExtended extends Job {
   pipeline_name?: string;
@@ -57,6 +58,7 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ job, onClose }) => {
     ? job.input_text || ''
     : inputLog?.url || stepOneLog?.detail?.split('Step 1: Extracting article from ')[1]?.trim() || '';
   const outputUrl = typeof job.outputs?.wp_url === 'string' ? job.outputs.wp_url : '';
+  const version = job.workflow_type === 'rewrite' ? 'V2' : 'V1';
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center p-0 sm:p-4">
@@ -161,42 +163,9 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ job, onClose }) => {
 
           {outputUrl && <div className="rounded-xl border border-status-success/30 bg-status-success/10 p-4"><p className="text-xs font-bold uppercase tracking-wider text-status-success">WordPress output</p><div className="mt-2 flex items-center gap-2"><a href={outputUrl} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-sm font-medium text-accent hover:underline">{outputUrl}</a><button type="button" onClick={() => handleCopy(outputUrl)} className="rounded-md border border-border-default bg-surface p-2 text-content-secondary hover:text-content-primary" title="Copy WordPress link"><Copy size={15} /></button><a href={outputUrl} target="_blank" rel="noreferrer" className="rounded-md border border-border-default bg-surface p-2 text-content-secondary hover:text-content-primary" title="Open WordPress link"><ExternalLink size={15} /></a></div></div>}
 
-          {/* Detailed Logs */}
           <div className="space-y-4">
-            <h4 className="text-lg font-bold text-content-primary flex items-center space-x-2">
-              <FileText size={20} className="text-content-tertiary" />
-              <span>Step Logs</span>
-            </h4>
-
-            <div className="space-y-3">
-              {displayLogs.length === 0 ? (
-                <div className="text-center py-10 text-content-tertiary italic bg-surface-subtle rounded-xl border border-dashed border-border-default">
-                  No detailed logs recorded for this job.
-                </div>
-              ) : (
-                displayLogs.map((log, index) => (
-                  <div key={index} className="flex space-x-4 group">
-                    <div className="flex flex-col items-center">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                        log.event === 'error' || log.event === 'failed' ? 'bg-status-danger/10 text-status-danger' : 'bg-status-success/10 text-status-success'
-                      }`}>
-                        {log.event === 'error' || log.event === 'failed' ? <XCircle size={16} /> : <CheckCircle size={16} />}
-                      </div>
-                      {index !== displayLogs.length - 1 && <div className="w-0.5 h-full bg-border-subtle group-hover:bg-border-default transition-colors my-1"></div>}
-                    </div>
-                    <div className="flex-1 pb-6">
-                      <div className="flex justify-between items-start mb-1">
-                        <h5 className="font-bold text-content-primary">{log.step_name || 'Event'}</h5>
-                        <span className="text-[10px] font-mono text-content-tertiary">{log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : ''}</span>
-                      </div>
-                      <p className="text-sm text-content-secondary bg-surface-subtle p-3 rounded-lg border border-border-subtle font-mono break-all whitespace-pre-wrap">
-                        {log.detail}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+            <h4 className="text-lg font-bold text-content-primary flex items-center space-x-2"><FileText size={20} className="text-content-tertiary" /><span>Execution timeline</span></h4>
+            {displayLogs.length === 0 ? <div className="text-center py-10 text-content-tertiary italic bg-surface-subtle rounded-xl border border-dashed border-border-default">No detailed logs recorded for this job.</div> : <ProgressTimeline progress={job.progress} current={job.current_step} status={job.status} detail={displayLogs.at(-1)?.detail} startedAt={job.start_time} updatedAt={displayLogs.at(-1)?.timestamp} failedStep={job.outputs?.failed_step} cancelledStep={job.outputs?.cancelled_step} logs={displayLogs} version={version} />}
           </div>
         </div>
         

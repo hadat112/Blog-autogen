@@ -16,6 +16,16 @@ type ProgressTimelineProps = {
   failedStep?: string;
   cancelledStep?: string;
   steps?: ProgressTimelineStep[];
+  logs?: WorkflowLog[];
+  version?: 'V1' | 'V2';
+};
+
+export type WorkflowLog = {
+  step_name?: string;
+  detail?: string;
+  timestamp?: string;
+  event?: string;
+  progress?: number;
 };
 
 const defaultSteps: ProgressTimelineStep[] = [
@@ -51,6 +61,77 @@ function extractChunk(detail?: string) {
   return match ? { current: Number(match[1]), total: Number(match[2]) } : null;
 }
 
+function displayStepName(value?: string) {
+  const key = (value || '').toLowerCase();
+  if (key.includes('rewrite') || key.includes('chunk')) return 'Story processing';
+  if (key.includes('prepare_publish')) return 'Prepare publish';
+  if (key.includes('publish_wordpress')) return 'Publish to WordPress';
+  if (key.includes('choose_patterns')) return 'Choose story patterns';
+  if (key.includes('agent')) return 'Generate story';
+  return (value || 'Workflow update').replaceAll('_', ' ').replace(/\b\w/g, character => character.toUpperCase());
+}
+
+function isChildLog(log: WorkflowLog) {
+  return /\bchunk\s*\d+\s*(?:\/|of)\s*\d+\b/i.test(log.detail || '')
+    || /\bchunk\s*\d+\b/i.test(log.step_name || '')
+    || /\bchunk\s*\d+\b/i.test(log.detail || '');
+}
+
+function formatLogDuration(logs: WorkflowLog[]) {
+  const details = logs.map(log => log.detail || '').join(' ');
+  const explicit = [...details.matchAll(/(?:·|in)\s*([\d,.]+)\s*(ms|s|sec|seconds)\b/gi)];
+  if (explicit.length) {
+    const milliseconds = explicit.reduce((total, match) => total + Number(match[1].replaceAll(',', '')) * (match[2].toLowerCase() === 'ms' ? 1 : 1000), 0);
+    return milliseconds < 1000 ? `${Math.round(milliseconds)} ms` : `${(milliseconds / 1000).toFixed(1)} s`;
+  }
+  const timestamps = logs.map(log => Date.parse(log.timestamp || '')).filter(value => !Number.isNaN(value));
+  if (timestamps.length > 1) return formatDuration(Math.max(0, Math.max(...timestamps) - Math.min(...timestamps)));
+  return '';
+}
+
+function ExecutionLogTimeline({ logs, version, status }: { logs: WorkflowLog[]; version?: 'V1' | 'V2'; status: string }) {
+  const groups = useMemo(() => {
+    const result: Array<{ name: string; logs: WorkflowLog[]; children: WorkflowLog[] }> = [];
+    logs.forEach(log => {
+      const child = isChildLog(log);
+      const name = displayStepName(log.step_name || log.detail);
+      const target = child ? result.find(group => group.name === 'Story processing') || result.at(-1) : result.find(group => group.name === name);
+      if (target) {
+        (child ? target.children : target.logs).push(log);
+      } else {
+        result.push({ name, logs: child ? [] : [log], children: child ? [log] : [] });
+      }
+    });
+    return result;
+  }, [logs]);
+
+  return <ol className="space-y-3" aria-label="Execution timeline">
+    {groups.map((group, index) => {
+      const allLogs = [...group.logs, ...group.children];
+      const failed = allLogs.some(log => log.event === 'failed' || log.event === 'error');
+      const active = index === groups.length - 1 && ['queued', 'pending', 'running'].includes(status);
+      const done = !active && !failed;
+      const Icon = failed ? XCircle : done ? CheckCircle2 : active ? Loader2 : Circle;
+      return <li key={`${group.name}-${index}`} className="relative flex gap-3" aria-current={active ? 'step' : undefined}>
+        <div className="flex w-7 shrink-0 flex-col items-center">
+          <span className={`flex h-7 w-7 items-center justify-center rounded-full ${failed ? 'bg-status-danger/10 text-status-danger' : active ? 'bg-accent/10 text-accent' : done ? 'bg-status-success/10 text-status-success' : 'bg-surface-subtle text-content-tertiary'}`}><Icon size={16} className={active ? 'animate-spin' : ''} /></span>
+          {index < groups.length - 1 && <span className="mt-1 h-full min-h-5 w-px bg-border-subtle" />}
+        </div>
+        <div className="min-w-0 flex-1 pb-2">
+          <div className="flex items-start justify-between gap-3">
+            <div><p className="font-semibold text-content-primary">{group.name}</p><p className="text-xs text-content-tertiary">{version || 'Workflow'} · {failed ? 'Failed' : active ? 'In progress' : done ? 'Completed' : 'Waiting'}</p></div>
+            <span className="shrink-0 text-xs font-mono text-content-tertiary">{formatLogDuration(allLogs)}</span>
+          </div>
+          {group.logs.at(-1)?.detail && <p className="mt-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2 text-sm text-content-secondary">{group.logs.at(-1)?.detail}</p>}
+          {group.children.length > 0 && <div className="mt-2 ml-3 space-y-1.5 border-l border-border-default pl-3">
+            {group.children.map((child, childIndex) => <div key={`${child.timestamp || childIndex}-${child.detail}`} className="flex items-center justify-between gap-3 rounded-md bg-surface-subtle/70 px-2.5 py-2 text-xs"><span className="min-w-0 truncate text-content-secondary">{child.detail || 'Chunk update'}</span><span className="shrink-0 font-mono text-content-tertiary">{formatLogDuration([child])}</span></div>)}
+          </div>}
+        </div>
+      </li>;
+    })}
+  </ol>;
+}
+
 function statusCopy(status: string, progress: number) {
   if (status === 'success') return { label: 'Completed', tone: 'success' };
   if (status === 'failed') return { label: 'Failed', tone: 'danger' };
@@ -70,6 +151,8 @@ export function ProgressTimeline({
   failedStep,
   cancelledStep,
   steps = defaultSteps,
+  logs,
+  version,
 }: ProgressTimelineProps) {
   const isLive = status === 'queued' || status === 'pending' || status === 'running';
   const [now, setNow] = useState(() => Date.now());
@@ -127,7 +210,7 @@ export function ProgressTimeline({
       </div>
     </div>
 
-    <ol className="space-y-2" aria-label="Workflow steps">
+    {logs?.length ? <ExecutionLogTimeline logs={logs} version={version} status={status} /> : <ol className="space-y-2" aria-label="Workflow steps">
       {steps.map((step, index) => {
         const isTerminalError = (status === 'failed' || status === 'cancelled') && index === terminalIndex;
         const done = status === 'success' || (progressionIndex >= 0 && index < progressionIndex && !isTerminalError);
@@ -148,6 +231,6 @@ export function ProgressTimeline({
           <span className={`shrink-0 text-xs font-medium ${isTerminalError ? status === 'cancelled' ? 'text-status-warning' : 'text-status-danger' : done ? 'text-status-success' : active ? 'text-accent' : 'text-content-tertiary'}`}>{stateLabel}</span>
         </li>;
       })}
-    </ol>
+    </ol>}
   </section>;
 }

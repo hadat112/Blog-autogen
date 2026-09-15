@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -24,6 +25,18 @@ async def start_rewrite(data: RewriteJobInput, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Selected pipeline has no AI account")
     if not (pipeline.step_accounts or {}).get("wp"):
         raise HTTPException(status_code=400, detail="Selected pipeline has no WordPress account")
+    previous_job = None
+    if data.rerun_from_job_id:
+        previous_job = db.query(models.Job).filter(
+            models.Job.id == data.rerun_from_job_id,
+            models.Job.pipeline_id == pipeline.id,
+            models.Job.workflow_type == "rewrite",
+            models.Job.status == "failed",
+        ).first()
+        if not previous_job:
+            raise HTTPException(status_code=400, detail="Only a failed V2 job can be retried")
+        if previous_job.rerun_job_id:
+            raise HTTPException(status_code=400, detail="This V2 job has already been retried")
     try:
         source_url = normalize_source_url(data.source_url)
     except ValueError as exc:
@@ -41,6 +54,10 @@ async def start_rewrite(data: RewriteJobInput, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(draft)
     job = WorkflowJobService(db).create(pipeline.id, "rewrite", draft.id, input_text=source_url)
+    if previous_job:
+        previous_job.rerun_at = datetime.utcnow()
+        previous_job.rerun_job_id = job.id
+        db.commit()
 
     async def operation():
         await asyncio.to_thread(RewriteWorkflowService.execute, job.id, draft.id)

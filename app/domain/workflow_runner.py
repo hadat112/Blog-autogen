@@ -3,6 +3,7 @@ from datetime import datetime
 
 from app.db import models
 from app.db.session import SessionLocal
+from app.services.job_retention_service import JobRetentionService
 
 
 class WorkflowRunner:
@@ -40,6 +41,7 @@ class WorkflowRunner:
                         draft.state = "generation_failed"
                         draft.error = "Generation was cancelled"
                 db.commit()
+                JobRetentionService(db).prune()
 
     async def cancel(self, job_id):
         task = self.active_jobs.get(job_id)

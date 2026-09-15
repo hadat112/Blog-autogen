@@ -4,6 +4,7 @@ from app.domain.story_agent import StoryAgent
 from app.domain.story_agent_tools import StoryAgentTools
 from app.services.ai_client_factory import create_ai_client
 from app.services.workflow_job_service import WorkflowJobService
+from app.services.error_sanitizer import sanitize_error
 
 
 class GenerateStoryWorkflowService:
@@ -60,7 +61,7 @@ class GenerateStoryWorkflowService:
                 return
             except Exception as exc:
                 draft.state = "generation_failed"
-                draft.error = str(exc)[:500]
+                draft.error = sanitize_error(str(exc))[:500]
                 draft.version += 1
                 db.commit()
                 jobs.fail(job_id, exc)

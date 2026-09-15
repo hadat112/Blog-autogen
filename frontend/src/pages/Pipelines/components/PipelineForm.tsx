@@ -217,7 +217,7 @@ const PipelineForm: React.FC<PipelineFormProps> = ({
                   <option value="">Không dịch / reup nguyên bản</option>
                   {currentLanguageIsMissing && (
                     <option value={formData.language}>
-                      {formData.language} (legacy)
+                      {formData.language} (V1)
                     </option>
                   )}
                   {selectableLanguages.map((language) => (

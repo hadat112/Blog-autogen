@@ -256,6 +256,7 @@ class JobRunner:
                     job.progress = 100
                     job.end_time = datetime.utcnow()
                     db.commit()
+                    JobRetentionService(db).prune()
         except Exception as e:
             logger.exception(f"Job {job_id} failed")
             self._add_log_event(job_id, "Critical Error", str(e), "failed")
@@ -265,6 +266,7 @@ class JobRunner:
                     job.status = "failed"
                     job.end_time = datetime.utcnow()
                     db.commit()
+                    JobRetentionService(db).prune()
 
     async def cancel_job(self, job_id: str):
         with SessionLocal() as db:
@@ -297,6 +299,7 @@ class JobRunner:
                 job.current_step = "Cancelled"
                 job.end_time = datetime.utcnow()
                 db.commit()
+                JobRetentionService(db).prune()
 
     def _is_job_cancelled(self, job_id: str):
         with SessionLocal() as db:

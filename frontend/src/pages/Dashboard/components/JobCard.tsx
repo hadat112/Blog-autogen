@@ -35,7 +35,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
   const canCancel = job.capabilities?.can_cancel ?? (isQueued || isRunning);
   const canRerun = job.capabilities?.can_rerun ?? isFailed;
   const outputUrl = typeof job.outputs?.wp_url === 'string' ? job.outputs.wp_url : '';
-  const recoveryPath = job.workflow_type === 'rewrite' ? '/rewrite' : job.workflow_type === 'generate_story' ? '/generate-story' : job.workflow_type === 'wp_publish' ? '/wordpress-publisher' : job.workflow_type === 'pattern_analysis' ? '/pattern-library' : '';
+  const recoveryPath = job.workflow_type === 'generate_story' ? '/generate-story' : job.workflow_type === 'wp_publish' ? '/wordpress-publisher' : job.workflow_type === 'pattern_analysis' ? '/pattern-library' : '';
 
   const formatTime = (isoString: string) => {
     if (!isoString) return '--:--';
@@ -106,7 +106,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
                 {job.status.replace('_', ' ')}
               </span>
               <span className="text-[10px] text-content-tertiary font-mono">#{job.id.slice(0, 8)}</span>
-              <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-content-secondary">{(job.workflow_type || 'legacy').replaceAll('_', ' ')}</span>
+              <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-content-secondary">{job.workflow_type === 'legacy' || !job.workflow_type ? 'V1' : job.workflow_type === 'rewrite' ? 'V2' : job.workflow_type.replaceAll('_', ' ')}</span>
             </div>
             <h4 className="font-bold text-content-primary truncate mt-1 text-sm">{job.pipeline_name || 'Pipeline Run'}</h4>
           </div>

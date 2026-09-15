@@ -57,6 +57,7 @@ class WorkflowJobService:
         job.outputs = outputs or {}
         job.end_time = datetime.utcnow()
         self.db.commit()
+        JobRetentionService(self.db).prune()
         return job
 
     def fail(self, job_id, error):
@@ -76,6 +77,7 @@ class WorkflowJobService:
         logs.append({"timestamp": datetime.utcnow().isoformat(), "step_name": "Failed", "progress": job.progress, "detail": str(error)[:500], "event": "failed"})
         job.logs = logs[-120:]
         self.db.commit()
+        JobRetentionService(self.db).prune()
         return job
 
     def recover_interrupted(self):

@@ -61,6 +61,14 @@ class AccountService:
         if referenced_by:
             raise ValueError(f"Account is used by a pipeline: {referenced_by[0]}")
 
+        if account.type == "wp":
+            active_draft = self.db.query(models.ContentDraft.id).filter(
+                models.ContentDraft.wp_account_id == account_id,
+                models.ContentDraft.state.notin_(("wordpress_created", "publish_failed")),
+            ).first()
+            if active_draft:
+                raise ValueError("WordPress account is used by an unpublished draft")
+
         self.db.delete(account)
         self.db.commit()
         return True

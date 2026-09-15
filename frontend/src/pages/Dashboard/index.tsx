@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import { cancelJob, getJobs, runPipeline } from '../../api/client';
+import { startRewrite } from '../../api/workflows';
 import QuickRun from './components/QuickRun';
 import JobCard from './components/JobCard';
 import JobDetailsModal from './components/JobDetailsModal';
@@ -31,25 +32,43 @@ const Dashboard = () => {
   const [rerunningJobId, setRerunningJobId] = useState<string | null>(null);
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
   const [workflowFilter, setWorkflowFilter] = useState('all');
-  const [page, setPage] = useState(1);
+  const [activePage, setActivePage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
 
-  const { data: jobPage, isLoading, refetch } = useQuery({
-    queryKey: ['jobs', page, workflowFilter],
+  const activeQuery = useQuery({
+    queryKey: ['jobs', 'active', activePage, workflowFilter],
     queryFn: async () => {
-      const { data } = await getJobs({ page, page_size: 9, workflow_type: workflowFilter });
+      const { data } = await getJobs({ page: activePage, page_size: 9, workflow_type: workflowFilter, status_group: 'active' });
       return data;
     },
     placeholderData: keepPreviousData,
+    staleTime: 1000,
     refetchInterval: 3000, // Poll every 3 seconds
   });
+  const historyQuery = useQuery({
+    queryKey: ['jobs', 'history', historyPage, workflowFilter],
+    queryFn: async () => {
+      const { data } = await getJobs({ page: historyPage, page_size: 9, workflow_type: workflowFilter, status_group: 'history' });
+      return data;
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 5000,
+  });
 
-  const jobs = jobPage?.items ?? [];
+  const activeJobs = activeQuery.data?.items ?? [];
+  const historyJobs = historyQuery.data?.items ?? [];
+  const jobs = [...activeJobs, ...historyJobs];
 
   useEffect(() => {
-    if (jobPage && jobPage.total_pages > 0 && page > jobPage.total_pages) {
-      setPage(jobPage.total_pages);
+    if (activeQuery.data && activeQuery.data.total_pages > 0 && activePage > activeQuery.data.total_pages) {
+      setActivePage(activeQuery.data.total_pages);
     }
-  }, [jobPage, page]);
+    if (historyQuery.data && historyQuery.data.total_pages > 0 && historyPage > historyQuery.data.total_pages) {
+      setHistoryPage(historyQuery.data.total_pages);
+    }
+  }, [activeQuery.data, activePage, historyQuery.data, historyPage]);
+
+  const refetch = () => Promise.all([activeQuery.refetch(), historyQuery.refetch()]);
 
   const rerunMutation = useMutation({
     mutationFn: (job: Job) => {
@@ -57,10 +76,10 @@ const Dashboard = () => {
       if (!prompt) {
         throw new Error('Job input was not found in logs');
       }
-      return runPipeline(job.pipeline_id, {
-        prompt,
-        rerun_from_job_id: job.id,
-      });
+      if (job.workflow_type === 'rewrite') {
+        return startRewrite(job.pipeline_id, prompt, job.id);
+      }
+      return runPipeline(job.pipeline_id, { prompt, rerun_from_job_id: job.id });
     },
     onMutate: (job) => setRerunningJobId(job.id),
     onSuccess: () => refetch(),
@@ -80,11 +99,9 @@ const Dashboard = () => {
     onSettled: () => setCancellingJobId(null),
   });
 
-  const runningJobs = jobs.filter(j => j.status === 'running' || j.status === 'queued');
-  const pastJobs = jobs.filter(j => j.status !== 'running' && j.status !== 'queued');
   const selectedJob = jobs.find(j => j.id === selectedJobId);
 
-  if (isLoading && jobs.length === 0) {
+  if (activeQuery.isLoading && historyQuery.isLoading && jobs.length === 0) {
     return <DashboardSkeleton />;
   }
 
@@ -92,7 +109,7 @@ const Dashboard = () => {
     <div className="space-y-8">
       <QuickRun onRunStarted={() => refetch()} />
 
-      <div className="flex justify-end"><label className="w-full max-w-xs text-sm font-medium text-content-secondary">Workflow filter<Select className="mt-1" value={workflowFilter} onChange={event => { setWorkflowFilter(event.target.value); setPage(1); }}><option value="all">All workflows</option><option value="legacy">Legacy pipelines</option><option value="rewrite">Rewrite</option><option value="generate_story">Generate Story</option><option value="pattern_analysis">Pattern Analysis</option><option value="wp_publish">WordPress Publisher</option></Select></label></div>
+      <div className="flex justify-end"><label className="w-full max-w-xs text-sm font-medium text-content-secondary">Workflow filter<Select className="mt-1" value={workflowFilter} onChange={event => { setWorkflowFilter(event.target.value); setActivePage(1); setHistoryPage(1); }}><option value="all">All workflows</option><option value="legacy">V1</option><option value="rewrite">V2</option><option value="generate_story">Generate Story</option><option value="pattern_analysis">Pattern Analysis</option><option value="wp_publish">WordPress Publisher</option></Select></label></div>
 
       <div className="space-y-4">
         <h3 className="text-xl font-bold text-content-primary flex items-center space-x-2">
@@ -100,12 +117,12 @@ const Dashboard = () => {
           <span>Active Tasks</span>
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
-          {runningJobs.length === 0 ? (
+          {activeJobs.length === 0 ? (
             <div className="col-span-full py-12 text-center bg-canvas rounded-xl border border-dashed border-border-default">
               <p className="text-content-tertiary text-sm italic">No active tasks at the moment.</p>
             </div>
           ) : (
-            runningJobs.map(job => (
+            activeJobs.map(job => (
               <JobCard
                 key={job.id}
                 job={job as any}
@@ -118,6 +135,7 @@ const Dashboard = () => {
             ))
           )}
         </div>
+        {activeQuery.data && activeQuery.data.total > 0 && <Pagination page={activePage} pageData={activeQuery.data} onPageChange={setActivePage} />}
       </div>
 
       <div className="space-y-4">
@@ -126,12 +144,12 @@ const Dashboard = () => {
           <span>Recent Activity</span>
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
-          {pastJobs.length === 0 && runningJobs.length === 0 ? (
+          {historyJobs.length === 0 ? (
             <div className="col-span-full py-12 text-center bg-canvas rounded-xl border border-dashed border-border-default">
               <p className="text-content-tertiary text-sm">No activity history yet.</p>
             </div>
           ) : (
-            pastJobs.map(job => (
+            historyJobs.map(job => (
               <JobCard
                 key={job.id}
                 job={job as any}
@@ -144,20 +162,8 @@ const Dashboard = () => {
             ))
           )}
         </div>
+        {historyQuery.data && historyQuery.data.total > 0 && <Pagination page={historyPage} pageData={historyQuery.data} onPageChange={setHistoryPage} />}
       </div>
-
-      {jobPage && jobPage.total > 0 && (
-        <div className="flex flex-col items-center justify-between gap-3 border-t border-border-default pt-4 sm:flex-row">
-          <p className="text-xs text-content-tertiary">
-            Showing {(page - 1) * jobPage.page_size + 1}-{Math.min(page * jobPage.page_size, jobPage.total)} of {jobPage.total}
-          </p>
-          <div className="flex items-center gap-2">
-            <button type="button" className="rounded-md border border-border-default px-3 py-1.5 text-xs font-semibold text-content-secondary hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-50" disabled={page <= 1} onClick={() => setPage(current => current - 1)}>Previous</button>
-            <span className="text-xs font-semibold text-content-secondary">Page {page} of {jobPage.total_pages}</span>
-            <button type="button" className="rounded-md border border-border-default px-3 py-1.5 text-xs font-semibold text-content-secondary hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-50" disabled={page >= jobPage.total_pages} onClick={() => setPage(current => current + 1)}>Next</button>
-          </div>
-        </div>
-      )}
 
       {selectedJob && (
         <JobDetailsModal 
@@ -170,3 +176,14 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
+function Pagination({ page, pageData, onPageChange }: { page: number; pageData: { page_size: number; total: number; total_pages: number }; onPageChange: (page: number) => void }) {
+  return <div className="mt-4 flex flex-col items-center justify-between gap-3 border-t border-border-default pt-4 sm:flex-row">
+    <p className="text-xs text-content-tertiary">Showing {(page - 1) * pageData.page_size + 1}-{Math.min(page * pageData.page_size, pageData.total)} of {pageData.total}</p>
+    <div className="flex items-center gap-2">
+      <button type="button" className="rounded-md border border-border-default px-3 py-1.5 text-xs font-semibold text-content-secondary hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-50" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Previous</button>
+      <span className="text-xs font-semibold text-content-secondary">Page {page} of {pageData.total_pages}</span>
+      <button type="button" className="rounded-md border border-border-default px-3 py-1.5 text-xs font-semibold text-content-secondary hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-50" disabled={page >= pageData.total_pages} onClick={() => onPageChange(page + 1)}>Next</button>
+    </div>
+  </div>;
+}

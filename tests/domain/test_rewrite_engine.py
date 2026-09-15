@@ -59,6 +59,6 @@ def test_rewrite_reports_metadata_phase_after_all_chunks():
     ai = FakeAI()
     phases = []
 
-    RewriteEngine(ai).rewrite("Old", "source", "English", lambda index, total, phase: phases.append(phase))
+    RewriteEngine(ai).rewrite("Old", "source", "English", lambda index, total, phase, meta: phases.append(phase))
 
-    assert phases == ["rewriting", "metadata"]
+    assert phases == ["rewriting", "rewriting", "metadata"]

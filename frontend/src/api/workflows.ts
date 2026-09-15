@@ -1,8 +1,8 @@
 import client from './client';
 import type { ContentDraft } from './types';
 
-export const getDrafts = (params?: { kind?: string; pipeline_id?: string }) =>
-  client.get<ContentDraft[]>('/content-drafts', { params });
+export const getDrafts = (params?: { kind?: string; pipeline_id?: string; page?: number; page_size?: number }) =>
+  client.get<ContentDraft[] | { items: ContentDraft[]; total: number; page: number; page_size: number }>('/content-drafts', { params });
 export const getPipelineCategories = (id: string) =>
   client.get<Array<{ id: string | number; name: string; count: number }>>(`/pipelines/${id}/wp-categories`);
 export const getDraft = (id: string) => client.get<ContentDraft>(`/content-drafts/${id}`);
@@ -20,7 +20,7 @@ export const uploadDraftImage = (id: string, image: File) => {
 export const publishDraft = (id: string, confirmed: boolean) =>
   client.post<ContentDraft>(`/content-drafts/${id}/publish`, { confirmed });
 
-export const startRewrite = (pipelineId: string, sourceUrl: string) =>
-  client.post<{ job_id: string; draft_id: string; status: string }>('/rewrite-jobs', { pipeline_id: pipelineId, source_url: sourceUrl });
+export const startRewrite = (pipelineId: string, sourceUrl: string, rerunFromJobId?: string) =>
+  client.post<{ job_id: string; draft_id: string; status: string }>('/rewrite-jobs', { pipeline_id: pipelineId, source_url: sourceUrl, ...(rerunFromJobId ? { rerun_from_job_id: rerunFromJobId } : {}) });
 export const startGeneration = (pipelineId: string) =>
   client.post<{ job_id: string; draft_id: string; status: string }>('/generation-jobs', { pipeline_id: pipelineId });

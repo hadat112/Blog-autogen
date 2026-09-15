@@ -16,9 +16,10 @@ def get_jobs(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     workflow_type: Optional[str] = None,
+    status_group: Optional[str] = Query(None, pattern="^(active|history)$"),
     db: Session = Depends(get_db),
 ):
-    return JobService(db).list_jobs(page=page, page_size=page_size, workflow_type=workflow_type)
+    return JobService(db).list_jobs(page=page, page_size=page_size, workflow_type=workflow_type, status_group=status_group)
 
 
 @router.get("/jobs/{id}", response_model=schemas.JobResponse)

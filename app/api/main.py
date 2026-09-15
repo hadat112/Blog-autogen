@@ -1,4 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +13,7 @@ from app.db.session import SessionLocal
 from app.db.migrations import run_migrations
 from app.services.workflow_job_service import WorkflowJobService
 from app.services.job_retention_service import JobRetentionService
+from app.services.error_sanitizer import sanitize_error
 
 
 run_migrations(engine, Base.metadata)
@@ -19,6 +23,36 @@ with SessionLocal() as db:
     JobRetentionService(db).prune()
 
 app = FastAPI(title="Story Autogen API")
+
+
+def _error_code(status_code: int):
+    return {
+        400: "bad_request",
+        401: "unauthorized",
+        403: "forbidden",
+        404: "not_found",
+        409: "conflict",
+        422: "validation_error",
+        502: "upstream_error",
+    }.get(status_code, "request_error")
+
+
+@app.exception_handler(HTTPException)
+async def http_error_handler(request: Request, exc: HTTPException):
+    detail = sanitize_error(exc.detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        headers=exc.headers,
+        content={"code": _error_code(exc.status_code), "message": detail, "detail": detail},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content=jsonable_encoder({"code": "validation_error", "message": "Request validation failed", "detail": exc.errors()}),
+    )
 
 app.add_middleware(
     CORSMiddleware,

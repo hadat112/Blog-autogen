@@ -1,11 +1,11 @@
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.api.workflow_schemas import DraftInput, DraftResponse, DraftUpdate, PublishDraftInput
+from app.api.workflow_schemas import DraftInput, DraftListResponse, DraftResponse, DraftUpdate, PublishDraftInput
 from app.db import models
 from app.db.session import get_db
 from app.services.content_draft_service import ContentDraftService, DraftConflictError
@@ -18,9 +18,12 @@ from app.services.account_service import fetch_wp_categories
 router = APIRouter(prefix="/content-drafts", tags=["content drafts"])
 
 
-@router.get("", response_model=List[DraftResponse])
-def list_drafts(kind: Optional[str] = None, pipeline_id: Optional[str] = None, db: Session = Depends(get_db)):
-    return ContentDraftService(db).list(kind=kind, pipeline_id=pipeline_id)
+@router.get("", response_model=Union[List[DraftResponse], DraftListResponse])
+def list_drafts(kind: Optional[str] = None, pipeline_id: Optional[str] = None, page: Optional[int] = None, page_size: int = 20, db: Session = Depends(get_db)):
+    service = ContentDraftService(db)
+    if page is None:
+        return service.list(kind=kind, pipeline_id=pipeline_id)
+    return service.list_page(kind=kind, pipeline_id=pipeline_id, page=page, page_size=page_size)
 
 
 @router.post("", response_model=DraftResponse)

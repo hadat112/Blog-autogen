@@ -62,6 +62,7 @@ class JobCapabilities(BaseModel):
 class RewriteJobInput(BaseModel):
     pipeline_id: str
     source_url: str = Field(min_length=8)
+    rerun_from_job_id: Optional[str] = None
 
 
 class GenerationJobInput(BaseModel):

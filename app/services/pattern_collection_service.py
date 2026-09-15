@@ -8,6 +8,7 @@ from app.domain.theme_matcher import match_theme_tags
 from app.services.ai_client_factory import create_ai_client
 from app.services.article_service import ArticleService
 from app.services.workflow_job_service import WorkflowJobService
+from app.services.error_sanitizer import sanitize_error
 from app.integrations.wordpress.source import WordPressSourceGateway
 
 
@@ -72,7 +73,7 @@ class PatternCollectionService:
                 jobs.complete(job_id, {"article_id": article.id})
             except Exception as exc:
                 article.analysis_status = "failed"
-                article.analysis_error = str(exc)[:500]
+                article.analysis_error = sanitize_error(str(exc))[:500]
                 article.updated_at = datetime.utcnow()
                 db.commit()
                 jobs.fail(job_id, exc)

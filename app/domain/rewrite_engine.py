@@ -1,3 +1,5 @@
+from time import monotonic
+
 from app.domain.content_validation import caption_matches_prefix, parse_json_object
 from app.integrations.ai.openai_compatible import _split_text_chunks
 
@@ -38,8 +40,9 @@ class RewriteEngine:
         system = REWRITE_SYSTEM_PROMPT.format(language=language)
         turns = []
         for index, chunk in enumerate(chunks, start=1):
+            started_at = monotonic()
             if progress:
-                progress(index, len(chunks), "rewriting")
+                progress(index, len(chunks), "rewriting", {"event": "start", "word_count": len(chunk.split())})
             messages = _history_messages(system, turns)
             messages.append({
                 "role": "user",
@@ -54,10 +57,16 @@ class RewriteEngine:
             if not value:
                 raise ValueError(f"AI returned an empty rewrite for chunk {index}")
             turns.append((chunk, value))
+            if progress:
+                progress(index, len(chunks), "rewriting", {
+                    "event": "done",
+                    "word_count": len(chunk.split()),
+                    "elapsed_ms": round((monotonic() - started_at) * 1000),
+                })
 
         story = "\n\n".join(rewritten for _, rewritten in turns).strip()
         if progress:
-            progress(len(chunks), len(chunks), "metadata")
+            progress(len(chunks), len(chunks), "metadata", None)
         final_messages = _history_messages(system, turns)
         final_messages.append({
             "role": "user",

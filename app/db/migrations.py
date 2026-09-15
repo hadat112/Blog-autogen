@@ -16,6 +16,7 @@ MIGRATIONS = (
     (3, "seed initial theme rules"),
     (4, "add workflow query indexes"),
     (5, "add direct WordPress account to content drafts"),
+    (6, "add job and article pagination indexes"),
 )
 
 
@@ -127,7 +128,20 @@ def _migration_5(connection):
         _add_column(connection, "content_drafts", "wp_account_id VARCHAR")
 
 
-MIGRATION_FUNCTIONS = {1: _migration_1, 2: _migration_2, 3: _migration_3, 4: _migration_4, 5: _migration_5}
+def _migration_6(connection):
+    statements = (
+        "CREATE INDEX IF NOT EXISTS ix_jobs_status_start_time ON jobs(status, start_time)",
+        "CREATE INDEX IF NOT EXISTS ix_jobs_workflow_start_time ON jobs(workflow_type, start_time)",
+        "CREATE INDEX IF NOT EXISTS ix_articles_status_updated_at ON articles(analysis_status, updated_at)",
+    )
+    tables = set(inspect(connection).get_table_names())
+    for statement in statements:
+        table = statement.split(" ON ", 1)[1].split("(", 1)[0]
+        if table in tables:
+            connection.execute(text(statement))
+
+
+MIGRATION_FUNCTIONS = {1: _migration_1, 2: _migration_2, 3: _migration_3, 4: _migration_4, 5: _migration_5, 6: _migration_6}
 
 
 def run_migrations(engine, metadata, backup_dir=None):
