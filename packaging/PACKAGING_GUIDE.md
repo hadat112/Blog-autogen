@@ -35,7 +35,7 @@ Run this on your Mac or development machine:
 Output:
 
 ```text
-release/StoryAutogen-Windows-<YYYY-MM-DD-HHMMSS>.zip
+release/StoryAutogen-Windows-v<MAJOR.MINOR.PATCH>.zip
 ```
 
 Send this zip to Windows users.
@@ -51,7 +51,7 @@ Run:
 Output:
 
 ```text
-release/StoryAutogen-Mac-<YYYY-MM-DD-HHMMSS>.zip
+release/StoryAutogen-Mac-v<MAJOR.MINOR.PATCH>.zip
 ```
 
 Send this zip to Mac users.
@@ -67,7 +67,7 @@ User requirements:
 
 Steps:
 
-1. Extract the timestamped `StoryAutogen-Windows-<YYYY-MM-DD-HHMMSS>.zip`.
+1. Extract the versioned `StoryAutogen-Windows-v<MAJOR.MINOR.PATCH>.zip`.
 2. Double-click `install_windows.bat` once.
 3. Double-click `run.bat` to start the app.
 4. Keep the black terminal window open.
@@ -84,7 +84,7 @@ User requirements:
 
 Steps:
 
-1. Extract the timestamped `StoryAutogen-Mac-<YYYY-MM-DD-HHMMSS>.zip`.
+1. Extract the versioned `StoryAutogen-Mac-v<MAJOR.MINOR.PATCH>.zip`.
 2. Right-click `install_mac.command`, then choose `Open`.
 3. Right-click `run_mac.command`, then choose `Open`.
 4. Keep the Terminal window open.

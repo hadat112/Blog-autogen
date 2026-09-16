@@ -9,7 +9,7 @@ from app.db import models
 from app.db.session import get_db
 from app.domain.workflow_runner import workflow_runner
 from app.services.article_service import normalize_source_url
-from app.services.rewrite_workflow_service import RewriteWorkflowService
+from app.services.article_workflow_service import ArticleWorkflowService
 from app.services.workflow_job_service import WorkflowJobService
 
 
@@ -60,7 +60,7 @@ async def start_rewrite(data: RewriteJobInput, db: Session = Depends(get_db)):
         db.commit()
 
     async def operation():
-        await asyncio.to_thread(RewriteWorkflowService.execute, job.id, draft.id)
+        await asyncio.to_thread(ArticleWorkflowService.execute, job.id, draft.id, mode="v2")
 
     workflow_runner.start(job.id, operation)
     return {"job_id": job.id, "draft_id": draft.id, "status": job.status}

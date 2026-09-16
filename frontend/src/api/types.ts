@@ -100,7 +100,7 @@ export interface ContentDraft {
   id: string;
   pipeline_id?: string | null;
   wp_account_id?: string | null;
-  kind: 'rewrite' | 'generated' | 'manual';
+  kind: 'rewrite' | 'generated' | 'manual' | 'article_workflow' | 'article_v1' | 'article_v2';
   source_url?: string | null;
   language?: string | null;
   title: string;

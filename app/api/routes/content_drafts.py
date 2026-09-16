@@ -137,6 +137,9 @@ def publish_draft(draft_id: str, data: PublishDraftInput, db: Session = Depends(
         "manual": "wp_publish",
         "rewrite": "rewrite",
         "generated": "generate_story",
+        "article_workflow": "article_workflow",
+        "article_v1": "article_v1",
+        "article_v2": "article_v2",
     }[draft.kind]
     job = WorkflowJobService(db).create(draft.pipeline_id, workflow_type, draft_id=draft.id)
     jobs = WorkflowJobService(db)

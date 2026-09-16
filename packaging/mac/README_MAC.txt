@@ -14,8 +14,8 @@ Requirements
 Install from Finder
 -------------------
 
-1. Unzip the timestamped StoryAutogen-Mac-<YYYY-MM-DD-HHMMSS>.zip. Do not move the
-   individual files out of the extracted StoryAutogen-Mac-<YYYY-MM-DD-HHMMSS>
+1. Unzip the versioned StoryAutogen-Mac-v<MAJOR.MINOR.PATCH>.zip. Do not move the
+   individual files out of the extracted StoryAutogen-Mac-v<MAJOR.MINOR.PATCH>
    folder.
 2. Install Python 3.9+ from https://www.python.org/downloads/macos/ if needed.
 3. In Finder, right-click install_mac.command and choose Open.
@@ -27,7 +27,7 @@ Install from Finder
 Run from Terminal to see errors
 --------------------------------
 
-Open Terminal, drag the extracted StoryAutogen-Mac-<YYYY-MM-DD-HHMMSS> folder into
+Open Terminal, drag the extracted StoryAutogen-Mac-v<MAJOR.MINOR.PATCH> folder into
 the Terminal window, press Enter, then run:
 
   ./install_mac.command

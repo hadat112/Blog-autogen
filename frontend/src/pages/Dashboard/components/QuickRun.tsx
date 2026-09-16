@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Send, Zap, WandSparkles } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { getPipelines, runPipeline } from '../../../api/client';
-import { startRewrite } from '../../../api/workflows';
+import { getPipelines } from '../../../api/client';
+import { startArticleWorkflow } from '../../../api/workflows';
 import { Card, CardHeader, CardTitle, CardContent } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
@@ -33,9 +33,9 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
     },
   });
 
-  const availablePipelines = version === 'v2'
-    ? pipelines.filter(pipeline => Boolean(pipeline.step_accounts?.ai) && Boolean(pipeline.step_accounts?.wp))
-    : pipelines;
+  const availablePipelines = pipelines.filter(
+    pipeline => Boolean(pipeline.step_accounts?.ai) && Boolean(pipeline.step_accounts?.wp)
+  );
 
   useEffect(() => {
     if (availablePipelines.length > 0 && !availablePipelines.some(pipeline => pipeline.id === selectedPipeline)) {
@@ -44,23 +44,26 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
   }, [availablePipelines, selectedPipeline]);
 
   const runMutation = useMutation({
-    mutationFn: (data: { pipelineId: string; prompt: string }) =>
-      version === 'v2'
-        ? startRewrite(data.pipelineId, data.prompt)
-        : runPipeline(data.pipelineId, { prompt: data.prompt }),
+    mutationFn: (data: { pipelineId: string; sourceUrl: string }) =>
+      startArticleWorkflow(data.pipelineId, data.sourceUrl, version),
     onSuccess: (response) => {
       setInput('');
       if (onRunStarted) onRunStarted(response.data.job_id);
     },
     onError: (error: any) => {
-      alert('Failed to start pipeline: ' + (error.response?.data?.detail || error.message));
+      alert('Failed to start workflow: ' + (error.response?.data?.detail || error.message));
     },
   });
 
   const handleRun = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPipeline || !input.trim()) return;
-    runMutation.mutate({ pipelineId: selectedPipeline, prompt: input.trim() });
+    const trimmed = input.trim();
+    if (!selectedPipeline || !trimmed) return;
+    if (!/^https?:\/\//i.test(trimmed)) {
+      alert('Please enter a valid HTTP or HTTPS article URL.');
+      return;
+    }
+    runMutation.mutate({ pipelineId: selectedPipeline, sourceUrl: trimmed });
   };
 
   const handlePipelineChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -108,18 +111,18 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
               {availablePipelines.map(p => (
                 <option key={p.id} value={p.id}>{p.name} ({p.language})</option>
               ))}
-              {availablePipelines.length === 0 && <option value="">{version === 'v2' ? 'No AI + WP pipeline found' : 'No pipelines found'}</option>}
+              {availablePipelines.length === 0 && <option value="">No AI + WP pipeline found</option>}
             </Select>
           </div>
           
           <div className="flex-[2] w-full space-y-1.5">
-            <label className="text-[10px] font-bold text-content-tertiary uppercase tracking-widest ml-0.5">Content Input (URL / Prompt)</label>
+            <label className="text-[10px] font-bold text-content-tertiary uppercase tracking-widest ml-0.5">Source Article URL</label>
             <div className="relative group">
               <Input 
                 ref={inputRef}
                 size="default"
                 className="pr-12 bg-surface-subtle focus:bg-surface transition-all border-border-default group-hover:border-accent/50"
-                placeholder="Paste an article URL or enter a creative prompt..."
+                placeholder="Paste an article URL (https://...)..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 disabled={runMutation.isPending}

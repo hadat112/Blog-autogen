@@ -9,11 +9,27 @@ from app.services.job_retention_service import JobRetentionService
 class WorkflowRunner:
     def __init__(self):
         self.active_jobs = {}
+        self.queue = []
+        self.worker_task = None
 
     def start(self, job_id, operation):
-        task = asyncio.create_task(self._run(job_id, operation))
-        self.active_jobs[job_id] = task
-        return task
+        self.queue.append((job_id, operation))
+        if self.worker_task is None or self.worker_task.done():
+            self.worker_task = asyncio.create_task(self._drain_queue())
+        return self.worker_task
+
+    async def _drain_queue(self):
+        while self.queue:
+            job_id, operation = self.queue.pop(0)
+            task = asyncio.create_task(self._run(job_id, operation))
+            self.active_jobs[job_id] = task
+            try:
+                await task
+            except asyncio.CancelledError:
+                # _run records cancellation; keep the queue moving.
+                pass
+            finally:
+                self.active_jobs.pop(job_id, None)
 
     async def _run(self, job_id, operation):
         try:
@@ -46,7 +62,12 @@ class WorkflowRunner:
     async def cancel(self, job_id):
         task = self.active_jobs.get(job_id)
         if not task:
-            return None
+            queued = next((item for item in self.queue if item[0] == job_id), None)
+            if not queued:
+                return None
+            self.queue.remove(queued)
+            self._mark_cancelled(job_id)
+            return {"status": "cancelled"}
         task.cancel()
         try:
             await task

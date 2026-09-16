@@ -163,7 +163,7 @@ For non-technical users, do not ask them to run Node.js or development commands.
 Give the user:
 
 ```text
-StoryAutogen-Windows-<YYYY-MM-DD-HHMMSS>.zip
+StoryAutogen-Windows-v<MAJOR.MINOR.PATCH>.zip
 ```
 
 They should:
@@ -186,7 +186,7 @@ Requirements on the user's Windows machine:
 Give the user:
 
 ```text
-StoryAutogen-Mac-<YYYY-MM-DD-HHMMSS>.zip
+StoryAutogen-Mac-v<MAJOR.MINOR.PATCH>.zip
 ```
 
 They should:
@@ -233,7 +233,7 @@ On a build machine with Node 20.19+ or 22.12+:
 Output:
 
 ```text
-release/StoryAutogen-Windows-<YYYY-MM-DD-HHMMSS>.zip
+release/StoryAutogen-Windows-v<MAJOR.MINOR.PATCH>.zip
 ```
 
 ### Build macOS Release
@@ -247,7 +247,7 @@ On a build machine with Node 20.19+ or 22.12+:
 Output:
 
 ```text
-release/StoryAutogen-Mac-<YYYY-MM-DD-HHMMSS>.zip
+release/StoryAutogen-Mac-v<MAJOR.MINOR.PATCH>.zip
 ```
 
 The detailed packaging checklist is in:

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import { cancelJob, getJobs, runPipeline } from '../../api/client';
-import { startRewrite } from '../../api/workflows';
+import { startArticleWorkflow, startRewrite } from '../../api/workflows';
 import QuickRun from './components/QuickRun';
 import JobCard from './components/JobCard';
 import JobDetailsModal from './components/JobDetailsModal';
@@ -32,13 +32,14 @@ const Dashboard = () => {
   const [rerunningJobId, setRerunningJobId] = useState<string | null>(null);
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
   const [workflowFilter, setWorkflowFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [activePage, setActivePage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
 
   const activeQuery = useQuery({
-    queryKey: ['jobs', 'active', activePage, workflowFilter],
+    queryKey: ['jobs', 'active', activePage, workflowFilter, statusFilter],
     queryFn: async () => {
-      const { data } = await getJobs({ page: activePage, page_size: 9, workflow_type: workflowFilter, status_group: 'active' });
+      const { data } = await getJobs({ page: activePage, page_size: 9, workflow_type: workflowFilter, status_group: 'active', status: statusFilter === 'all' ? undefined : statusFilter as 'success' | 'failed' | 'cancelled' });
       return data;
     },
     placeholderData: keepPreviousData,
@@ -46,13 +47,14 @@ const Dashboard = () => {
     refetchInterval: 3000, // Poll every 3 seconds
   });
   const historyQuery = useQuery({
-    queryKey: ['jobs', 'history', historyPage, workflowFilter],
+    queryKey: ['jobs', 'history', historyPage, workflowFilter, statusFilter],
     queryFn: async () => {
-      const { data } = await getJobs({ page: historyPage, page_size: 9, workflow_type: workflowFilter, status_group: 'history' });
+      const { data } = await getJobs({ page: historyPage, page_size: 9, workflow_type: workflowFilter, status_group: 'history', status: statusFilter === 'all' ? undefined : statusFilter as 'success' | 'failed' | 'cancelled' });
       return data;
     },
     placeholderData: keepPreviousData,
     staleTime: 5000,
+    refetchInterval: 3000, // Keep recent activity in sync when active jobs finish
   });
 
   const activeJobs = activeQuery.data?.items ?? [];
@@ -76,8 +78,11 @@ const Dashboard = () => {
       if (!prompt) {
         throw new Error('Job input was not found in logs');
       }
-      if (job.workflow_type === 'rewrite') {
-        return startRewrite(job.pipeline_id, prompt, job.id);
+      if (job.workflow_type === 'article_v2' || job.workflow_type === 'rewrite') {
+        return startArticleWorkflow(job.pipeline_id, prompt, 'v2', job.id);
+      }
+      if (job.workflow_type === 'article_v1') {
+        return startArticleWorkflow(job.pipeline_id, prompt, 'v1', job.id);
       }
       return runPipeline(job.pipeline_id, { prompt, rerun_from_job_id: job.id });
     },
@@ -109,7 +114,7 @@ const Dashboard = () => {
     <div className="space-y-8">
       <QuickRun onRunStarted={() => refetch()} />
 
-      <div className="flex justify-end"><label className="w-full max-w-xs text-sm font-medium text-content-secondary">Workflow filter<Select className="mt-1" value={workflowFilter} onChange={event => { setWorkflowFilter(event.target.value); setActivePage(1); setHistoryPage(1); }}><option value="all">All workflows</option><option value="legacy">V1</option><option value="rewrite">V2</option><option value="generate_story">Generate Story</option><option value="pattern_analysis">Pattern Analysis</option><option value="wp_publish">WordPress Publisher</option></Select></label></div>
+      <div className="flex flex-col justify-end gap-3 sm:flex-row"><label className="w-full max-w-xs text-sm font-medium text-content-secondary">Workflow filter<Select className="mt-1" value={workflowFilter} onChange={event => { setWorkflowFilter(event.target.value); setActivePage(1); setHistoryPage(1); }}><option value="all">All workflows</option><option value="legacy">V1</option><option value="rewrite">V2</option><option value="generate_story">Generate Story</option><option value="pattern_analysis">Pattern Analysis</option><option value="wp_publish">WordPress Publisher</option></Select></label><label className="w-full max-w-xs text-sm font-medium text-content-secondary">Status filter<Select className="mt-1" value={statusFilter} onChange={event => { setStatusFilter(event.target.value); setActivePage(1); setHistoryPage(1); }}><option value="all">All statuses</option><option value="success">Success</option><option value="failed">Error</option><option value="cancelled">Cancelled</option></Select></label></div>
 
       <div className="space-y-4">
         <h3 className="text-xl font-bold text-content-primary flex items-center space-x-2">

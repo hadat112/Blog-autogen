@@ -62,7 +62,7 @@ wheels = [
 
 [[package]]
 name = "blog-autogen"
-version = "1.0.0"
+version = "1.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi", version = "0.128.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },

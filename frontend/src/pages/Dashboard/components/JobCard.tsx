@@ -106,7 +106,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
                 {job.status.replace('_', ' ')}
               </span>
               <span className="text-[10px] text-content-tertiary font-mono">#{job.id.slice(0, 8)}</span>
-              <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-content-secondary">{job.workflow_type === 'legacy' || !job.workflow_type ? 'V1' : job.workflow_type === 'rewrite' ? 'V2' : job.workflow_type.replaceAll('_', ' ')}</span>
+              <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-content-secondary">{job.workflow_type === 'legacy' || job.workflow_type === 'article_v1' || !job.workflow_type ? 'V1' : job.workflow_type === 'rewrite' || job.workflow_type === 'article_v2' ? 'V2' : job.workflow_type.replaceAll('_', ' ')}</span>
             </div>
             <h4 className="font-bold text-content-primary truncate mt-1 text-sm">{job.pipeline_name || 'Pipeline Run'}</h4>
           </div>

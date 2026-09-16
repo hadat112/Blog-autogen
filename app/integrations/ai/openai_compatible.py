@@ -728,7 +728,7 @@ class OpenAICompatibleAIClient(BaseAI):
         language: str = "Ukrainian",
         progress_callback=None,
     ) -> dict:
-        translated_title = self._translate_text_with_retry(title, language, article_title=title)
+        translated_title = self.translate_title(title, language)
         chunks = _split_text_chunks(content, max_chars=self.translation_chunk_size)
         total_words = _word_count(content)
         translated_chunks = self._translate_chunks(
@@ -745,6 +745,10 @@ class OpenAICompatibleAIClient(BaseAI):
             "caption": "",
             "image_url": (image_url or "").strip(),
         }
+
+    def translate_title(self, title: str, language: str) -> str:
+        """Translate a headline directly, preserving its meaning and structure."""
+        return self._translate_text_with_retry(title, language, article_title=title)
 
     def _translate_chunks_sequential(
         self,

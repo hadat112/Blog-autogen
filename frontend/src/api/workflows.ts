@@ -22,5 +22,9 @@ export const publishDraft = (id: string, confirmed: boolean) =>
 
 export const startRewrite = (pipelineId: string, sourceUrl: string, rerunFromJobId?: string) =>
   client.post<{ job_id: string; draft_id: string; status: string }>('/rewrite-jobs', { pipeline_id: pipelineId, source_url: sourceUrl, ...(rerunFromJobId ? { rerun_from_job_id: rerunFromJobId } : {}) });
+export const startArticleWorkflow = (pipelineId: string, sourceUrl: string, mode: 'v1' | 'v2' = 'v2', rerunFromJobId?: string) =>
+  client.post<{ job_id: string; draft_id: string; status: string }>('/article-workflows/run', { pipeline_id: pipelineId, source_url: sourceUrl, mode, ...(rerunFromJobId ? { rerun_from_job_id: rerunFromJobId } : {}) });
+export const retryArticleWorkflow = (jobId: string) =>
+  client.post<{ job_id: string; draft_id: string; status: string }>(`/article-workflows/${jobId}/retry`);
 export const startGeneration = (pipelineId: string) =>
   client.post<{ job_id: string; draft_id: string; status: string }>('/generation-jobs', { pipeline_id: pipelineId });

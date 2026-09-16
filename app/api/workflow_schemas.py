@@ -4,7 +4,7 @@ from typing import List, Literal, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-DraftKind = Literal["rewrite", "generated", "manual"]
+DraftKind = Literal["rewrite", "generated", "manual", "article_workflow", "article_v1", "article_v2"]
 
 
 class DraftInput(BaseModel):
@@ -62,6 +62,13 @@ class JobCapabilities(BaseModel):
 class RewriteJobInput(BaseModel):
     pipeline_id: str
     source_url: str = Field(min_length=8)
+    rerun_from_job_id: Optional[str] = None
+
+
+class ArticleWorkflowRunInput(BaseModel):
+    pipeline_id: str
+    source_url: str = Field(min_length=8)
+    mode: Literal["v1", "v2"] = "v2"
     rerun_from_job_id: Optional[str] = None
 
 

@@ -32,7 +32,7 @@ export const getSettings = () => client.get<AppSettings>('/settings');
 export const updateSettings = (data: AppSettings) =>
   client.put<AppSettings>('/settings', data);
 
-export const getJobs = (params?: { page?: number; page_size?: number; workflow_type?: string; status_group?: 'active' | 'history' }) =>
+export const getJobs = (params?: { page?: number; page_size?: number; workflow_type?: string; status_group?: 'active' | 'history'; status?: 'success' | 'failed' | 'cancelled' }) =>
   client.get<JobPage>('/jobs', { params });
 export const getJob = (id: string) => client.get<Job>(`/jobs/${id}`);
 export const syncJob = (id: string) => client.post(`/jobs/${id}/sync`);

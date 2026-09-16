@@ -15,11 +15,15 @@ class FakeAI:
             return {"content": json.dumps({"title": "New title", "caption": "First rewrite"})}
         return {"content": "First rewrite" if len(self.calls) == 1 else "Second rewrite"}
 
+    def translate_title(self, title, language):
+        return f"Translated {title}"
+
 
 def test_rewrite_keeps_full_source_and_rewritten_message_history():
     ai = FakeAI()
     source = "original-one\n\noriginal-two"
     result = RewriteEngine(ai, chunk_size=12).rewrite("Old", source, "Italian")
+    assert result["title"] == "Translated Old"
     assert result["caption"] == "First rewrite"
     second_messages = ai.calls[1]
     assert any(message["role"] == "assistant" and message["content"] == "First rewrite" for message in second_messages)
@@ -62,3 +66,15 @@ def test_rewrite_reports_metadata_phase_after_all_chunks():
     RewriteEngine(ai).rewrite("Old", "source", "English", lambda index, total, phase, meta: phases.append(phase))
 
     assert phases == ["rewriting", "rewriting", "metadata"]
+
+
+def test_rewrite_normalizes_dialogue_quotes():
+    class QuotesAI(FakeAI):
+        def chat(self, messages, **kwargs):
+            if "Return JSON only" in messages[-1]["content"]:
+                return {"content": '{"title":"New","caption":"„Ahoj,“ řekla."}'}
+            return {"content": '"Ahoj," řekla.'}
+
+    res = RewriteEngine(QuotesAI()).rewrite("Old", "source", "Czech")
+    assert res["content"] == "„Ahoj,“ řekla."
+    assert res["caption"] == "„Ahoj,“ řekla."

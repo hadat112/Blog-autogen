@@ -14,14 +14,21 @@ class JobService:
     def __init__(self, db: Session):
         self.db = db
 
-    def list_jobs(self, page: int = 1, page_size: int = 10, workflow_type: Optional[str] = None, status_group: Optional[str] = None):
+    def list_jobs(self, page: int = 1, page_size: int = 10, workflow_type: Optional[str] = None, status_group: Optional[str] = None, status: Optional[str] = None):
         jobs_query = self.db.query(models.Job)
         if workflow_type and workflow_type != "all":
-            jobs_query = jobs_query.filter(models.Job.workflow_type == workflow_type)
+            if workflow_type == "legacy":
+                jobs_query = jobs_query.filter(models.Job.workflow_type.in_(["legacy", "article_v1"]))
+            elif workflow_type == "rewrite":
+                jobs_query = jobs_query.filter(models.Job.workflow_type.in_(["rewrite", "article_v2"]))
+            else:
+                jobs_query = jobs_query.filter(models.Job.workflow_type == workflow_type)
         if status_group == "active":
             jobs_query = jobs_query.filter(models.Job.status.in_(("queued", "running")))
         elif status_group == "history":
             jobs_query = jobs_query.filter(~models.Job.status.in_(("queued", "running")))
+        if status and status != "all":
+            jobs_query = jobs_query.filter(models.Job.status == status)
 
         total = jobs_query.count()
         results = jobs_query.with_entities(models.Job, models.Pipeline.name).outerjoin(
@@ -68,7 +75,7 @@ class JobService:
         job.outputs = outputs
         job.capabilities = {
             "can_cancel": job.status in {"queued", "running"},
-            "can_rerun": (job.workflow_type or "legacy") in {"legacy", "rewrite"} and job.status == "failed" and not job.rerun_job_id,
+            "can_rerun": (job.workflow_type or "legacy") in {"legacy", "rewrite", "article_v1", "article_v2", "article_workflow"} and job.status in {"failed", "cancelled"} and not job.rerun_job_id,
             "can_open_draft": bool(job.draft_id),
             "can_copy_link": bool(outputs.get("wp_url")),
         }
