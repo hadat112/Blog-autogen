@@ -79,7 +79,13 @@ async def run_article_workflow(data: ArticleWorkflowRunInput, db: Session = Depe
         db.commit()
 
     async def operation():
-        await asyncio.to_thread(ArticleWorkflowService.execute, job.id, draft.id, mode=mode)
+        await asyncio.to_thread(
+            ArticleWorkflowService.execute,
+            job.id,
+            draft.id,
+            mode=mode,
+            use_proxy=data.use_proxy,
+        )
 
     workflow_runner.start(job.id, operation)
     return {"job_id": job.id, "draft_id": draft.id, "status": job.status}

@@ -12,8 +12,16 @@ class SourceArticle:
 
 
 class WordPressSourceGateway:
+    def __init__(self, proxy_url=""):
+        self.proxy_url = proxy_url or ""
+
     def fetch(self, source_url: str) -> SourceArticle:
-        result = extract_article_from_url(source_url, None, translate=False)
+        result = extract_article_from_url(
+            source_url,
+            None,
+            translate=False,
+            proxy_url=self.proxy_url,
+        )
         return SourceArticle(
             title=(result.get("title") or "").strip(),
             content=(result.get("content") or "").strip(),

@@ -79,10 +79,10 @@ const Dashboard = () => {
         throw new Error('Job input was not found in logs');
       }
       if (job.workflow_type === 'article_v2' || job.workflow_type === 'rewrite') {
-        return startArticleWorkflow(job.pipeline_id, prompt, 'v2', job.id);
+        return startArticleWorkflow(job.pipeline_id, prompt, 'v2', false, job.id);
       }
       if (job.workflow_type === 'article_v1') {
-        return startArticleWorkflow(job.pipeline_id, prompt, 'v1', job.id);
+        return startArticleWorkflow(job.pipeline_id, prompt, 'v1', false, job.id);
       }
       return runPipeline(job.pipeline_id, { prompt, rerun_from_job_id: job.id });
     },

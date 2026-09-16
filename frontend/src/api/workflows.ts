@@ -20,10 +20,10 @@ export const uploadDraftImage = (id: string, image: File) => {
 export const publishDraft = (id: string, confirmed: boolean) =>
   client.post<ContentDraft>(`/content-drafts/${id}/publish`, { confirmed });
 
-export const startRewrite = (pipelineId: string, sourceUrl: string, rerunFromJobId?: string) =>
-  client.post<{ job_id: string; draft_id: string; status: string }>('/rewrite-jobs', { pipeline_id: pipelineId, source_url: sourceUrl, ...(rerunFromJobId ? { rerun_from_job_id: rerunFromJobId } : {}) });
-export const startArticleWorkflow = (pipelineId: string, sourceUrl: string, mode: 'v1' | 'v2' = 'v2', rerunFromJobId?: string) =>
-  client.post<{ job_id: string; draft_id: string; status: string }>('/article-workflows/run', { pipeline_id: pipelineId, source_url: sourceUrl, mode, ...(rerunFromJobId ? { rerun_from_job_id: rerunFromJobId } : {}) });
+export const startRewrite = (pipelineId: string, sourceUrl: string, useProxy = false, rerunFromJobId?: string) =>
+  client.post<{ job_id: string; draft_id: string; status: string }>('/rewrite-jobs', { pipeline_id: pipelineId, source_url: sourceUrl, use_proxy: useProxy, ...(rerunFromJobId ? { rerun_from_job_id: rerunFromJobId } : {}) });
+export const startArticleWorkflow = (pipelineId: string, sourceUrl: string, mode: 'v1' | 'v2' = 'v2', useProxy = false, rerunFromJobId?: string) =>
+  client.post<{ job_id: string; draft_id: string; status: string }>('/article-workflows/run', { pipeline_id: pipelineId, source_url: sourceUrl, mode, use_proxy: useProxy, ...(rerunFromJobId ? { rerun_from_job_id: rerunFromJobId } : {}) });
 export const retryArticleWorkflow = (jobId: string) =>
   client.post<{ job_id: string; draft_id: string; status: string }>(`/article-workflows/${jobId}/retry`);
 export const startGeneration = (pipelineId: string) =>

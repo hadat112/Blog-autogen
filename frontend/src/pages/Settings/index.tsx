@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   ChevronRight,
+  Globe2,
   Languages,
   Pencil,
   Plus,
@@ -42,7 +43,7 @@ const concurrencyPresets = [
   { value: 3, label: 'Fast' },
 ];
 
-type SettingsScreen = 'menu' | 'translation' | 'languages';
+type SettingsScreen = 'menu' | 'translation' | 'proxy' | 'languages';
 
 const Settings = () => {
   const queryClient = useQueryClient();
@@ -51,6 +52,8 @@ const Settings = () => {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<LanguageForm>(emptyForm);
   const [settingsForm, setSettingsForm] = useState<AppSettings>({
+    proxy_url: '',
+    proxy_urls: [],
     translation_mode: 'sequential',
     translation_max_concurrency: 2,
     ai_request_timeout: 300,
@@ -70,6 +73,8 @@ const Settings = () => {
     queryFn: async () => {
       const { data } = await getSettings();
       const settings = {
+        proxy_url: data.proxy_url || '',
+        proxy_urls: data.proxy_urls || (data.proxy_url ? [data.proxy_url] : []),
         translation_mode: data.translation_mode || 'sequential',
         translation_max_concurrency: data.translation_max_concurrency || 2,
         ai_request_timeout: data.ai_request_timeout || 300,
@@ -157,6 +162,8 @@ const Settings = () => {
   const saveSettings = (event: FormEvent) => {
     event.preventDefault();
     settingsMutation.mutate({
+      proxy_url: settingsForm.proxy_urls[0] || '',
+      proxy_urls: settingsForm.proxy_urls.map(value => value.trim()).filter(Boolean),
       translation_mode: settingsForm.translation_mode,
       translation_max_concurrency: Math.min(
         8,
@@ -200,6 +207,23 @@ const Settings = () => {
                 <div className="text-sm text-content-secondary">
                   Chunk mode, concurrency, and context behavior.
                 </div>
+              </div>
+            </div>
+            <ChevronRight size={18} className="shrink-0 text-content-secondary" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveScreen('proxy')}
+            className="flex items-center justify-between rounded-md border border-border-default bg-surface p-4 text-left shadow-sm transition-colors hover:bg-surface-subtle"
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-content-primary">
+                <Globe2 size={18} />
+              </div>
+              <div className="min-w-0">
+                <div className="font-semibold text-content-primary">Proxy Settings</div>
+                <div className="text-sm text-content-secondary">Proxy for source article fetching.</div>
               </div>
             </div>
             <ChevronRight size={18} className="shrink-0 text-content-secondary" />
@@ -387,6 +411,46 @@ const Settings = () => {
                 </div>
               </>
             )}
+          </CardContent>
+        </form>
+      </Card>
+      </>
+      )}
+
+      {activeScreen === 'proxy' && (
+      <>
+      <div className="flex items-center gap-3">
+        <Button type="button" variant="outline" size="icon" onClick={() => setActiveScreen('menu')} title="Back to settings">
+          <ArrowLeft size={18} />
+        </Button>
+        <div>
+          <h3 className="text-xl font-bold text-content-primary">Proxy Settings</h3>
+          <p className="text-sm text-content-secondary">Configure a proxy for source article requests.</p>
+        </div>
+      </div>
+      <Card>
+        <CardHeader className="border-b border-border-subtle">
+          <CardTitle className="flex items-center gap-2 text-base"><Globe2 size={18} />Source Fetch Proxy</CardTitle>
+        </CardHeader>
+        <form onSubmit={saveSettings}>
+          <CardContent className="space-y-5 p-5">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-content-primary" htmlFor="proxy-url">Proxy URL</label>
+              <textarea
+                id="proxy-url"
+                value={settingsForm.proxy_urls.join('\n')}
+                onChange={(event) => setSettingsForm({ ...settingsForm, proxy_urls: event.target.value.split('\n') })}
+                placeholder="One proxy per line: host:port:user:password"
+                rows={4}
+                className="flex w-full rounded-md border border-border-default bg-surface-subtle px-3 py-2 text-sm text-content-primary outline-none transition-colors placeholder:text-content-tertiary focus:border-accent focus:bg-surface"
+              />
+              <p className="text-xs leading-5 text-content-secondary">One proxy per line. When Proxy is enabled, they are checked in order and the first working proxy is selected.</p>
+            </div>
+            <div className="flex justify-end">
+              <Button type="submit" className="flex items-center gap-2" disabled={settingsMutation.isPending}>
+                <Save size={16} />Save Proxy
+              </Button>
+            </div>
           </CardContent>
         </form>
       </Card>

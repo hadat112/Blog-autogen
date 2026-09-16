@@ -38,6 +38,12 @@ class Language(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+    key = Column(String, primary_key=True)
+    value = Column(JSON, nullable=False)
+
 class Job(Base):
     __tablename__ = "jobs"
     id = Column(String, primary_key=True, default=generate_uuid)

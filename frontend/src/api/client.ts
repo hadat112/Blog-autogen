@@ -31,6 +31,8 @@ export const updateLanguage = (
 export const getSettings = () => client.get<AppSettings>('/settings');
 export const updateSettings = (data: AppSettings) =>
   client.put<AppSettings>('/settings', data);
+export const checkProxy = (proxyUrls: string[]) =>
+  client.post<{ ok: boolean; proxy_index: number; checked: number }>('/settings/proxy/check', { proxy_urls: proxyUrls });
 
 export const getJobs = (params?: { page?: number; page_size?: number; workflow_type?: string; status_group?: 'active' | 'history'; status?: 'success' | 'failed' | 'cancelled' }) =>
   client.get<JobPage>('/jobs', { params });

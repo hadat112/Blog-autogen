@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Send, Zap, WandSparkles } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { getPipelines } from '../../../api/client';
+import { getPipelines, getSettings } from '../../../api/client';
 import { startArticleWorkflow } from '../../../api/workflows';
 import { Card, CardHeader, CardTitle, CardContent } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
@@ -19,10 +19,14 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
     const saved = window.localStorage.getItem('story-autogen-workflow-version');
     return saved === 'v2' ? 'v2' : 'v1';
   });
+  const [useProxy, setUseProxy] = useState(() => window.localStorage.getItem('story-autogen-source-proxy') === 'true');
 
   useEffect(() => {
     window.localStorage.setItem('story-autogen-workflow-version', version);
   }, [version]);
+  useEffect(() => {
+    window.localStorage.setItem('story-autogen-source-proxy', String(useProxy));
+  }, [useProxy]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: pipelines = [] } = useQuery({
@@ -32,6 +36,17 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
       return data;
     },
   });
+  const { data: appSettings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: async () => (await getSettings()).data,
+  });
+  const proxyConfigured = Boolean(appSettings?.proxy_url?.trim());
+
+  useEffect(() => {
+    if (appSettings && !proxyConfigured && useProxy) {
+      setUseProxy(false);
+    }
+  }, [appSettings, proxyConfigured, useProxy]);
 
   const availablePipelines = pipelines.filter(
     pipeline => Boolean(pipeline.step_accounts?.ai) && Boolean(pipeline.step_accounts?.wp)
@@ -44,8 +59,8 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
   }, [availablePipelines, selectedPipeline]);
 
   const runMutation = useMutation({
-    mutationFn: (data: { pipelineId: string; sourceUrl: string }) =>
-      startArticleWorkflow(data.pipelineId, data.sourceUrl, version),
+    mutationFn: (data: { pipelineId: string; sourceUrl: string; useProxy: boolean }) =>
+      startArticleWorkflow(data.pipelineId, data.sourceUrl, version, data.useProxy),
     onSuccess: (response) => {
       setInput('');
       if (onRunStarted) onRunStarted(response.data.job_id);
@@ -63,7 +78,11 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
       alert('Please enter a valid HTTP or HTTPS article URL.');
       return;
     }
-    runMutation.mutate({ pipelineId: selectedPipeline, sourceUrl: trimmed });
+    if (useProxy && !proxyConfigured) {
+      alert('Configure a proxy URL in Settings before enabling Proxy.');
+      return;
+    }
+    runMutation.mutate({ pipelineId: selectedPipeline, sourceUrl: trimmed, useProxy });
   };
 
   const handlePipelineChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -71,36 +90,57 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
     inputRef.current?.focus();
   };
 
+  const handleProxyToggle = () => {
+    if (!proxyConfigured) {
+      alert('No valid proxy is configured. Open Settings and configure a proxy first.');
+      return;
+    }
+    setUseProxy(value => !value);
+  };
+
   return (
     <Card className="border-border-default shadow-sm overflow-hidden">
-      <CardHeader className="p-5 pb-0">
-        <CardTitle className="text-base font-bold flex items-center space-x-2 text-content-primary">
-          <div className="p-1.5 bg-accent/10 text-accent rounded-md">
+      <CardHeader className="flex-row items-center justify-between gap-3 p-5 pb-0">
+        <CardTitle className="flex min-w-0 items-center space-x-2 text-base font-bold text-content-primary">
+          <div className="shrink-0 rounded-md bg-accent/10 p-1.5 text-accent">
             <Zap size={16} fill="currentColor" />
           </div>
           <span>Run workflow</span>
         </CardTitle>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="flex h-7 rounded-md border border-border-default bg-surface-subtle p-0.5" role="group" aria-label="Version">
+            {(['v1', 'v2'] as const).map(option => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={version === option}
+                onClick={() => setVersion(option)}
+                className={`min-w-10 rounded px-2 text-[10px] font-bold transition-colors ${version === option ? 'bg-surface text-accent shadow-sm' : 'text-content-tertiary hover:text-content-primary'}`}
+              >
+                {option.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={useProxy}
+            aria-disabled={!proxyConfigured}
+            onClick={handleProxyToggle}
+            className={`flex h-7 items-center gap-1.5 rounded-md border px-2 text-[10px] font-bold transition-colors ${!proxyConfigured ? 'cursor-not-allowed border-border-default bg-surface-subtle text-content-tertiary opacity-60' : useProxy ? 'border-accent/40 bg-accent/10 text-accent' : 'border-border-default bg-surface-subtle text-content-tertiary'}`}
+            title={proxyConfigured ? 'Toggle source proxy' : 'Configure a proxy in Settings first'}
+          >
+              <span className={`relative h-3.5 w-6 rounded-full transition-colors ${useProxy ? 'bg-accent' : 'bg-border-strong'}`}>
+                <span className={`absolute left-0.5 top-0.5 h-2.5 w-2.5 rounded-full bg-white shadow transition-transform ${useProxy ? 'translate-x-2.5' : 'translate-x-0'}`} />
+            </span>
+            {useProxy ? 'Proxy ON' : 'Proxy OFF'}
+          </button>
+        </div>
       </CardHeader>
       
       <CardContent className="p-5">
         <form onSubmit={handleRun} className="flex flex-col md:flex-row gap-4 items-end">
-          <div className="w-full space-y-1.5 md:w-auto">
-            <span className="text-[10px] font-bold text-content-tertiary uppercase tracking-widest ml-0.5">Version</span>
-            <div className="flex h-9 rounded-md border border-border-default bg-surface-subtle p-0.5" role="group" aria-label="Version">
-              {(['v1', 'v2'] as const).map(option => (
-                <button
-                  key={option}
-                  type="button"
-                  aria-pressed={version === option}
-                  onClick={() => setVersion(option)}
-                  className={`min-w-12 rounded px-2 text-xs font-bold transition-colors ${version === option ? 'bg-surface text-accent shadow-sm' : 'text-content-tertiary hover:text-content-primary'}`}
-                >
-                  {option.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex-1 w-full space-y-1.5">
+          <div className="w-full space-y-1.5 md:w-52 md:flex-none">
             <label className="text-[10px] font-bold text-content-tertiary uppercase tracking-widest ml-0.5">Select Pipeline</label>
             <Select 
               size="default"

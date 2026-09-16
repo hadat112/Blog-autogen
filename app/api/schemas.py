@@ -30,10 +30,16 @@ class LanguageResponse(LanguageCreate):
     created_at: datetime
 
 class AppSettings(BaseModel):
+    proxy_url: str = ""
+    proxy_urls: List[str] = Field(default_factory=list)
     translation_mode: str = Field(default="sequential")
     translation_max_concurrency: int = Field(default=2, ge=1, le=8)
     ai_request_timeout: int = Field(default=300, ge=30, le=900)
     translation_chunk_size: int = Field(default=6000, ge=1000, le=30000)
+
+
+class ProxyCheckInput(BaseModel):
+    proxy_urls: List[str] = Field(default_factory=list)
 
 class PipelineBase(BaseModel):
     name: str

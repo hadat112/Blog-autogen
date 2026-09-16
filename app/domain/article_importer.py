@@ -184,18 +184,19 @@ def _wp_post_matches_slug(post_json: dict, expected_slug: str) -> bool:
     return True
 
 
-def fetch_wp_post_json(origin_api: str, post_id: str):
+def fetch_wp_post_json(origin_api: str, post_id: str, proxies=None):
     response = requests.get(
         f"{origin_api}/posts/{post_id}",
         params={"_embed": "1"},
         headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
         timeout=30,
+        proxies=proxies,
     )
     response.raise_for_status()
     return response.json()
 
 
-def fetch_wp_post_by_slug(origin_api: str, slug: str):
+def fetch_wp_post_by_slug(origin_api: str, slug: str, proxies=None):
     if not slug:
         return None
     response = requests.get(
@@ -203,6 +204,7 @@ def fetch_wp_post_by_slug(origin_api: str, slug: str):
         params={"slug": slug, "_embed": "1"},
         headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
         timeout=30,
+        proxies=proxies,
     )
     response.raise_for_status()
     posts = response.json()
@@ -229,7 +231,7 @@ def _extract_yoast_image(post_json: dict):
     return ""
 
 
-def _fetch_featured_media_url(origin_api: str, post_json: dict):
+def _fetch_featured_media_url(origin_api: str, post_json: dict, proxies=None):
     media_id = post_json.get("featured_media")
     if not media_id:
         return ""
@@ -238,12 +240,13 @@ def _fetch_featured_media_url(origin_api: str, post_json: dict):
         f"{origin_api}/media/{media_id}",
         headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
         timeout=30,
+        proxies=proxies,
     )
     response.raise_for_status()
     return (response.json() or {}).get("source_url", "")
 
 
-def parse_wp_post_payload(post_json: dict, original_html: str = "", origin_api: str = ""):
+def parse_wp_post_payload(post_json: dict, original_html: str = "", origin_api: str = "", proxies=None):
     title = strip_html_preserve_paragraphs((post_json.get("title") or {}).get("rendered", ""))
     content = strip_html_preserve_paragraphs((post_json.get("content") or {}).get("rendered", ""))
     image_url = (
@@ -254,7 +257,7 @@ def parse_wp_post_payload(post_json: dict, original_html: str = "", origin_api: 
 
     if not image_url and origin_api:
         try:
-            image_url = _fetch_featured_media_url(origin_api, post_json)
+            image_url = _fetch_featured_media_url(origin_api, post_json, proxies=proxies)
         except Exception:
             image_url = ""
 
@@ -284,6 +287,7 @@ def _extract_wp_article_from_response(
     log_callback=None,
     translate: bool = True,
     source_callback=None,
+    proxies=None,
 ):
     origin_api = _wp_api_base(response.url)
     if not origin_api:
@@ -292,21 +296,32 @@ def _extract_wp_article_from_response(
     post_json = None
     try:
         requested_slug = _slug_from_url(response.url)
-        post_json = fetch_wp_post_by_slug(origin_api, requested_slug)
+        if proxies:
+            post_json = fetch_wp_post_by_slug(origin_api, requested_slug, proxies=proxies)
+        else:
+            post_json = fetch_wp_post_by_slug(origin_api, requested_slug)
         post_id = extract_wp_post_id(response.text, response.url)
         if post_json and not _wp_post_matches_slug(post_json, requested_slug):
             if log_callback:
                 log_callback("Step 2: WordPress slug lookup returned a different post; retrying by post ID.")
             post_json = None
         if not post_json and post_id:
-            post_json = fetch_wp_post_json(origin_api, post_id)
+            if proxies:
+                post_json = fetch_wp_post_json(origin_api, post_id, proxies=proxies)
+            else:
+                post_json = fetch_wp_post_json(origin_api, post_id)
     except Exception:
         return None
 
     if not post_json:
         return None
 
-    fields = parse_wp_post_payload(post_json, original_html=response.text, origin_api=origin_api)
+    fields = parse_wp_post_payload(
+        post_json,
+        original_html=response.text,
+        origin_api=origin_api,
+        proxies=proxies,
+    )
     if not fields["title"] or not fields["content"]:
         return None
 
@@ -352,7 +367,9 @@ def extract_article_from_url(
     log_callback=None,
     translate: bool = True,
     source_callback=None,
+    proxy_url=None,
 ) -> dict:
+    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
     response = requests.get(
         article_url,
         headers={
@@ -361,6 +378,7 @@ def extract_article_from_url(
         },
         timeout=30,
         allow_redirects=True,
+        proxies=proxies,
     )
     response.raise_for_status()
 
@@ -371,6 +389,7 @@ def extract_article_from_url(
         log_callback=log_callback,
         translate=translate,
         source_callback=source_callback,
+        proxies=proxies,
     )
     if article is None and not translate:
         raise ValueError("Repost original requires a WordPress REST article with title and content.")

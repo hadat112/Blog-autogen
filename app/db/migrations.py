@@ -17,6 +17,7 @@ MIGRATIONS = (
     (4, "add workflow query indexes"),
     (5, "add direct WordPress account to content drafts"),
     (6, "add job and article pagination indexes"),
+    (7, "add application settings table"),
 )
 
 
@@ -141,7 +142,22 @@ def _migration_6(connection):
             connection.execute(text(statement))
 
 
-MIGRATION_FUNCTIONS = {1: _migration_1, 2: _migration_2, 3: _migration_3, 4: _migration_4, 5: _migration_5, 6: _migration_6}
+def _migration_7(connection):
+    connection.execute(text(
+        "CREATE TABLE IF NOT EXISTS app_settings "
+        "(key VARCHAR PRIMARY KEY, value JSON NOT NULL)"
+    ))
+
+
+MIGRATION_FUNCTIONS = {
+    1: _migration_1,
+    2: _migration_2,
+    3: _migration_3,
+    4: _migration_4,
+    5: _migration_5,
+    6: _migration_6,
+    7: _migration_7,
+}
 
 
 def run_migrations(engine, metadata, backup_dir=None):

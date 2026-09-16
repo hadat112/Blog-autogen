@@ -51,6 +51,8 @@ export interface Language {
 }
 
 export interface AppSettings {
+  proxy_url: string;
+  proxy_urls: string[];
   translation_mode: "sequential" | "parallel";
   translation_max_concurrency: number;
   ai_request_timeout: number;

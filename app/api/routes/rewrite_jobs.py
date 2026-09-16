@@ -60,7 +60,13 @@ async def start_rewrite(data: RewriteJobInput, db: Session = Depends(get_db)):
         db.commit()
 
     async def operation():
-        await asyncio.to_thread(ArticleWorkflowService.execute, job.id, draft.id, mode="v2")
+        await asyncio.to_thread(
+            ArticleWorkflowService.execute,
+            job.id,
+            draft.id,
+            mode="v2",
+            use_proxy=data.use_proxy,
+        )
 
     workflow_runner.start(job.id, operation)
     return {"job_id": job.id, "draft_id": draft.id, "status": job.status}

@@ -1,4 +1,5 @@
 import os
+from urllib.parse import quote, urlparse
 
 import yaml
 
@@ -8,6 +9,48 @@ DEFAULT_TRANSLATION_MODE = "sequential"
 DEFAULT_TRANSLATION_MAX_CONCURRENCY = 2
 DEFAULT_AI_REQUEST_TIMEOUT = 300
 DEFAULT_TRANSLATION_CHUNK_SIZE = 6000
+
+
+def normalize_proxy_url(value):
+    proxy_url = str(value or "").strip()
+    if not proxy_url:
+        return ""
+    if "://" not in proxy_url:
+        parts = proxy_url.split(":", 3)
+        if len(parts) not in {2, 4} or not parts[0] or not parts[1]:
+            raise ValueError(
+                "Proxy must be http(s)://... or host:port[:username:password]"
+            )
+        host, port = parts[:2]
+        if len(parts) == 4 and (not parts[2] or not parts[3]):
+            raise ValueError("Proxy username and password cannot be empty")
+        credentials = (
+            f"{quote(parts[2], safe='')}:{quote(parts[3], safe='')}@"
+            if len(parts) == 4
+            else ""
+        )
+        proxy_url = f"http://{credentials}{host}:{port}"
+    parsed = urlparse(proxy_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("Proxy URL must use http:// or https:// and include a host")
+    try:
+        parsed.port
+    except ValueError as exc:
+        raise ValueError("Proxy URL contains an invalid port") from exc
+    return proxy_url
+
+
+def normalize_proxy_urls(values):
+    if isinstance(values, str):
+        values = values.splitlines()
+    if values is None:
+        values = []
+    normalized = []
+    for value in values:
+        proxy_url = normalize_proxy_url(value)
+        if proxy_url and proxy_url not in normalized:
+            normalized.append(proxy_url)
+    return normalized
 
 
 def normalize_translation_mode(value):

@@ -13,6 +13,7 @@ from app.services.error_sanitizer import sanitize_error
 from app.services.pattern_collection_service import PatternCollectionService
 from app.services.wordpress_publishing_service import WordPressPublishingService
 from app.services.workflow_job_service import WorkflowJobService
+from app.services.proxy_settings_service import ProxySettingsService
 
 
 def _create_v1_caption(translated_content: str, max_words: int = 50) -> str:
@@ -39,7 +40,7 @@ def _create_v1_caption(translated_content: str, max_words: int = 50) -> str:
 
 class ArticleWorkflowService:
     @staticmethod
-    def execute(job_id: str, draft_id: str, mode: str = "v2", source_gateway=None):
+    def execute(job_id: str, draft_id: str, mode: str = "v2", source_gateway=None, use_proxy: bool = False):
         mode = str(mode or "v2").strip().lower()
         if mode not in {"v1", "v2"}:
             mode = "v2"
@@ -104,7 +105,11 @@ class ArticleWorkflowService:
             try:
                 # Step 2: Source Ingestion & Pattern Collection
                 jobs.progress(job_id, "fetch_source", 10, "Fetching source article")
-                source = (source_gateway or WordPressSourceGateway()).fetch(draft.source_url)
+                if source_gateway:
+                    source = source_gateway.fetch(draft.source_url)
+                else:
+                    proxy_url = ProxySettingsService.get_selected(db) if use_proxy else ""
+                    source = WordPressSourceGateway(proxy_url=proxy_url).fetch(draft.source_url)
                 draft.image_kind = "url" if source.image_url else None
                 draft.image_source = source.image_url or None
                 db.commit()
