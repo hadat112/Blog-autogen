@@ -6,7 +6,7 @@ from app.db.session import SessionLocal
 from app.domain.pattern_analyzer import PatternAnalyzer
 from app.domain.theme_matcher import match_theme_tags
 from app.services.ai_client_factory import create_ai_client
-from app.services.article_service import ArticleService
+from app.services.article_service import ArticleService, normalize_source_url, source_slug
 from app.services.workflow_job_service import WorkflowJobService
 from app.services.error_sanitizer import sanitize_error
 from app.integrations.wordpress.source import WordPressSourceGateway
@@ -17,10 +17,15 @@ class PatternCollectionService:
         self.db = db
 
     def collect(self, article_data, pipeline_id, parent_job_id=None, ai_account_id=None):
+        source_url = normalize_source_url(article_data.get("source_url"))
+        article_service = ArticleService(self.db)
+        existing = article_service.get_by_slug(source_slug(source_url))
+        if existing:
+            return existing, None
         rules = self.db.query(models.ThemeRule).filter(models.ThemeRule.is_active.is_(True)).all()
         tags = match_theme_tags(article_data.get("title"), article_data.get("content"), rules)
-        article = ArticleService(self.db).upsert(
-            article_data.get("source_url"), article_data.get("title"), article_data.get("content"), tags
+        article = article_service.upsert(
+            source_url, article_data.get("title"), article_data.get("content"), tags
         )
         if not ai_account_id:
             article.analysis_status = "failed"

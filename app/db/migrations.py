@@ -18,6 +18,7 @@ MIGRATIONS = (
     (5, "add direct WordPress account to content drafts"),
     (6, "add job and article pagination indexes"),
     (7, "add application settings table"),
+    (8, "add article source slug identity"),
 )
 
 
@@ -149,6 +150,12 @@ def _migration_7(connection):
     ))
 
 
+def _migration_8(connection):
+    if "articles" in set(inspect(connection).get_table_names()):
+        _add_column(connection, "articles", "source_slug VARCHAR")
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_articles_source_slug ON articles(source_slug)"))
+
+
 MIGRATION_FUNCTIONS = {
     1: _migration_1,
     2: _migration_2,
@@ -157,6 +164,7 @@ MIGRATION_FUNCTIONS = {
     5: _migration_5,
     6: _migration_6,
     7: _migration_7,
+    8: _migration_8,
 }
 
 

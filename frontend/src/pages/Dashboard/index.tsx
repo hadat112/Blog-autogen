@@ -72,6 +72,8 @@ const Dashboard = () => {
 
   const refetch = () => Promise.all([activeQuery.refetch(), historyQuery.refetch()]);
 
+  const isSourceProxyEnabled = () => window.localStorage.getItem('story-autogen-source-proxy') === 'true';
+
   const rerunMutation = useMutation({
     mutationFn: (job: Job) => {
       const prompt = getJobInput(job);
@@ -79,10 +81,10 @@ const Dashboard = () => {
         throw new Error('Job input was not found in logs');
       }
       if (job.workflow_type === 'article_v2' || job.workflow_type === 'rewrite') {
-        return startArticleWorkflow(job.pipeline_id, prompt, 'v2', false, job.id);
+        return startArticleWorkflow(job.pipeline_id, prompt, 'v2', isSourceProxyEnabled(), job.id);
       }
       if (job.workflow_type === 'article_v1') {
-        return startArticleWorkflow(job.pipeline_id, prompt, 'v1', false, job.id);
+        return startArticleWorkflow(job.pipeline_id, prompt, 'v1', isSourceProxyEnabled(), job.id);
       }
       return runPipeline(job.pipeline_id, { prompt, rerun_from_job_id: job.id });
     },

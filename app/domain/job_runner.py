@@ -76,7 +76,7 @@ class JobRunner:
             wp_config["category_id"] = wp_category_id
 
         source_article_callback = None
-        if pipeline_settings.get("collect_patterns"):
+        if app_config.get("auto_collect_patterns", True):
             ai_account_id = (pipeline.step_accounts or {}).get("ai")
 
             def source_article_callback(article_data):

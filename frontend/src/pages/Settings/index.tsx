@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Globe2,
   Languages,
+  LibraryBig,
   Pencil,
   Plus,
   Save,
@@ -43,7 +44,7 @@ const concurrencyPresets = [
   { value: 3, label: 'Fast' },
 ];
 
-type SettingsScreen = 'menu' | 'translation' | 'proxy' | 'languages';
+type SettingsScreen = 'menu' | 'translation' | 'proxy' | 'patterns' | 'languages';
 
 const Settings = () => {
   const queryClient = useQueryClient();
@@ -58,6 +59,7 @@ const Settings = () => {
     translation_max_concurrency: 2,
     ai_request_timeout: 300,
     translation_chunk_size: 6000,
+    auto_collect_patterns: true,
   });
 
   const { data: languages = [], isLoading } = useQuery({
@@ -79,6 +81,7 @@ const Settings = () => {
         translation_max_concurrency: data.translation_max_concurrency || 2,
         ai_request_timeout: data.ai_request_timeout || 300,
         translation_chunk_size: data.translation_chunk_size || 6000,
+        auto_collect_patterns: data.auto_collect_patterns ?? true,
       } as AppSettings;
       setSettingsForm(settings);
       return settings;
@@ -177,6 +180,7 @@ const Settings = () => {
         30000,
         Math.max(1000, Number(settingsForm.translation_chunk_size) || 6000),
       ),
+      auto_collect_patterns: settingsForm.auto_collect_patterns,
     });
   };
 
@@ -207,6 +211,23 @@ const Settings = () => {
                 <div className="text-sm text-content-secondary">
                   Chunk mode, concurrency, and context behavior.
                 </div>
+              </div>
+            </div>
+            <ChevronRight size={18} className="shrink-0 text-content-secondary" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveScreen('patterns')}
+            className="flex items-center justify-between rounded-md border border-border-default bg-surface p-4 text-left shadow-sm transition-colors hover:bg-surface-subtle"
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-content-primary">
+                <LibraryBig size={18} />
+              </div>
+              <div className="min-w-0">
+                <div className="font-semibold text-content-primary">Pattern Library</div>
+                <div className="text-sm text-content-secondary">Automatically collect source articles from workflows.</div>
               </div>
             </div>
             <ChevronRight size={18} className="shrink-0 text-content-secondary" />
@@ -454,6 +475,32 @@ const Settings = () => {
           </CardContent>
         </form>
       </Card>
+      </>
+      )}
+
+      {activeScreen === 'patterns' && (
+      <>
+        <div className="flex items-center gap-3">
+          <Button type="button" variant="outline" size="icon" onClick={() => setActiveScreen('menu')} title="Back to settings">
+            <ArrowLeft size={18} />
+          </Button>
+          <div>
+            <h3 className="text-xl font-bold text-content-primary">Pattern Library</h3>
+            <p className="text-sm text-content-secondary">Control automatic source article collection.</p>
+          </div>
+        </div>
+        <Card>
+          <CardHeader className="border-b border-border-subtle"><CardTitle className="flex items-center gap-2 text-base"><LibraryBig size={18} />Source Collection</CardTitle></CardHeader>
+          <form onSubmit={saveSettings}>
+            <CardContent className="space-y-5 p-5">
+              <label className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-border-default p-4">
+                <span><span className="block font-semibold text-content-primary">Auto collect source articles</span><span className="mt-1 block text-sm text-content-secondary">Save each new workflow source in Pattern Library before AI processing. Existing source slugs are skipped.</span></span>
+                <input type="checkbox" checked={settingsForm.auto_collect_patterns} onChange={(event) => setSettingsForm({ ...settingsForm, auto_collect_patterns: event.target.checked })} />
+              </label>
+              <div className="flex justify-end"><Button type="submit" className="flex items-center gap-2" disabled={settingsMutation.isPending}><Save size={16} />Save Settings</Button></div>
+            </CardContent>
+          </form>
+        </Card>
       </>
       )}
 

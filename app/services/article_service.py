@@ -1,5 +1,5 @@
 from datetime import datetime
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from sqlalchemy import or_, text
 from sqlalchemy.orm import Session
@@ -25,6 +25,11 @@ def normalize_source_url(value):
     return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, parsed.query, ""))
 
 
+def source_slug(value):
+    path = urlsplit(value or "").path.rstrip("/")
+    return unquote(path.rsplit("/", 1)[-1]).strip().lower()
+
+
 class ArticleService:
     def __init__(self, db: Session):
         self.db = db
@@ -32,12 +37,29 @@ class ArticleService:
     def get(self, article_id):
         return self.db.query(models.Article).filter(models.Article.id == article_id).first()
 
+    def get_by_slug(self, slug):
+        normalized_slug = (slug or "").strip().lower()
+        if not normalized_slug:
+            return None
+        article = self.db.query(models.Article).filter(models.Article.source_slug == normalized_slug).first()
+        if article:
+            return article
+        # Backward-compatible lookup for rows created before source_slug existed.
+        for candidate in self.db.query(models.Article).filter(models.Article.source_slug.is_(None)).all():
+            if source_slug(candidate.source_url) == normalized_slug:
+                candidate.source_slug = normalized_slug
+                self.db.commit()
+                return candidate
+        return None
+
     def upsert(self, source_url, title, content, tags):
         source_url = normalize_source_url(source_url)
         article = self.db.query(models.Article).filter(models.Article.source_url == source_url).first()
         if not article:
-            article = models.Article(source_url=source_url)
+            article = models.Article(source_url=source_url, source_slug=source_slug(source_url))
             self.db.add(article)
+        elif not article.source_slug:
+            article.source_slug = source_slug(source_url)
         article.original_title = (title or "").strip()
         article.word_count = len((content or "").split())
         article.theme_tags = sorted(set(tags or []))

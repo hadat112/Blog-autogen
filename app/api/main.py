@@ -96,7 +96,7 @@ def serve_frontend(path: str):
     if path.startswith((
         "accounts", "pipelines", "jobs", "languages", "settings",
         "content-drafts", "patterns", "theme-rules",
-        "rewrite-jobs", "generation-jobs", "pattern-collection-sources",
+        "rewrite-jobs", "generation-jobs", "pattern-analysis-pipelines",
         "article-workflows",
     )):
         return {"status": "not_found"}

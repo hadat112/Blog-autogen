@@ -85,15 +85,11 @@ def test_manual_draft_rejects_non_publisher_pipeline():
     assert response.status_code == 400
 
 
-def test_theme_rules_patterns_and_collection_sources():
+def test_theme_rules_and_patterns():
     pipeline = create_pipeline("rewrite")
     rule = client.post("/theme-rules", json={"tag": "Family", "keywords": ["Mother", "mother", " Father "], "is_active": True})
     assert rule.status_code == 200
     assert rule.json()["keywords"] == ["mother", "father"]
-    source = client.get("/pattern-collection-sources").json()[0]
-    assert source["collect_patterns"] is False
-    assert source["can_analyze"] is True
-    assert client.put(f"/pattern-collection-sources/{pipeline['id']}", json={"collect_patterns": True}).json()["collect_patterns"] is True
     with TestingSession() as db:
         db.add(models.Article(source_url="https://source.test/a", original_title="A", theme_tags=["family"], word_count=12, analysis_status="failed"))
         db.commit()
@@ -113,7 +109,7 @@ def test_pattern_sources_report_ai_eligibility_and_retry_revalidates_it():
         ])
         db.commit()
 
-    sources = {item["pipeline_id"]: item for item in client.get("/pattern-collection-sources").json()}
+    sources = {item["pipeline_id"]: item for item in client.get("/pattern-analysis-pipelines").json()}
     assert sources[valid["id"]]["can_analyze"] is True
     assert sources["missing-ai"]["can_analyze"] is False
     assert sources["inactive"]["can_analyze"] is False

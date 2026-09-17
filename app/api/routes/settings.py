@@ -9,6 +9,7 @@ from app.domain.settings_manager import (
     normalize_translation_chunk_size,
     normalize_translation_max_concurrency,
     normalize_translation_mode,
+    normalize_auto_collect_patterns,
     normalize_proxy_url,
     normalize_proxy_urls,
 )
@@ -33,6 +34,7 @@ def _settings_from_config(config: dict, proxy_urls=None) -> schemas.AppSettings:
         translation_chunk_size=normalize_translation_chunk_size(
             config.get("translation_chunk_size")
         ),
+        auto_collect_patterns=normalize_auto_collect_patterns(config.get("auto_collect_patterns")),
     )
 
 
@@ -59,6 +61,9 @@ def update_settings(settings: schemas.AppSettings, db: Session = Depends(get_db)
     )
     manager.config["translation_chunk_size"] = normalize_translation_chunk_size(
         settings.translation_chunk_size
+    )
+    manager.config["auto_collect_patterns"] = normalize_auto_collect_patterns(
+        settings.auto_collect_patterns
     )
     manager.save_config()
     return _settings_from_config(manager.config, proxy_urls)

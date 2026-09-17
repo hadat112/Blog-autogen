@@ -9,11 +9,13 @@ from app.integrations.notifiers.telegram import send_telegram_msg
 from app.integrations.publishers.facebook_page import FacebookPagePublisher
 from app.integrations.wordpress.source import WordPressSourceGateway
 from app.services.ai_client_factory import create_ai_client
+from app.services.article_service import ArticleService, normalize_source_url, source_slug
 from app.services.error_sanitizer import sanitize_error
 from app.services.pattern_collection_service import PatternCollectionService
 from app.services.wordpress_publishing_service import WordPressPublishingService
 from app.services.workflow_job_service import WorkflowJobService
 from app.services.proxy_settings_service import ProxySettingsService
+from app.domain.settings_manager import SettingsManager
 
 
 def _create_v1_caption(translated_content: str, max_words: int = 50) -> str:
@@ -103,6 +105,11 @@ class ArticleWorkflowService:
                 )
 
             try:
+                # Use the indexed slug before collection so an already stored
+                # source does not trigger duplicate theme matching or AI analysis.
+                source_url = normalize_source_url(draft.source_url)
+                pattern_exists = ArticleService(db).get_by_slug(source_slug(source_url)) is not None
+
                 # Step 2: Source Ingestion & Pattern Collection
                 jobs.progress(job_id, "fetch_source", 10, "Fetching source article")
                 if source_gateway:
@@ -114,10 +121,11 @@ class ArticleWorkflowService:
                 draft.image_source = source.image_url or None
                 db.commit()
 
-                if bool((pipeline.settings or {}).get("collect_patterns", False)):
+                # Collection is controlled globally from Settings, not per pipeline.
+                if not pattern_exists and SettingsManager().config.get("auto_collect_patterns", True):
                     PatternCollectionService(db).collect(
                         {
-                            "source_url": source.source_url,
+                            "source_url": draft.source_url,
                             "title": source.title,
                             "content": source.content,
                             "image_url": source.image_url,
@@ -206,7 +214,12 @@ class ArticleWorkflowService:
 
                 # Step 5: Multi-Channel Publishing Hub
                 jobs.progress(job_id, "publish_wordpress", 92, "Publishing to WordPress")
-                published = WordPressPublishingService(db).publish(draft.id, confirmed=True)
+                source_proxy_url = ProxySettingsService.get_selected(db) if use_proxy else ""
+                published = WordPressPublishingService(db).publish(
+                    draft.id,
+                    confirmed=True,
+                    source_proxy_url=source_proxy_url,
+                )
 
                 fb_post_id = None
                 if fb_account and fb_account.config:

@@ -34,11 +34,12 @@ class AmbiguousWordPressResult(RuntimeError):
 
 
 class WordPressDestinationGateway:
-    def __init__(self, config, session=None):
+    def __init__(self, config, session=None, remote_proxy_url=""):
         self.url = (config.get("url") or "").rstrip("/")
         self.auth = HTTPBasicAuth(config.get("username"), config.get("password") or config.get("app_password"))
         self.session = session or requests.Session()
         self.session.max_redirects = 3
+        self.remote_proxy_url = remote_proxy_url or ""
 
     def categories(self):
         response = self.session.get(
@@ -81,7 +82,8 @@ class WordPressDestinationGateway:
             raise ValueError("Remote image must use HTTP(S)")
         if parsed.username or parsed.password:
             raise ValueError("Remote image URL cannot contain credentials")
-        with self.session.get(source, stream=True, timeout=(10, 30), allow_redirects=True) as response:
+        proxies = {"http": self.remote_proxy_url, "https": self.remote_proxy_url} if self.remote_proxy_url else None
+        with self.session.get(source, stream=True, timeout=(10, 30), allow_redirects=True, proxies=proxies) as response:
             response.raise_for_status()
             final_url = urlsplit(response.url)
             if final_url.scheme not in {"http", "https"} or final_url.username or final_url.password:

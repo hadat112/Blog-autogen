@@ -7,6 +7,8 @@ from app.services.pattern_collection_service import PatternCollectionService
 from app.services.wordpress_publishing_service import WordPressPublishingService
 from app.services.workflow_job_service import WorkflowJobService
 from app.services.error_sanitizer import sanitize_error
+from app.domain.settings_manager import SettingsManager
+from app.services.article_service import ArticleService, normalize_source_url, source_slug
 
 
 class RewriteWorkflowService:
@@ -28,15 +30,17 @@ class RewriteWorkflowService:
                 jobs.fail(job_id, "AI account is unavailable")
                 return
             try:
+                source_url = normalize_source_url(draft.source_url)
+                pattern_exists = ArticleService(db).get_by_slug(source_slug(source_url)) is not None
                 jobs.progress(job_id, "fetch_source", 5, "Fetching source article")
                 source = (source_gateway or WordPressSourceGateway()).fetch(draft.source_url)
                 draft.image_kind = "url" if source.image_url else None
                 draft.image_source = source.image_url or None
                 db.commit()
-                if bool((pipeline.settings or {}).get("collect_patterns", False)):
+                if not pattern_exists and SettingsManager().config.get("auto_collect_patterns", True):
                     PatternCollectionService(db).collect(
                         {
-                            "source_url": source.source_url,
+                            "source_url": draft.source_url,
                             "title": source.title,
                             "content": source.content,
                             "image_url": source.image_url,

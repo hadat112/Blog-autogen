@@ -84,10 +84,6 @@ class WorkflowJobCreated(BaseModel):
     status: str
 
 
-class CollectionSourceUpdate(BaseModel):
-    collect_patterns: bool
-
-
 class CategoryResponse(BaseModel):
     id: Union[int, str]
     name: str

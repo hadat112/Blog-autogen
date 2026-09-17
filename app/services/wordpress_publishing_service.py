@@ -39,7 +39,7 @@ class WordPressPublishingService:
             raise ValueError("WordPress account is unavailable")
         return pipeline, account
 
-    def publish(self, draft_id, confirmed=False):
+    def publish(self, draft_id, confirmed=False, source_proxy_url=""):
         lock = _draft_locks[draft_id]
         if not lock.acquire(blocking=False):
             raise ValueError("This draft is already being published")
@@ -57,6 +57,8 @@ class WordPressPublishingService:
                 raise ValueError("Title and content are required")
             _, account = self._pipeline_and_account(draft)
             gateway = self.gateway_factory(account.config or {})
+            if source_proxy_url:
+                gateway.remote_proxy_url = source_proxy_url
             draft.state = "publishing"
             draft.error = None
             self.db.commit()

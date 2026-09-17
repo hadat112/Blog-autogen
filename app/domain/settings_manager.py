@@ -9,6 +9,7 @@ DEFAULT_TRANSLATION_MODE = "sequential"
 DEFAULT_TRANSLATION_MAX_CONCURRENCY = 2
 DEFAULT_AI_REQUEST_TIMEOUT = 300
 DEFAULT_TRANSLATION_CHUNK_SIZE = 6000
+DEFAULT_AUTO_COLLECT_PATTERNS = True
 
 
 def normalize_proxy_url(value):
@@ -82,6 +83,14 @@ def normalize_translation_chunk_size(value):
     return max(1000, min(chunk_size, 30000))
 
 
+def normalize_auto_collect_patterns(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return DEFAULT_AUTO_COLLECT_PATTERNS
+    return str(value).strip().lower() not in {"0", "false", "no", "off"}
+
+
 class SettingsManager:
     def __init__(self, config_path="config.yaml"):
         self.config_path = config_path
@@ -109,6 +118,9 @@ class SettingsManager:
         )
         self.config["translation_chunk_size"] = normalize_translation_chunk_size(
             self.config.get("translation_chunk_size")
+        )
+        self.config["auto_collect_patterns"] = normalize_auto_collect_patterns(
+            self.config.get("auto_collect_patterns")
         )
 
     def save_config(self):

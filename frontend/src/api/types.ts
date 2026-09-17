@@ -57,6 +57,7 @@ export interface AppSettings {
   translation_max_concurrency: number;
   ai_request_timeout: number;
   translation_chunk_size: number;
+  auto_collect_patterns: boolean;
 }
 
 export interface Job {

@@ -107,6 +107,7 @@ class Article(Base):
 
     id = Column(String, primary_key=True, default=generate_uuid)
     source_url = Column(String, nullable=False, unique=True)
+    source_slug = Column(String, nullable=True, index=True)
     original_title = Column(String, default="", nullable=False)
     theme_tags = Column(JSON, default=list, nullable=False)
     structure = Column(JSON, nullable=True)
