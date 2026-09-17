@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "blog-autogen"
-version = "1.1.3"
+version = "1.1.4"
 description = "AI-powered blog and story automation tool"
 # README.md is part of the source tree and is copied into release archives.
 readme = "README.md"
