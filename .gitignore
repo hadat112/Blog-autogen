@@ -60,5 +60,6 @@ ehthumbs.db
 
 debug
 .superpowers/
+.worktrees/
 frontend/test-results/
 frontend/playwright-report/
