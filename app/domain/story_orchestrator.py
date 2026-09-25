@@ -284,7 +284,13 @@ class StoryOrchestrator:
             from app.domain.article_importer import extract_article_from_url
 
             def crawl_log(message):
-                self._emit_log(f"{log_task_id} {message}", 2, "AI Translate", 0, task_id=task_id)
+                self._emit_log(
+                    f"{log_task_id} {message}",
+                    2,
+                    "AI Translate" if (self.language or "").strip() else "Original article",
+                    0,
+                    task_id=task_id,
+                )
 
             article_data = extract_article_from_url(
                 url,
@@ -298,7 +304,10 @@ class StoryOrchestrator:
             self._emit_log(f"{log_task_id} Extraction Success: Title='{article_data.get('title', '')[:30]}...'", 1, "Extract article from URL", 100, task_id=task_id)
 
             # Step 2 in crawl is usually image generation or skip
-            self._emit_progress(2, "AI Translate", 100, f"{log_task_id} AI Translate Success", task_id=task_id)
+            if (self.language or "").strip():
+                self._emit_progress(2, "AI Translate", 100, f"{log_task_id} AI Translate Success", task_id=task_id)
+            else:
+                self._emit_progress(2, "Original article", 100, f"{log_task_id} Original article ready", task_id=task_id)
 
             return self._publish_article_payload(
                 article_data,

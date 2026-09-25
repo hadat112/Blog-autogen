@@ -1,5 +1,6 @@
 from datetime import datetime
-from urllib.parse import unquote, urlsplit, urlunsplit
+import hashlib
+from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy import or_, text
 from sqlalchemy.orm import Session
@@ -22,7 +23,11 @@ def normalize_source_url(value):
     if parsed.username or parsed.password:
         raise ValueError("Source URL cannot contain credentials")
     path = parsed.path.rstrip("/") or "/"
-    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, parsed.query, ""))
+    query = urlencode(
+        [(key, item) for key, item in parse_qsl(parsed.query, keep_blank_values=True) if key.lower() != "fbclid"],
+        doseq=True,
+    )
+    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, query, ""))
 
 
 def source_slug(value):
@@ -67,6 +72,31 @@ class ArticleService:
         article.analysis_error = None
         article.processed_at = datetime.utcnow()
         article.updated_at = datetime.utcnow()
+        self.db.commit()
+        self.db.refresh(article)
+        return article
+
+    def archive_source(self, source_url, title, content, image_url="", language="", tags=None):
+        source_url = normalize_source_url(source_url)
+        slug = source_slug(source_url)
+        article = self.db.query(models.Article).filter(models.Article.source_url == source_url).first()
+        now = datetime.utcnow()
+        if not article:
+            article = models.Article(source_url=source_url, source_slug=slug)
+            self.db.add(article)
+        article.source_slug = article.source_slug or slug
+        article.source_title = (title or "").strip()
+        article.source_content = content or ""
+        article.source_image_url = (image_url or "").strip()
+        article.source_language = (language or "").strip()
+        article.source_content_hash = hashlib.sha256((content or "").encode("utf-8")).hexdigest()
+        article.source_fetched_at = now
+        article.original_title = article.source_title
+        article.word_count = len((content or "").split())
+        if tags is not None:
+            article.theme_tags = sorted(set(tags or []))
+        article.processed_at = now
+        article.updated_at = now
         self.db.commit()
         self.db.refresh(article)
         return article

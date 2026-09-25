@@ -16,7 +16,7 @@ class PatternCollectionService:
     def __init__(self, db):
         self.db = db
 
-    def collect(self, article_data, pipeline_id, parent_job_id=None, ai_account_id=None):
+    def collect(self, article_data, pipeline_id, parent_job_id=None, ai_account_id=None, analyze=True):
         source_url = normalize_source_url(article_data.get("source_url"))
         article_service = ArticleService(self.db)
         existing = article_service.get_by_slug(source_slug(source_url))
@@ -24,9 +24,16 @@ class PatternCollectionService:
             return existing, None
         rules = self.db.query(models.ThemeRule).filter(models.ThemeRule.is_active.is_(True)).all()
         tags = match_theme_tags(article_data.get("title"), article_data.get("content"), rules)
-        article = article_service.upsert(
-            source_url, article_data.get("title"), article_data.get("content"), tags
+        article = article_service.archive_source(
+            source_url,
+            article_data.get("title"),
+            article_data.get("content"),
+            image_url=article_data.get("image_url") or "",
+            language=article_data.get("language") or "",
+            tags=tags,
         )
+        if not analyze:
+            return article, None
         if not ai_account_id:
             article.analysis_status = "failed"
             article.analysis_error = "AI account is unavailable"

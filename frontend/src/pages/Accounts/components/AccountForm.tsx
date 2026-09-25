@@ -20,6 +20,8 @@ interface AccountFormProps {
   onSave: (formData: Partial<Account>) => void;
 }
 
+const DEFAULT_AI_BASE_URL = "http://localhost:20128/v1";
+
 const AccountForm: React.FC<AccountFormProps> = ({
   account,
   onClose,
@@ -41,7 +43,15 @@ const AccountForm: React.FC<AccountFormProps> = ({
 
   useEffect(() => {
     if (account) {
-      setFormData(account);
+      setFormData({
+        ...account,
+        config: account.type === "ai"
+          ? {
+              ...(account.config || {}),
+              base_url: account.config?.base_url || DEFAULT_AI_BASE_URL,
+            }
+          : account.config,
+      });
     }
   }, [account]);
 
@@ -231,7 +241,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
               <Input
                 type="url"
                 required
-                value={formData.config?.base_url || "http://localhost:20128/v1"}
+                value={formData.config?.base_url || DEFAULT_AI_BASE_URL}
                 onChange={(e) => handleConfigChange("base_url", e.target.value)}
               />
               {modelFetchError && (
@@ -359,7 +369,9 @@ const AccountForm: React.FC<AccountFormProps> = ({
                   setFormData({
                     ...formData,
                     type: e.target.value as any,
-                    config: {},
+                    config: e.target.value === "ai"
+                      ? { base_url: DEFAULT_AI_BASE_URL }
+                      : {},
                   })
                 }
               >

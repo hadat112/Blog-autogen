@@ -8,6 +8,7 @@ test('manual publisher writes, previews, and only shows copy link on success', a
   await page.route('**/content-drafts/draft-manual', route => route.fulfill({ json: { ...local, version: 2 } }));
   await page.route('**/content-drafts/draft-manual/publish', route => route.fulfill({ json: draft('manual', 'wordpress_created') }));
   await page.goto('/#/wordpress-publisher');
+  await page.getByLabel('WordPress account').selectOption('wp1');
   await page.getByRole('button', { name: 'New post draft' }).click();
   await page.getByLabel('Title').fill('Manual title');
   await page.getByLabel('Content').fill('<script>alert(1)</script><p>Safe copy</p>');

@@ -58,7 +58,7 @@ export function DraftEditor({ draft, manual = false, onUpdated }: { draft: Conte
   const update = <K extends keyof ContentDraft>(key: K, value: ContentDraft[K]) => setForm(current => ({ ...current, [key]: value }));
 
   return <div className="space-y-5">
-    {form.error && <InlineStatus tone="error">{form.error}</InlineStatus>}
+    {form.error && <InlineStatus tone={form.state === 'wordpress_created' ? 'warning' : 'error'}>{form.state === 'wordpress_created' ? `Warning: ${form.error}` : form.error}</InlineStatus>}
     {error && <InlineStatus tone="error">{error}</InlineStatus>}
     {form.state === 'wordpress_created' && form.wp_url && <div className="rounded-xl border border-status-success/30 bg-status-success/10 p-4"><p className="mb-3 font-semibold text-status-success">Created in WordPress</p><div className="flex flex-wrap gap-2"><CopyButton value={form.wp_url} label="Copy link" />{!manual && form.caption && <CopyButton value={form.caption} label="Copy caption" />}<a href={form.wp_url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center rounded-md px-3 text-sm font-medium text-accent hover:bg-accent/10">Open <ExternalLink size={14} className="ml-1.5" /></a></div></div>}
 

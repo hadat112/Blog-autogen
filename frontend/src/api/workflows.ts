@@ -1,5 +1,6 @@
 import client from './client';
 import type { ContentDraft } from './types';
+import { normalizeSourceUrl } from '../utils/sourceUrl';
 
 export const getDrafts = (params?: { kind?: string; pipeline_id?: string; page?: number; page_size?: number }) =>
   client.get<ContentDraft[] | { items: ContentDraft[]; total: number; page: number; page_size: number }>('/content-drafts', { params });
@@ -10,7 +11,7 @@ export const getDraftCategories = (id: string) =>
   client.get<Array<{ id: string | number; name: string; count: number }>>(`/content-drafts/${id}/wp-categories`);
 export const createDraft = (data: Partial<ContentDraft>) => client.post<ContentDraft>('/content-drafts', data);
 export const updateDraft = (id: string, data: Partial<ContentDraft> & { version: number }) =>
-  client.put<ContentDraft>(`/content-drafts/${id}`, data);
+  client.put<ContentDraft>(`/content-drafts/${id}`, { ...data, ...(data.source_url ? { source_url: normalizeSourceUrl(data.source_url) } : {}) });
 export const deleteDraft = (id: string) => client.delete(`/content-drafts/${id}`);
 export const uploadDraftImage = (id: string, image: File) => {
   const form = new FormData();
@@ -20,10 +21,10 @@ export const uploadDraftImage = (id: string, image: File) => {
 export const publishDraft = (id: string, confirmed: boolean) =>
   client.post<ContentDraft>(`/content-drafts/${id}/publish`, { confirmed });
 
-export const startRewrite = (pipelineId: string, sourceUrl: string, useProxy = false, rerunFromJobId?: string) =>
-  client.post<{ job_id: string; draft_id: string; status: string }>('/rewrite-jobs', { pipeline_id: pipelineId, source_url: sourceUrl, use_proxy: useProxy, ...(rerunFromJobId ? { rerun_from_job_id: rerunFromJobId } : {}) });
-export const startArticleWorkflow = (pipelineId: string, sourceUrl: string, mode: 'v1' | 'v2' = 'v2', useProxy = false, rerunFromJobId?: string) =>
-  client.post<{ job_id: string; draft_id: string; status: string }>('/article-workflows/run', { pipeline_id: pipelineId, source_url: sourceUrl, mode, use_proxy: useProxy, ...(rerunFromJobId ? { rerun_from_job_id: rerunFromJobId } : {}) });
+export const startRewrite = (pipelineId: string, sourceUrl: string, useProxy = false, rerunFromJobId?: string, useEnrichment = false) =>
+  client.post<{ job_id: string; draft_id: string; status: string }>('/rewrite-jobs', { pipeline_id: pipelineId, source_url: normalizeSourceUrl(sourceUrl), use_proxy: useProxy, use_enrichment: useEnrichment, ...(rerunFromJobId ? { rerun_from_job_id: rerunFromJobId } : {}) });
+export const startArticleWorkflow = (pipelineId: string, sourceUrl: string, mode: 'v1' | 'v2' = 'v2', useProxy = false, rerunFromJobId?: string, useEnrichment = false) =>
+  client.post<{ job_id: string; draft_id: string; status: string }>('/article-workflows/run', { pipeline_id: pipelineId, source_url: normalizeSourceUrl(sourceUrl), mode, use_proxy: useProxy, use_enrichment: useEnrichment, ...(rerunFromJobId ? { rerun_from_job_id: rerunFromJobId } : {}) });
 export const retryArticleWorkflow = (jobId: string) =>
   client.post<{ job_id: string; draft_id: string; status: string }>(`/article-workflows/${jobId}/retry`);
 export const startGeneration = (pipelineId: string) =>

@@ -108,6 +108,12 @@ class Article(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     source_url = Column(String, nullable=False, unique=True)
     source_slug = Column(String, nullable=True, index=True)
+    source_title = Column(String, default="", nullable=False)
+    source_content = Column(Text, default="", nullable=False)
+    source_image_url = Column(String, default="", nullable=False)
+    source_language = Column(String, default="", nullable=False)
+    source_content_hash = Column(String, default="", nullable=False)
+    source_fetched_at = Column(DateTime, nullable=True)
     original_title = Column(String, default="", nullable=False)
     theme_tags = Column(JSON, default=list, nullable=False)
     structure = Column(JSON, nullable=True)
@@ -120,6 +126,29 @@ class Article(Base):
     __table_args__ = (
         Index("ix_articles_analysis_processed", "analysis_status", "processed_at"),
     )
+
+
+class ArticleEnrichment(Base):
+    __tablename__ = "article_enrichments"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    article_id = Column(String, ForeignKey("articles.id"), nullable=False, unique=True, index=True)
+    summary = Column(Text, nullable=True)
+    plot_beats = Column(JSON, nullable=True)
+    characters = Column(JSON, nullable=True)
+    setting = Column(JSON, nullable=True)
+    conflict = Column(JSON, nullable=True)
+    emotional_arc = Column(JSON, nullable=True)
+    creative_dna = Column(JSON, nullable=True)
+    summary_status = Column(String, default="missing", nullable=False)
+    analysis_status = Column(String, default="missing", nullable=False)
+    dna_status = Column(String, default="missing", nullable=False)
+    summary_error = Column(Text, nullable=True)
+    analysis_error = Column(Text, nullable=True)
+    dna_error = Column(Text, nullable=True)
+    ai_account_id = Column(String, ForeignKey("accounts.id"), nullable=True)
+    model = Column(String, default="", nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
 class ThemeRule(Base):

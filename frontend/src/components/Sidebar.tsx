@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Users, GitBranch, Settings, X, Zap, ChevronLeft, ChevronRight, Sparkles, LibraryBig, Send } from 'lucide-react';
+import { version } from '../../package.json';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -97,7 +98,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, isCollapsed = fals
 
         <div className={`mt-auto p-4 border-t border-border-subtle flex items-center transition-all duration-150 ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
           <div className={`text-[10px] uppercase tracking-widest text-content-tertiary font-bold whitespace-nowrap overflow-hidden transition-all duration-150 ${isCollapsed ? 'w-0 opacity-0' : 'w-auto opacity-100'}`}>
-            v1.1.2
+            v{version}
           </div>
           <button
             onClick={toggleCollapse}

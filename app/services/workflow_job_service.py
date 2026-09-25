@@ -108,6 +108,12 @@ class WorkflowJobService:
         for article in analyzing:
             article.analysis_status = "failed"
             article.analysis_error = "Analysis was interrupted by an app restart"
+        enrichments = self.db.query(models.ArticleEnrichment).all()
+        for enrichment in enrichments:
+            for step in ("summary", "analysis", "dna"):
+                if getattr(enrichment, f"{step}_status") == "processing":
+                    setattr(enrichment, f"{step}_status", "failed")
+                    setattr(enrichment, f"{step}_error", "Enrichment was interrupted by an app restart")
         if jobs or generating or publishing or analyzing:
             self.db.commit()
         return len(jobs)

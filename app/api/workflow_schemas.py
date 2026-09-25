@@ -63,6 +63,7 @@ class RewriteJobInput(BaseModel):
     pipeline_id: str
     source_url: str = Field(min_length=8)
     use_proxy: bool = False
+    use_enrichment: bool = False
     rerun_from_job_id: Optional[str] = None
 
 
@@ -71,6 +72,7 @@ class ArticleWorkflowRunInput(BaseModel):
     source_url: str = Field(min_length=8)
     mode: Literal["v1", "v2"] = "v2"
     use_proxy: bool = False
+    use_enrichment: bool = False
     rerun_from_job_id: Optional[str] = None
 
 

@@ -58,6 +58,8 @@ export interface AppSettings {
   ai_request_timeout: number;
   translation_chunk_size: number;
   auto_collect_patterns: boolean;
+  default_ai_enrichment: boolean;
+  enrichment_ai_account_id: string;
 }
 
 export interface Job {

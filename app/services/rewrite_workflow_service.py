@@ -37,18 +37,24 @@ class RewriteWorkflowService:
                 draft.image_kind = "url" if source.image_url else None
                 draft.image_source = source.image_url or None
                 db.commit()
-                if not pattern_exists and SettingsManager().config.get("auto_collect_patterns", True):
-                    PatternCollectionService(db).collect(
-                        {
-                            "source_url": draft.source_url,
-                            "title": source.title,
-                            "content": source.content,
-                            "image_url": source.image_url,
-                        },
-                        pipeline.id,
-                        parent_job_id=job_id,
-                        ai_account_id=ai_account_id,
-                    )
+                if SettingsManager().config.get("auto_collect_patterns", True):
+                    source_data = {
+                        "source_url": draft.source_url,
+                        "title": source.title,
+                        "content": source.content,
+                        "image_url": source.image_url,
+                        "language": pipeline.language,
+                    }
+                    if pattern_exists:
+                        ArticleService(db).archive_source(**source_data)
+                    else:
+                        PatternCollectionService(db).collect(
+                            source_data,
+                            pipeline.id,
+                            parent_job_id=job_id,
+                            ai_account_id=ai_account_id,
+                            analyze=not use_enrichment,
+                        )
 
                 def on_progress(index, total, phase, meta=None):
                     fresh = db.query(models.Job).filter(models.Job.id == job_id).first()

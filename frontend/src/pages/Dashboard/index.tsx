@@ -53,7 +53,7 @@ const Dashboard = () => {
       return data;
     },
     placeholderData: keepPreviousData,
-    staleTime: 5000,
+    staleTime: 3000,
     refetchInterval: 3000, // Keep recent activity in sync when active jobs finish
   });
 

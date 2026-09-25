@@ -177,6 +177,55 @@ def test_article_workflow_v2_rewrites_and_publishes(test_db):
     assert mock_engine.rewrite.called
 
 
+@pytest.mark.parametrize("mode", ["v1", "v2"])
+def test_original_article_workflow_skips_ai_and_publishes_source(test_db, mode):
+    session, TestingSession = test_db
+    pipeline = session.get(models.Pipeline, "pipe_1")
+    pipeline.language = ""
+    session.commit()
+
+    draft = models.ContentDraft(
+        id=f"original-{mode}",
+        kind="article_workflow",
+        pipeline_id="pipe_1",
+        source_url="https://source.test/story",
+        state="generating",
+    )
+    job = models.Job(
+        id=f"original-job-{mode}",
+        pipeline_id="pipe_1",
+        workflow_type="article_workflow",
+        input_text="https://source.test/story",
+        status="running",
+        draft_id=draft.id,
+    )
+    session.add_all([draft, job])
+    session.commit()
+
+    mock_wp_pub = MagicMock()
+    mock_pub_res = MagicMock(
+        wp_post_id=2000,
+        wp_url="https://wp.test/original",
+        wp_status="publish",
+    )
+    mock_wp_pub.publish.return_value = mock_pub_res
+
+    with patch("app.services.article_workflow_service.SessionLocal", TestingSession), \
+         patch("app.services.article_workflow_service.create_ai_client") as mock_create_ai, \
+         patch("app.services.article_workflow_service.RewriteEngine") as mock_engine, \
+         patch("app.services.article_workflow_service.WordPressPublishingService", return_value=mock_wp_pub):
+        ArticleWorkflowService.execute(job.id, draft.id, mode=mode, source_gateway=DummyGateway())
+
+    session.refresh(job)
+    session.refresh(draft)
+    assert job.status == "success"
+    assert draft.title == "Source Title"
+    assert draft.content == "Source article text with many words."
+    assert mock_create_ai.call_count == 0
+    assert mock_engine.call_count == 0
+    mock_wp_pub.publish.assert_called_once()
+
+
 def test_article_workflow_cancellation_during_ai(test_db):
     session, TestingSession = test_db
 
@@ -305,4 +354,3 @@ def test_article_workflow_sanitizes_errors(test_db):
     assert draft.state == "generation_failed"
     assert "sk-1234567890abcdef" not in draft.error
     assert "[REDACTED]" in draft.error or "failed" in draft.error
-

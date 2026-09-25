@@ -31,7 +31,7 @@ async def run_article_workflow(data: ArticleWorkflowRunInput, db: Session = Depe
     )
     if not pipeline:
         raise HTTPException(status_code=404, detail="Active pipeline not found")
-    if not (pipeline.step_accounts or {}).get("ai"):
+    if (pipeline.language or "").strip() and not (pipeline.step_accounts or {}).get("ai"):
         raise HTTPException(status_code=400, detail="Selected pipeline has no AI account")
     if not (pipeline.step_accounts or {}).get("wp"):
         raise HTTPException(status_code=400, detail="Selected pipeline has no WordPress account")
@@ -85,6 +85,7 @@ async def run_article_workflow(data: ArticleWorkflowRunInput, db: Session = Depe
             draft.id,
             mode=mode,
             use_proxy=data.use_proxy,
+            use_enrichment=data.use_enrichment,
         )
 
     workflow_runner.start(job.id, operation)

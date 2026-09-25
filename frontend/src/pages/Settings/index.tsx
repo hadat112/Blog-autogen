@@ -15,6 +15,8 @@ import { FormEvent, useState } from 'react';
 
 import {
   createLanguage,
+  getAccounts,
+  getDatabaseInfo,
   getLanguages,
   getSettings,
   updateLanguage,
@@ -46,6 +48,18 @@ const concurrencyPresets = [
 
 type SettingsScreen = 'menu' | 'translation' | 'proxy' | 'patterns' | 'languages';
 
+const formatBytes = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let value = bytes / 1024;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
+  }
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`;
+};
+
 const Settings = () => {
   const queryClient = useQueryClient();
   const [activeScreen, setActiveScreen] = useState<SettingsScreen>('menu');
@@ -60,6 +74,18 @@ const Settings = () => {
     ai_request_timeout: 300,
     translation_chunk_size: 6000,
     auto_collect_patterns: true,
+    default_ai_enrichment: false,
+    enrichment_ai_account_id: '',
+  });
+
+  const { data: accounts = [] } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: async () => (await getAccounts()).data,
+  });
+  const { data: databaseInfo } = useQuery({
+    queryKey: ['database-info'],
+    queryFn: async () => (await getDatabaseInfo()).data,
+    refetchInterval: 30000,
   });
 
   const { data: languages = [], isLoading } = useQuery({
@@ -82,6 +108,8 @@ const Settings = () => {
         ai_request_timeout: data.ai_request_timeout || 300,
         translation_chunk_size: data.translation_chunk_size || 6000,
         auto_collect_patterns: data.auto_collect_patterns ?? true,
+        default_ai_enrichment: data.default_ai_enrichment ?? false,
+        enrichment_ai_account_id: data.enrichment_ai_account_id || '',
       } as AppSettings;
       setSettingsForm(settings);
       return settings;
@@ -181,6 +209,8 @@ const Settings = () => {
         Math.max(1000, Number(settingsForm.translation_chunk_size) || 6000),
       ),
       auto_collect_patterns: settingsForm.auto_collect_patterns,
+      default_ai_enrichment: settingsForm.default_ai_enrichment,
+      enrichment_ai_account_id: settingsForm.enrichment_ai_account_id,
     });
   };
 
@@ -497,9 +527,21 @@ const Settings = () => {
                 <span><span className="block font-semibold text-content-primary">Auto collect source articles</span><span className="mt-1 block text-sm text-content-secondary">Save each new workflow source in Pattern Library before AI processing. Existing source slugs are skipped.</span></span>
                 <input type="checkbox" checked={settingsForm.auto_collect_patterns} onChange={(event) => setSettingsForm({ ...settingsForm, auto_collect_patterns: event.target.checked })} />
               </label>
+              <label className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-border-default p-4">
+                <span><span className="block font-semibold text-content-primary">Default AI enrichment</span><span className="mt-1 block text-sm text-content-secondary">Preselect enrichment when starting a workflow. You can override it for each run.</span></span>
+                <input type="checkbox" checked={settingsForm.default_ai_enrichment} onChange={(event) => setSettingsForm({ ...settingsForm, default_ai_enrichment: event.target.checked })} />
+              </label>
+              <label className="block space-y-1.5 text-sm font-medium text-content-primary">Enrichment AI account<Select value={settingsForm.enrichment_ai_account_id} onChange={(event) => setSettingsForm({ ...settingsForm, enrichment_ai_account_id: event.target.value })}><option value="">Select an AI account</option>{accounts.filter(account => account.type === 'ai').map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</Select><span className="block text-xs font-normal leading-5 text-content-secondary">Used only for deferred Summary, Story Analysis, and Creative DNA jobs.</span></label>
               <div className="flex justify-end"><Button type="submit" className="flex items-center gap-2" disabled={settingsMutation.isPending}><Save size={16} />Save Settings</Button></div>
             </CardContent>
           </form>
+        </Card>
+        <Card>
+          <CardHeader className="border-b border-border-subtle"><CardTitle>Local Database Usage</CardTitle></CardHeader>
+          <CardContent className="grid gap-4 p-5 sm:grid-cols-2">
+            <div><p className="text-xs font-bold uppercase tracking-wider text-content-tertiary">Database size</p><p className="mt-1 text-2xl font-bold text-content-primary">{databaseInfo?.size_bytes == null ? '—' : formatBytes(databaseInfo.size_bytes)}</p><p className="text-xs text-content-secondary">{databaseInfo?.database || 'Loading...'}</p></div>
+            <div className="grid grid-cols-2 gap-3 text-sm"><div><span className="text-content-secondary">Articles</span><p className="font-semibold">{databaseInfo?.articles ?? '—'}</p></div><div><span className="text-content-secondary">Enrichments</span><p className="font-semibold">{databaseInfo?.enrichments ?? '—'}</p></div><div><span className="text-content-secondary">Jobs</span><p className="font-semibold">{databaseInfo?.jobs ?? '—'}</p></div><div><span className="text-content-secondary">Drafts</span><p className="font-semibold">{databaseInfo?.drafts ?? '—'}</p></div></div>
+          </CardContent>
         </Card>
       </>
       )}

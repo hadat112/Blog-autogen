@@ -10,6 +10,7 @@ from app.integrations.publishers.facebook_page import FacebookPagePublisher
 from app.integrations.wordpress.source import WordPressSourceGateway
 from app.services.ai_client_factory import create_ai_client
 from app.services.article_service import ArticleService, normalize_source_url, source_slug
+from app.services.article_enrichment_service import ArticleEnrichmentService
 from app.services.error_sanitizer import sanitize_error
 from app.services.pattern_collection_service import PatternCollectionService
 from app.services.wordpress_publishing_service import WordPressPublishingService
@@ -42,7 +43,7 @@ def _create_v1_caption(translated_content: str, max_words: int = 50) -> str:
 
 class ArticleWorkflowService:
     @staticmethod
-    def execute(job_id: str, draft_id: str, mode: str = "v2", source_gateway=None, use_proxy: bool = False):
+    def execute(job_id: str, draft_id: str, mode: str = "v2", source_gateway=None, use_proxy: bool = False, use_enrichment: bool = False):
         mode = str(mode or "v2").strip().lower()
         if mode not in {"v1", "v2"}:
             mode = "v2"
@@ -66,13 +67,16 @@ class ArticleWorkflowService:
             step_accounts = pipeline.step_accounts or {}
             ai_account_id = step_accounts.get("ai")
             wp_account_id = step_accounts.get("wp")
+            is_original = not (pipeline.language or "").strip()
 
-            ai_account = (
-                db.query(models.Account)
-                .filter(models.Account.id == ai_account_id, models.Account.type == "ai")
-                .first()
-            )
-            if not ai_account:
+            ai_account = None
+            if not is_original:
+                ai_account = (
+                    db.query(models.Account)
+                    .filter(models.Account.id == ai_account_id, models.Account.type == "ai")
+                    .first()
+                )
+            if not is_original and not ai_account:
                 jobs.fail(job_id, "AI account is unavailable")
                 return
 
@@ -121,29 +125,53 @@ class ArticleWorkflowService:
                 draft.image_source = source.image_url or None
                 db.commit()
 
-                # Collection is controlled globally from Settings, not per pipeline.
-                if not pattern_exists and SettingsManager().config.get("auto_collect_patterns", True):
-                    PatternCollectionService(db).collect(
-                        {
-                            "source_url": draft.source_url,
-                            "title": source.title,
-                            "content": source.content,
-                            "image_url": source.image_url,
-                        },
-                        pipeline.id,
-                        parent_job_id=job_id,
-                        ai_account_id=ai_account_id,
-                    )
+                # Archive the fetched source even when it already exists. This
+                # backfills older rows that predate source_content.
+                should_collect = SettingsManager().config.get("auto_collect_patterns", True)
+                if should_collect:
+                    source_data = {
+                        "source_url": draft.source_url,
+                        "title": source.title,
+                        "content": source.content,
+                        "image_url": source.image_url,
+                        "language": pipeline.language,
+                    }
+                    if pattern_exists:
+                        ArticleService(db).archive_source(**source_data)
+                    else:
+                        PatternCollectionService(db).collect(
+                            source_data,
+                            pipeline.id,
+                            parent_job_id=job_id,
+                            ai_account_id=ai_account_id,
+                            analyze=not use_enrichment and not is_original,
+                        )
+                    if use_enrichment and not is_original:
+                        article = ArticleService(db).get_by_slug(source_slug(source_url))
+                        enrichment_account_id = SettingsManager().config.get("enrichment_ai_account_id") or ai_account_id
+                        ArticleEnrichmentService.enqueue(
+                            article.id,
+                            pipeline.id,
+                            parent_job_id=job_id,
+                            ai_account_id=enrichment_account_id,
+                        ) if article else None
 
                 def check_cancelled():
                     fresh = db.query(models.Job).filter(models.Job.id == job_id).first()
                     if fresh and fresh.status == "cancelled":
                         raise InterruptedError("Article workflow cancelled")
 
-                ai_client = create_ai_client(ai_account)
-
                 # Step 3: AI Processing Core (The only branching point)
-                if mode == "v1":
+                if is_original:
+                    # Original/repost pipelines preserve the fetched article and
+                    # skip all translation/rewrite and enrichment AI calls.
+                    res_title = source.title
+                    res_content = source.content
+                    res_caption = ""
+                    res_caption_matches_prefix = False
+                    res_warnings = []
+                elif mode == "v1":
+                    ai_client = create_ai_client(ai_account)
                     # Mode V1: Deterministic Translation
                     def v1_progress(msg: str):
                         check_cancelled()
@@ -167,6 +195,7 @@ class ArticleWorkflowService:
                     res_warnings = []
                 else:
                     # Mode V2: Dramatic Rewrite
+                    ai_client = create_ai_client(ai_account)
                     def v2_progress(index, total, phase, meta=None):
                         check_cancelled()
                         if phase == "metadata":
@@ -220,6 +249,8 @@ class ArticleWorkflowService:
                     confirmed=True,
                     source_proxy_url=source_proxy_url,
                 )
+                if isinstance(published.error, str) and published.error:
+                    res_warnings.append(published.error)
 
                 fb_post_id = None
                 if fb_account and fb_account.config:

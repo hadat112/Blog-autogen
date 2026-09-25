@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
 import requests
 from sqlalchemy.orm import Session
@@ -10,15 +12,33 @@ from app.domain.settings_manager import (
     normalize_translation_max_concurrency,
     normalize_translation_mode,
     normalize_auto_collect_patterns,
+    normalize_ai_enrichment,
     normalize_proxy_url,
     normalize_proxy_urls,
 )
 from app.db import models
 from app.db.session import get_db
+from app.db.session import engine
 from app.services.proxy_settings_service import ProxySettingsService
 
 
 router = APIRouter()
+
+
+@router.get("/settings/database-info")
+def get_database_info(db: Session = Depends(get_db)):
+    database = engine.url.database
+    size_bytes = None
+    if database and database != ":memory:" and os.path.isfile(database):
+        size_bytes = os.path.getsize(database)
+    return {
+        "size_bytes": size_bytes,
+        "database": os.path.basename(database) if database and database != ":memory:" else "memory",
+        "articles": db.query(models.Article).count(),
+        "enrichments": db.query(models.ArticleEnrichment).count(),
+        "jobs": db.query(models.Job).count(),
+        "drafts": db.query(models.ContentDraft).count(),
+    }
 
 
 def _settings_from_config(config: dict, proxy_urls=None) -> schemas.AppSettings:
@@ -35,6 +55,8 @@ def _settings_from_config(config: dict, proxy_urls=None) -> schemas.AppSettings:
             config.get("translation_chunk_size")
         ),
         auto_collect_patterns=normalize_auto_collect_patterns(config.get("auto_collect_patterns")),
+        default_ai_enrichment=normalize_ai_enrichment(config.get("default_ai_enrichment")),
+        enrichment_ai_account_id=str(config.get("enrichment_ai_account_id") or ""),
     )
 
 
@@ -65,6 +87,18 @@ def update_settings(settings: schemas.AppSettings, db: Session = Depends(get_db)
     manager.config["auto_collect_patterns"] = normalize_auto_collect_patterns(
         settings.auto_collect_patterns
     )
+    manager.config["default_ai_enrichment"] = normalize_ai_enrichment(
+        settings.default_ai_enrichment
+    )
+    enrichment_account_id = (settings.enrichment_ai_account_id or "").strip()
+    if enrichment_account_id:
+        account = db.query(models.Account).filter(
+            models.Account.id == enrichment_account_id,
+            models.Account.type == "ai",
+        ).first()
+        if not account:
+            raise HTTPException(status_code=400, detail="Selected enrichment account is invalid")
+    manager.config["enrichment_ai_account_id"] = enrichment_account_id
     manager.save_config()
     return _settings_from_config(manager.config, proxy_urls)
 

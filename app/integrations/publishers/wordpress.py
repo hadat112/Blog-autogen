@@ -9,6 +9,7 @@ class WordPressPublisher(BasePublisher):
         self.username = username
         self.app_password = app_password
         self.auth = HTTPBasicAuth(self.username, self.app_password)
+        self.last_warning = ""
 
     def upload_media(self, image_source: str) -> int:
         """Uploads an image to WP media library and returns the media ID."""
@@ -45,20 +46,23 @@ class WordPressPublisher(BasePublisher):
 
     def publish(self, title: str, content: str, image_source: str, category_id: int = None) -> str:
         """Creates a post and returns the link."""
+        self.last_warning = ""
         media_id = None
         if image_source:
             try:
                 media_id = self.upload_media(image_source)
             except Exception as e:
-                print(f"Warning: Failed to upload featured image: {e}")
+                self.last_warning = f"Published without featured image: {e}"
+                print(f"Warning: {self.last_warning}")
 
         url = f"{self.url}/wp-json/wp/v2/posts"
         data = {
             "title": title,
             "content": content,
             "status": "publish",
-            "featured_media": media_id
         }
+        if media_id:
+            data["featured_media"] = media_id
 
         if category_id:
             data["categories"] = [category_id]

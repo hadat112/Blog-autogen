@@ -3,11 +3,13 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.pattern_schemas import ArticleListResponse, ArticleResponse, PatternSummaryResponse
+from app.api.pattern_schemas import ArticleEnrichmentResponse, ArticleListResponse, ArticleResponse, PatternSummaryResponse
 from app.db import models
 from app.db.session import get_db
 from app.services.article_service import ArticleService
 from app.services.pattern_collection_service import PatternCollectionService
+from app.services.article_enrichment_service import ArticleEnrichmentService
+from app.domain.settings_manager import SettingsManager
 
 
 router = APIRouter(prefix="/patterns", tags=["patterns"])
@@ -48,6 +50,52 @@ def get_pattern(article_id: str, db: Session = Depends(get_db)):
     if not article:
         raise HTTPException(status_code=404, detail="Pattern not found")
     return article
+
+
+@router.get("/{article_id}/enrichment", response_model=ArticleEnrichmentResponse)
+def get_enrichment(article_id: str, db: Session = Depends(get_db)):
+    article = ArticleService(db).get(article_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="Pattern not found")
+    enrichment = db.query(models.ArticleEnrichment).filter(models.ArticleEnrichment.article_id == article_id).first()
+    if not enrichment:
+        enrichment = models.ArticleEnrichment(article_id=article_id)
+        db.add(enrichment)
+        db.commit()
+        db.refresh(enrichment)
+    return enrichment
+
+
+@router.post("/enrichment/bulk")
+def enrich_missing(db: Session = Depends(get_db)):
+    account_id = SettingsManager().config.get("enrichment_ai_account_id")
+    if not account_id:
+        raise HTTPException(status_code=400, detail="Configure an enrichment AI account in Settings")
+    articles = db.query(models.Article).all()
+    queued = 0
+    for article in articles:
+        enrichment = db.query(models.ArticleEnrichment).filter(models.ArticleEnrichment.article_id == article.id).first()
+        if not enrichment or enrichment.summary_status != "completed":
+            if ArticleEnrichmentService.enqueue(article.id, ai_account_id=account_id):
+                queued += 1
+    return {"queued": queued}
+
+
+@router.post("/{article_id}/enrichment/{step}")
+def enqueue_enrichment(article_id: str, step: str, db: Session = Depends(get_db)):
+    if step not in {"summary", "analysis", "dna"}:
+        raise HTTPException(status_code=400, detail="Unsupported enrichment step")
+    article = ArticleService(db).get(article_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="Pattern not found")
+    account_id = SettingsManager().config.get("enrichment_ai_account_id")
+    if not account_id:
+        raise HTTPException(status_code=400, detail="Configure an enrichment AI account in Settings")
+    try:
+        job = ArticleEnrichmentService.enqueue(article_id, ai_account_id=account_id, step=step)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"job_id": job.id if job else None, "status": "queued" if job else "already_complete"}
 
 
 @router.delete("/{article_id}")

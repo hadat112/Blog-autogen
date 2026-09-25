@@ -10,6 +10,7 @@ DEFAULT_TRANSLATION_MAX_CONCURRENCY = 2
 DEFAULT_AI_REQUEST_TIMEOUT = 300
 DEFAULT_TRANSLATION_CHUNK_SIZE = 6000
 DEFAULT_AUTO_COLLECT_PATTERNS = True
+DEFAULT_AI_ENRICHMENT = False
 
 
 def normalize_proxy_url(value):
@@ -91,6 +92,14 @@ def normalize_auto_collect_patterns(value):
     return str(value).strip().lower() not in {"0", "false", "no", "off"}
 
 
+def normalize_ai_enrichment(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return DEFAULT_AI_ENRICHMENT
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 class SettingsManager:
     def __init__(self, config_path="config.yaml"):
         self.config_path = config_path
@@ -122,6 +131,12 @@ class SettingsManager:
         self.config["auto_collect_patterns"] = normalize_auto_collect_patterns(
             self.config.get("auto_collect_patterns")
         )
+        self.config["default_ai_enrichment"] = normalize_ai_enrichment(
+            self.config.get("default_ai_enrichment")
+        )
+        self.config["enrichment_ai_account_id"] = str(
+            self.config.get("enrichment_ai_account_id") or ""
+        ).strip()
 
     def save_config(self):
         with open(self.config_path, "w") as f:

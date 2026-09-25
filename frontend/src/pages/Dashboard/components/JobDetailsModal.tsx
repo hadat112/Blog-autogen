@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { syncJob } from '../../../api/client';
 import { Job } from '../../../api/types';
 import { ProgressTimeline } from '../../../components/ui/ProgressTimeline';
+import { InlineStatus } from '../../../components/ui/InlineStatus';
 
 interface JobExtended extends Job {
   pipeline_name?: string;
@@ -58,6 +59,7 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ job, onClose }) => {
     ? job.input_text || ''
     : inputLog?.url || stepOneLog?.detail?.split('Step 1: Extracting article from ')[1]?.trim() || '';
   const outputUrl = typeof job.outputs?.wp_url === 'string' ? job.outputs.wp_url : '';
+  const warnings = Array.isArray(job.outputs?.warnings) ? job.outputs.warnings.filter(Boolean) : [];
   const version = (job.workflow_type === 'rewrite' || job.workflow_type === 'article_v2') ? 'V2' : 'V1';
 
   return (
@@ -162,6 +164,7 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ job, onClose }) => {
           </div>
 
           {outputUrl && <div className="rounded-xl border border-status-success/30 bg-status-success/10 p-4"><p className="text-xs font-bold uppercase tracking-wider text-status-success">WordPress output</p><div className="mt-2 flex items-center gap-2"><a href={outputUrl} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-sm font-medium text-accent hover:underline">{outputUrl}</a><button type="button" onClick={() => handleCopy(outputUrl)} className="rounded-md border border-border-default bg-surface p-2 text-content-secondary hover:text-content-primary" title="Copy WordPress link"><Copy size={15} /></button><a href={outputUrl} target="_blank" rel="noreferrer" className="rounded-md border border-border-default bg-surface p-2 text-content-secondary hover:text-content-primary" title="Open WordPress link"><ExternalLink size={15} /></a></div></div>}
+          {warnings.length > 0 && <div className="space-y-2">{warnings.map((warning, index) => <InlineStatus key={`${warning}-${index}`} tone="warning">{warning}</InlineStatus>)}</div>}
 
           <div className="space-y-4">
             <h4 className="text-lg font-bold text-content-primary flex items-center space-x-2"><FileText size={20} className="text-content-tertiary" /><span>Execution timeline</span></h4>

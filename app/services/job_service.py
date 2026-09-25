@@ -16,11 +16,17 @@ class JobService:
 
     def list_jobs(self, page: int = 1, page_size: int = 10, workflow_type: Optional[str] = None, status_group: Optional[str] = None, status: Optional[str] = None):
         jobs_query = self.db.query(models.Job)
-        if workflow_type and workflow_type != "all":
+        if not workflow_type or workflow_type == "all":
+            # Enrichment jobs are monitored from Pattern Library and should
+            # not pollute the main Dashboard activity feed.
+            jobs_query = jobs_query.filter(~models.Job.workflow_type.like("article_enrichment_%"))
+        else:
             if workflow_type == "legacy":
                 jobs_query = jobs_query.filter(models.Job.workflow_type.in_(["legacy", "article_v1"]))
             elif workflow_type == "rewrite":
                 jobs_query = jobs_query.filter(models.Job.workflow_type.in_(["rewrite", "article_v2"]))
+            elif workflow_type == "article_enrichment":
+                jobs_query = jobs_query.filter(models.Job.workflow_type.like("article_enrichment_%"))
             else:
                 jobs_query = jobs_query.filter(models.Job.workflow_type == workflow_type)
         if status_group == "active":
@@ -37,7 +43,9 @@ class JobService:
 
         jobs = []
         for job, pipeline_name in results:
-            job.pipeline_name = pipeline_name
+            job.pipeline_name = pipeline_name or (
+                "AI Enrichment" if (job.workflow_type or "").startswith("article_enrichment_") else None
+            )
             self._decorate(job)
             jobs.append(job)
         return {
@@ -57,7 +65,9 @@ class JobService:
             return None
 
         job, pipeline_name = result
-        job.pipeline_name = pipeline_name
+        job.pipeline_name = pipeline_name or (
+            "AI Enrichment" if (job.workflow_type or "").startswith("article_enrichment_") else None
+        )
         self._decorate(job)
         return job
 

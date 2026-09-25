@@ -3,6 +3,7 @@ import { Send, Zap, WandSparkles } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { getPipelines, getSettings } from '../../../api/client';
 import { startArticleWorkflow } from '../../../api/workflows';
+import { normalizeSourceUrl } from '../../../utils/sourceUrl';
 import { Card, CardHeader, CardTitle, CardContent } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
@@ -20,6 +21,7 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
     return saved === 'v2' ? 'v2' : 'v1';
   });
   const [useProxy, setUseProxy] = useState(() => window.localStorage.getItem('story-autogen-source-proxy') === 'true');
+  const [useEnrichment, setUseEnrichment] = useState(false);
 
   useEffect(() => {
     window.localStorage.setItem('story-autogen-workflow-version', version);
@@ -47,6 +49,9 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
       setUseProxy(false);
     }
   }, [appSettings, proxyConfigured, useProxy]);
+  useEffect(() => {
+    if (appSettings) setUseEnrichment(appSettings.default_ai_enrichment);
+  }, [appSettings?.default_ai_enrichment]);
 
   const availablePipelines = pipelines.filter(
     pipeline => Boolean(pipeline.step_accounts?.ai) && Boolean(pipeline.step_accounts?.wp)
@@ -59,8 +64,8 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
   }, [availablePipelines, selectedPipeline]);
 
   const runMutation = useMutation({
-    mutationFn: (data: { pipelineId: string; sourceUrl: string; useProxy: boolean }) =>
-      startArticleWorkflow(data.pipelineId, data.sourceUrl, version, data.useProxy),
+    mutationFn: (data: { pipelineId: string; sourceUrl: string; useProxy: boolean; useEnrichment: boolean }) =>
+      startArticleWorkflow(data.pipelineId, data.sourceUrl, version, data.useProxy, undefined, data.useEnrichment),
     onSuccess: (response) => {
       setInput('');
       if (onRunStarted) onRunStarted(response.data.job_id);
@@ -82,7 +87,13 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
       alert('Configure a proxy URL in Settings before enabling Proxy.');
       return;
     }
-    runMutation.mutate({ pipelineId: selectedPipeline, sourceUrl: trimmed, useProxy });
+    if (useEnrichment && !appSettings?.enrichment_ai_account_id) {
+      alert('Configure an enrichment AI account in Settings before enabling AI enrichment.');
+      return;
+    }
+    const normalizedSourceUrl = normalizeSourceUrl(trimmed);
+    setInput(normalizedSourceUrl);
+    runMutation.mutate({ pipelineId: selectedPipeline, sourceUrl: normalizedSourceUrl, useProxy, useEnrichment });
   };
 
   const handlePipelineChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -134,6 +145,10 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
                 <span className={`absolute left-0.5 top-0.5 h-2.5 w-2.5 rounded-full bg-white shadow transition-transform ${useProxy ? 'translate-x-2.5' : 'translate-x-0'}`} />
             </span>
             {useProxy ? 'Proxy ON' : 'Proxy OFF'}
+          </button>
+          <button type="button" role="switch" aria-checked={useEnrichment} aria-disabled={!appSettings?.enrichment_ai_account_id} onClick={() => { if (!appSettings?.enrichment_ai_account_id) { alert('Configure an enrichment AI account in Settings first.'); return; } setUseEnrichment(value => !value); }} className={`flex h-7 items-center gap-1.5 rounded-md border px-2 text-[10px] font-bold transition-colors ${!appSettings?.enrichment_ai_account_id ? 'cursor-not-allowed border-border-default bg-surface-subtle text-content-tertiary opacity-60' : useEnrichment ? 'border-accent/40 bg-accent/10 text-accent' : 'border-border-default bg-surface-subtle text-content-tertiary'}`} title={appSettings?.enrichment_ai_account_id ? 'Toggle deferred AI enrichment' : 'Configure an enrichment AI account first'}>
+            <span className={`relative h-3.5 w-6 rounded-full transition-colors ${useEnrichment ? 'bg-accent' : 'bg-border-strong'}`}><span className={`absolute left-0.5 top-0.5 h-2.5 w-2.5 rounded-full bg-white shadow transition-transform ${useEnrichment ? 'translate-x-2.5' : 'translate-x-0'}`} /></span>
+            {useEnrichment ? 'AI ON' : 'AI OFF'}
           </button>
         </div>
       </CardHeader>

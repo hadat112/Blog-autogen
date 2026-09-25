@@ -52,4 +52,6 @@ echo
 echo "Done: ${RELEASE_DIR}.zip"
 echo "Version bumped: ${CURRENT_VERSION} -> ${NEXT_VERSION}"
 echo
-read -n 1 -s -r -p "Press any key to close..."
+if [ -t 0 ]; then
+  read -n 1 -s -r -p "Press any key to close..."
+fi

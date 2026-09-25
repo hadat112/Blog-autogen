@@ -7,6 +7,7 @@ test('generate story has no manual theme input and opens review output', async (
   await page.route('**/content-drafts/draft-generated', route => route.fulfill({ json: { ...draft('generated'), caption: 'Independent social caption' } }));
   await page.goto('/#/generate-story');
   await expect(page.getByLabel(/theme/i)).toHaveCount(0);
+  await page.getByLabel('Pipeline').selectOption('pipeline-generate');
   await page.getByRole('button', { name: 'Generate new story' }).click();
   await expect(page.getByLabel('Title')).toHaveValue('A new story');
   await expect(page.getByLabel('Caption')).toHaveValue('Independent social caption');
@@ -29,6 +30,7 @@ test('generate story can be cancelled from its progress panel', async ({ page })
   await page.route('**/jobs/cancel-generation/cancel', route => { status = 'cancelled'; return route.fulfill({ json: { status } }); });
   await page.route('**/content-drafts/draft-generated', route => route.fulfill({ json: { ...draft('generated'), state: status === 'cancelled' ? 'generation_failed' : 'generating', error: status === 'cancelled' ? 'Generation was cancelled' : null } }));
   await page.goto('/#/generate-story');
+  await page.getByLabel('Pipeline').selectOption('pipeline-generate');
   await page.getByRole('button', { name: 'Generate new story' }).click();
   await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByText('Generation cancelled. The draft was preserved for recovery.')).toBeVisible();

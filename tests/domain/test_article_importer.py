@@ -1,6 +1,7 @@
 import responses
 
 from app.domain.article_importer import extract_article_from_url, extract_wp_post_id, parse_wp_post_payload
+from app.services.article_service import normalize_source_url
 
 
 class FakeAI:
@@ -83,6 +84,10 @@ def test_parse_wp_post_payload_prefers_embedded_image():
         "content": "First paragraph.\n\nSecond paragraph.",
         "image_url": "https://source.test/image.jpg",
     }
+
+
+def test_normalize_source_url_removes_fbclid_and_fragment():
+    assert normalize_source_url("https://source.test/article?utm_source=fb&fbclid=tracking#comments") == "https://source.test/article?utm_source=fb"
 
 
 @responses.activate
@@ -261,6 +266,39 @@ def test_extract_article_from_url_can_repost_wp_rest_without_translation():
 
 
 @responses.activate
+def test_extract_article_from_url_reposts_html_when_wp_rest_is_forbidden():
+    url = "https://source.test/article-html-fallback"
+    responses.add(
+        responses.GET,
+        url,
+        body="""
+        <html>
+          <head>
+            <meta property="og:title" content="HTML fallback title">
+            <meta property="og:image" content="https://source.test/fallback.jpg">
+          </head>
+          <body><article><h1>HTML fallback title</h1><p>Fallback paragraph.</p></article></body>
+        </html>
+        """,
+        status=200,
+        content_type="text/html",
+    )
+    responses.add(
+        responses.GET,
+        "https://source.test/wp-json/wp/v2/posts?slug=article-html-fallback&_embed=1",
+        body="<html><body>403 Forbidden</body></html>",
+        status=403,
+        content_type="text/html",
+    )
+
+    article = extract_article_from_url(url, None, translate=False)
+
+    assert article["title"] == "HTML fallback title"
+    assert "Fallback paragraph." in article["content"]
+    assert article["image_url"] == "https://source.test/fallback.jpg"
+
+
+@responses.activate
 def test_extract_article_from_url_falls_back_to_post_id_when_slug_lookup_misses():
     responses.add(
         responses.GET,
@@ -408,6 +446,40 @@ def test_extract_article_from_url_falls_back_when_wp_rest_is_missing_content():
     assert len(ai.calls) == 1
     assert "Clean paragraph" in ai.calls[0][0]
     assert log_messages == ["Step 2: Extracting and translating article via AI fallback..."]
+
+
+@responses.activate
+def test_extract_article_from_url_uses_defuddle_when_wp_rest_returns_too_short_content(monkeypatch):
+    url = "https://source.test/article-defuddle"
+    responses.add(
+        responses.GET,
+        url,
+        body='<html><head><link rel="alternate" href="https://source.test/wp-json/wp/v2/posts/99"></head></html>',
+        status=200,
+        content_type="text/html",
+    )
+    responses.add(
+        responses.GET,
+        "https://source.test/wp-json/wp/v2/posts?slug=article-defuddle&_embed=1",
+        json=[{"title": {"rendered": "REST title"}, "content": {"rendered": "<p>Too short</p>"}}],
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        f"https://defuddle.md/{url}",
+        body='---\ntitle: Defuddle title\nimage: https://source.test/defuddle.jpg\nlanguage: es\nsource: https://source.test/article-defuddle\n---\n\nLong enough Defuddle content that should be used as the fallback article body.',
+        status=200,
+        content_type="text/markdown",
+    )
+    monkeypatch.setenv("DEFUDDLE_API_KEY", "df_test")
+    ai = TranslatingAI()
+
+    article = extract_article_from_url(url, ai, language="Spanish")
+
+    assert article["title"] == "Defuddle title translated"
+    assert article["content"].startswith("Long enough Defuddle content")
+    assert article["image_url"] == "https://source.test/defuddle.jpg"
+    assert responses.calls[-1].request.headers["Authorization"] == "Bearer df_test"
 
 
 @responses.activate

@@ -40,6 +40,27 @@ class ArticleListResponse(BaseModel):
     page_size: int
 
 
+class ArticleEnrichmentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    article_id: str
+    summary: Optional[str] = None
+    plot_beats: Optional[Any] = None
+    characters: Optional[Any] = None
+    setting: Optional[Any] = None
+    conflict: Optional[Any] = None
+    emotional_arc: Optional[Any] = None
+    creative_dna: Optional[Any] = None
+    summary_status: str
+    analysis_status: str
+    dna_status: str
+    summary_error: Optional[str] = None
+    analysis_error: Optional[str] = None
+    dna_error: Optional[str] = None
+    ai_account_id: Optional[str] = None
+    model: str = ""
+    updated_at: datetime
+
+
 class PatternSummaryResponse(BaseModel):
     total: int
     completed: int

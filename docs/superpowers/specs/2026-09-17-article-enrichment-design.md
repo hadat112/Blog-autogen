@@ -112,6 +112,16 @@ The migration adds source archive columns and the one-to-one enrichment table wi
 
 ## Verification criteria
 
+## Local database visibility
+
+Settings also displays local database usage for this personal desktop tool:
+
+- SQLite file size when a file-backed database is used.
+- Counts for articles, enrichments, jobs, and drafts.
+- Values refresh periodically while Settings is open.
+
+This is informational only. No automatic deletion or compaction is triggered from the usage panel.
+
 - A normal V1/V2 run succeeds with AI enrichment Off and creates no enrichment job.
 - A normal V1/V2 run with enrichment On creates source data and independent enrichment jobs while returning the workflow result without waiting for them.
 - Re-running the same source slug does not create a duplicate article.

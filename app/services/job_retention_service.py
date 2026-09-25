@@ -2,6 +2,7 @@ from app.db import models
 
 
 MAX_STORED_JOBS = 500
+MAX_FULL_SUCCESSFUL_DRAFTS = 100
 ACTIVE_STATUSES = {"queued", "running"}
 
 
@@ -10,6 +11,7 @@ class JobRetentionService:
         self.db = db
 
     def prune(self, limit=MAX_STORED_JOBS):
+        self._compact_old_successful_drafts()
         jobs = self.db.query(models.Job).order_by(
             models.Job.start_time.desc(), models.Job.id.desc()
         ).all()
@@ -31,3 +33,24 @@ class JobRetentionService:
         if deleted:
             self.db.commit()
         return deleted
+
+    def _compact_old_successful_drafts(self, limit=MAX_FULL_SUCCESSFUL_DRAFTS):
+        """Keep recent published output, but remove large old draft bodies.
+
+        The row and WordPress metadata remain available for history/recovery.
+        Source articles are intentionally not touched because they are the
+        reusable creative archive.
+        """
+        successful_states = {"wordpress_created", "published"}
+        drafts = self.db.query(models.ContentDraft).filter(
+            models.ContentDraft.state.in_(successful_states),
+            models.ContentDraft.content != "",
+        ).order_by(models.ContentDraft.updated_at.desc(), models.ContentDraft.id.desc()).all()
+        compacted = 0
+        for draft in drafts[limit:]:
+            draft.content = ""
+            draft.caption = None
+            compacted += 1
+        if compacted:
+            self.db.commit()
+        return compacted

@@ -19,6 +19,11 @@ class Gateway:
         return {"id": "42", "link": "https://wp.test/post", "status": status}
 
 
+class FailingImageGateway(Gateway):
+    def upload_remote(self, source):
+        raise OSError("DNS lookup failed")
+
+
 @pytest.fixture
 def db():
     engine = create_engine("sqlite:///:memory:")
@@ -40,6 +45,32 @@ def test_strict_publisher_records_ids_and_prevents_duplicate(db):
     assert Gateway.posts[0][1] == "<p>Line 1</p>\n<p>Line 2</p>"
     with pytest.raises(ValueError, match="already created"):
         WordPressPublishingService(db, Gateway).publish("draft")
+
+
+def test_image_upload_failure_still_publishes_without_media(db, caplog):
+    FailingImageGateway.posts.clear()
+    draft = models.ContentDraft(
+        id="image-failure",
+        kind="manual",
+        pipeline_id="pipeline",
+        title="Title",
+        content="Body",
+        content_format="plain",
+        wp_status="draft",
+        state="ready_for_review",
+        image_kind="url",
+        image_source="https://img.test/unavailable.jpg",
+    )
+    db.add(draft)
+    db.commit()
+
+    with caplog.at_level("WARNING"):
+        result = WordPressPublishingService(db, FailingImageGateway).publish("image-failure")
+
+    assert result.state == "wordpress_created"
+    assert result.wp_media_id is None
+    assert FailingImageGateway.posts[-1][-1] is None
+    assert "publishing without image" in caplog.text
 
 
 def test_publish_now_requires_confirmation(db):

@@ -41,12 +41,18 @@ cd release
 zip -r "${RELEASE_NAME}.zip" "$RELEASE_NAME" >/dev/null
 cd ..
 
-sed -i '' "s/^version = \"${CURRENT_VERSION}\"/version = \"${NEXT_VERSION}\"/" pyproject.toml
-sed -i '' "s/^version = \"${CURRENT_VERSION}\"/version = \"${NEXT_VERSION}\"/" uv.lock
-sed -i '' "s/^  \"version\": \"${CURRENT_VERSION}\"/  \"version\": \"${NEXT_VERSION}\"/" frontend/package.json
+if [ "${STORY_AUTOGEN_BUMP_VERSION:-1}" = "1" ]; then
+  sed -i '' "s/^version = \"${CURRENT_VERSION}\"/version = \"${NEXT_VERSION}\"/" pyproject.toml
+  sed -i '' "s/^version = \"${CURRENT_VERSION}\"/version = \"${NEXT_VERSION}\"/" uv.lock
+  sed -i '' "s/^  \"version\": \"${CURRENT_VERSION}\"/  \"version\": \"${NEXT_VERSION}\"/" frontend/package.json
+fi
 
 echo
 echo "Done: ${RELEASE_DIR}.zip"
-echo "Version bumped: ${CURRENT_VERSION} -> ${NEXT_VERSION}"
+if [ "${STORY_AUTOGEN_BUMP_VERSION:-1}" = "1" ]; then
+  echo "Version bumped: ${CURRENT_VERSION} -> ${NEXT_VERSION}"
+fi
 echo
-read -n 1 -s -r -p "Press any key to close..."
+if [ -t 0 ]; then
+  read -n 1 -s -r -p "Press any key to close..."
+fi

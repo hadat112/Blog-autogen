@@ -1,4 +1,5 @@
 import html
+import logging
 import threading
 from collections import defaultdict
 from datetime import datetime
@@ -12,6 +13,7 @@ from app.services.error_sanitizer import sanitize_error
 
 
 _draft_locks = defaultdict(threading.Lock)
+logger = logging.getLogger(__name__)
 
 
 def plain_text_to_html(value):
@@ -63,16 +65,26 @@ class WordPressPublishingService:
             draft.error = None
             self.db.commit()
             media_id = draft.wp_media_id
+            publish_warning = None
             try:
                 if draft.image_source and not media_id:
-                    if draft.image_kind == "url":
-                        media_id = gateway.upload_remote(draft.image_source)
-                    elif draft.image_kind == "upload":
-                        media_id = gateway.upload_file(draft.image_source)
-                    else:
-                        raise ValueError("Unsupported image source")
-                    draft.wp_media_id = str(media_id)
-                    self.db.commit()
+                    try:
+                        if draft.image_kind == "url":
+                            media_id = gateway.upload_remote(draft.image_source)
+                        elif draft.image_kind == "upload":
+                            media_id = gateway.upload_file(draft.image_source)
+                        else:
+                            raise ValueError("Unsupported image source")
+                        draft.wp_media_id = str(media_id)
+                        self.db.commit()
+                    except Exception as exc:
+                        media_id = None
+                        publish_warning = f"Published without featured image: {sanitize_error(str(exc))}"
+                        logger.warning(
+                            "WordPress image upload skipped; publishing without image: draft_id=%s error=%s",
+                            draft.id,
+                            sanitize_error(str(exc)),
+                        )
                 content = draft.content if draft.content_format == "html" else plain_text_to_html(draft.content)
                 result = gateway.create_post(
                     draft.title,
@@ -95,6 +107,7 @@ class WordPressPublishingService:
             draft.wp_post_id = result["id"]
             draft.wp_url = result["link"]
             draft.wp_status = result["status"]
+            draft.error = publish_warning
             draft.wordpress_created_at = datetime.utcnow()
             draft.version += 1
             self.db.commit()

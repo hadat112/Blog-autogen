@@ -1,10 +1,17 @@
 from html.parser import HTMLParser
 from html import unescape
 import inspect
+import logging
+import os
 import re
 from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
+import yaml
+
+
+logger = logging.getLogger(__name__)
+_MIN_SOURCE_CONTENT_CHARS = 12
 
 
 class _ArticleHTMLCleaner(HTMLParser):
@@ -135,6 +142,22 @@ def _extract_html_attr(html: str, name: str):
     return ""
 
 
+def _extract_html_title(html: str) -> str:
+    title = _extract_html_attr(html, "og:title")
+    if title:
+        return title
+
+    match = re.search(r"<h1\b[^>]*>(.*?)</h1>", html or "", re.IGNORECASE | re.DOTALL)
+    if match:
+        return strip_html_preserve_paragraphs(match.group(1))
+
+    match = re.search(r"<title\b[^>]*>(.*?)</title>", html or "", re.IGNORECASE | re.DOTALL)
+    if match:
+        return strip_html_preserve_paragraphs(match.group(1))
+
+    return ""
+
+
 def extract_wp_post_id(html: str, final_url: str = ""):
     match = re.search(r"/wp-json/wp/v2/posts/(\d+)", html or "")
     if match:
@@ -162,6 +185,10 @@ def _wp_api_base(final_url: str):
     if not parsed.scheme or not parsed.netloc:
         return None
     return f"{parsed.scheme}://{parsed.netloc}/wp-json/wp/v2"
+
+
+def _wp_rest_query_url(origin_api: str) -> str:
+    return origin_api.removesuffix("/wp-json/wp/v2") + "/"
 
 
 def _slug_from_url(final_url: str):
@@ -192,7 +219,21 @@ def fetch_wp_post_json(origin_api: str, post_id: str, proxies=None):
         timeout=30,
         proxies=proxies,
     )
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.HTTPError:
+        if response.status_code not in {403, 404, 405}:
+            raise
+        fallback_url = _wp_rest_query_url(origin_api)
+        logger.warning("WordPress REST path blocked; retrying query route: url=%s", fallback_url)
+        response = requests.get(
+            fallback_url,
+            params={"rest_route": f"/wp/v2/posts/{post_id}"},
+            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"},
+            timeout=30,
+            proxies=proxies,
+        )
+        response.raise_for_status()
     return response.json()
 
 
@@ -206,7 +247,21 @@ def fetch_wp_post_by_slug(origin_api: str, slug: str, proxies=None):
         timeout=30,
         proxies=proxies,
     )
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.HTTPError:
+        if response.status_code not in {403, 404, 405}:
+            raise
+        fallback_url = _wp_rest_query_url(origin_api)
+        logger.warning("WordPress REST path blocked; retrying query route: url=%s", fallback_url)
+        response = requests.get(
+            fallback_url,
+            params={"rest_route": "/wp/v2/posts", "slug": slug, "_embed": "1"},
+            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"},
+            timeout=30,
+            proxies=proxies,
+        )
+        response.raise_for_status()
     posts = response.json()
     return posts[0] if posts else None
 
@@ -271,6 +326,43 @@ def parse_wp_post_payload(post_json: dict, original_html: str = "", origin_api: 
     }
 
 
+def _has_usable_source_fields(fields: dict) -> bool:
+    return bool((fields.get("title") or "").strip()) and len((fields.get("content") or "").strip()) >= _MIN_SOURCE_CONTENT_CHARS
+
+
+def _parse_defuddle_response(response_text: str, source_url: str) -> dict:
+    frontmatter = {}
+    content = (response_text or "").strip()
+    if content.startswith("---"):
+        parts = content.split("---", 2)
+        if len(parts) == 3:
+            frontmatter = yaml.safe_load(parts[1]) or {}
+            content = parts[2].strip()
+
+    return {
+        "title": str(frontmatter.get("title") or "").strip(),
+        "content": content,
+        "image_url": str(frontmatter.get("image") or "").strip(),
+        "source_url": str(frontmatter.get("source") or source_url).strip(),
+        "language": str(frontmatter.get("language") or "").strip(),
+    }
+
+
+def _fetch_defuddle_article(source_url: str, proxies=None):
+    endpoint = f"https://defuddle.md/{source_url}"
+    headers = {"User-Agent": "story-autogen/1.0"}
+    api_key = os.getenv("DEFUDDLE_API_KEY", "").strip()
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    response = requests.get(endpoint, headers=headers, timeout=60, proxies=proxies)
+    response.raise_for_status()
+    article = _parse_defuddle_response(response.text, source_url)
+    if not _has_usable_source_fields(article):
+        raise ValueError("Defuddle returned no usable article content")
+    return article
+
+
 def _supports_progress_callback(func) -> bool:
     try:
         signature = inspect.signature(func)
@@ -291,6 +383,7 @@ def _extract_wp_article_from_response(
 ):
     origin_api = _wp_api_base(response.url)
     if not origin_api:
+        logger.warning("WordPress REST lookup skipped: invalid origin URL=%s", response.url)
         return None
 
     post_json = None
@@ -310,10 +403,21 @@ def _extract_wp_article_from_response(
                 post_json = fetch_wp_post_json(origin_api, post_id, proxies=proxies)
             else:
                 post_json = fetch_wp_post_json(origin_api, post_id)
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "WordPress REST lookup failed: type=%s message=%s source_url=%s",
+            type(exc).__name__,
+            exc,
+            response.url,
+        )
         return None
 
     if not post_json:
+        logger.warning(
+            "WordPress REST lookup returned no post: slug=%s source_url=%s",
+            requested_slug,
+            response.url,
+        )
         return None
 
     fields = parse_wp_post_payload(
@@ -322,7 +426,13 @@ def _extract_wp_article_from_response(
         origin_api=origin_api,
         proxies=proxies,
     )
-    if not fields["title"] or not fields["content"]:
+    if not _has_usable_source_fields(fields):
+        logger.warning(
+            "WordPress REST post is missing or too short: title_present=%s content_chars=%s source_url=%s",
+            bool(fields["title"]),
+            len(fields["content"]),
+            response.url,
+        )
         return None
 
     if source_callback:
@@ -391,8 +501,64 @@ def extract_article_from_url(
         source_callback=source_callback,
         proxies=proxies,
     )
+    if article is None:
+        try:
+            defuddle_fields = _fetch_defuddle_article(response.url, proxies=proxies)
+            if source_callback:
+                try:
+                    source_callback(defuddle_fields)
+                except Exception:
+                    pass
+            if not translate:
+                article = {
+                    "title": defuddle_fields["title"],
+                    "content": defuddle_fields["content"],
+                    "caption": "",
+                    "image_url": defuddle_fields["image_url"],
+                }
+            elif hasattr(ai_client, "translate_article_fields"):
+                kwargs = {"language": language}
+                if log_callback and _supports_progress_callback(ai_client.translate_article_fields):
+                    kwargs["progress_callback"] = log_callback
+                if log_callback:
+                    log_callback("Step 2: Translating Defuddle article via AI...")
+                article = ai_client.translate_article_fields(
+                    defuddle_fields["title"],
+                    defuddle_fields["content"],
+                    defuddle_fields["image_url"],
+                    **kwargs,
+                )
+            else:
+                clean_html = f"<h1>{defuddle_fields['title']}</h1>\n{defuddle_fields['content']}"
+                article = ai_client.extract_article(clean_html, response.url, language=language)
+            logger.info("Defuddle fallback succeeded: source_url=%s", response.url)
+        except Exception as exc:
+            logger.warning("Defuddle fallback failed: type=%s message=%s source_url=%s", type(exc).__name__, exc, response.url)
     if article is None and not translate:
-        raise ValueError("Repost original requires a WordPress REST article with title and content.")
+        # Some WordPress sites serve the article HTML but block /wp-json/ with
+        # a firewall. Preserve repost functionality by extracting the visible
+        # article instead of treating a REST-only failure as a hard failure.
+        clean_html = clean_article_html(response.text, response.url)
+        html_title = _extract_html_title(response.text)
+        html_content = strip_html_preserve_paragraphs(clean_html)
+        if html_title and html_content:
+            logger.warning(
+                "WordPress REST unavailable; reposting from HTML fallback: title_present=%s content_chars=%s source_url=%s",
+                bool(html_title),
+                len(html_content),
+                response.url,
+            )
+            return {
+                "title": html_title,
+                "content": html_content,
+                "caption": "",
+                "image_url": _extract_html_attr(response.text, "og:image"),
+                "source_url": response.url,
+            }
+        raise ValueError(
+            "Repost original requires a WordPress REST article with title and content. "
+            "Check server logs for the REST status, content type, and lookup URL."
+        )
     if article is None:
         clean_html = clean_article_html(response.text, response.url)
         if log_callback:

@@ -19,6 +19,8 @@ MIGRATIONS = (
     (6, "add job and article pagination indexes"),
     (7, "add application settings table"),
     (8, "add article source slug identity"),
+    (9, "archive fetched article source data"),
+    (10, "add article enrichment records"),
 )
 
 
@@ -156,6 +158,39 @@ def _migration_8(connection):
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_articles_source_slug ON articles(source_slug)"))
 
 
+def _migration_9(connection):
+    if "articles" not in set(inspect(connection).get_table_names()):
+        return
+    for definition in (
+        "source_title VARCHAR NOT NULL DEFAULT ''",
+        "source_content TEXT NOT NULL DEFAULT ''",
+        "source_image_url VARCHAR NOT NULL DEFAULT ''",
+        "source_language VARCHAR NOT NULL DEFAULT ''",
+        "source_content_hash VARCHAR NOT NULL DEFAULT ''",
+        "source_fetched_at DATETIME",
+    ):
+        _add_column(connection, "articles", definition)
+
+
+def _migration_10(connection):
+    connection.execute(text(
+        "CREATE TABLE IF NOT EXISTS article_enrichments ("
+        "id VARCHAR PRIMARY KEY, article_id VARCHAR NOT NULL UNIQUE, "
+        "summary TEXT, plot_beats JSON, characters JSON, setting JSON, "
+        "conflict JSON, emotional_arc JSON, creative_dna JSON, "
+        "summary_status VARCHAR NOT NULL DEFAULT 'missing', "
+        "analysis_status VARCHAR NOT NULL DEFAULT 'missing', "
+        "dna_status VARCHAR NOT NULL DEFAULT 'missing', "
+        "summary_error TEXT, analysis_error TEXT, dna_error TEXT, "
+        "ai_account_id VARCHAR, model VARCHAR NOT NULL DEFAULT '', "
+        "updated_at DATETIME NOT NULL)"
+    ))
+    connection.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_article_enrichments_article_id "
+        "ON article_enrichments(article_id)"
+    ))
+
+
 MIGRATION_FUNCTIONS = {
     1: _migration_1,
     2: _migration_2,
@@ -165,6 +200,8 @@ MIGRATION_FUNCTIONS = {
     6: _migration_6,
     7: _migration_7,
     8: _migration_8,
+    9: _migration_9,
+    10: _migration_10,
 }
 
 

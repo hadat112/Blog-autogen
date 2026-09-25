@@ -16,3 +16,27 @@ export const deleteThemeRule = (id: string) => client.delete(`/theme-rules/${id}
 
 export interface PatternAnalysisPipeline { pipeline_id: string; name: string; type: string; can_analyze: boolean }
 export const getPatternAnalysisPipelines = () => client.get<PatternAnalysisPipeline[]>('/pattern-analysis-pipelines');
+export interface ArticleEnrichment {
+  article_id: string;
+  summary: string | null;
+  plot_beats: unknown;
+  characters: unknown;
+  setting: unknown;
+  conflict: unknown;
+  emotional_arc: unknown;
+  creative_dna: unknown;
+  summary_status: 'missing' | 'queued' | 'processing' | 'completed' | 'failed';
+  analysis_status: 'missing' | 'queued' | 'processing' | 'completed' | 'failed';
+  dna_status: 'missing' | 'queued' | 'processing' | 'completed' | 'failed';
+  summary_error?: string | null;
+  analysis_error?: string | null;
+  dna_error?: string | null;
+  ai_account_id?: string | null;
+  model: string;
+  updated_at: string;
+}
+export const getPatternEnrichment = (id: string) => client.get<ArticleEnrichment>(`/patterns/${id}/enrichment`);
+export const enqueuePatternEnrichment = (id: string, step: 'summary' | 'analysis' | 'dna') =>
+  client.post<{ job_id: string | null; status: string }>(`/patterns/${id}/enrichment/${step}`);
+export const enqueueMissingEnrichment = () =>
+  client.post<{ queued: number }>('/patterns/enrichment/bulk');

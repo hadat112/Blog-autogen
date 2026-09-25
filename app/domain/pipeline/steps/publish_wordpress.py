@@ -26,8 +26,12 @@ class WordPressPublishPlugin(BaseStep):
                 state.article.image_url,
                 category_id=category_id,
             )
+            warnings = []
+            if getattr(ports.wp, "last_warning", ""):
+                warnings.append(ports.wp.last_warning)
+                self._log(emit, state, self.step_index, step_name, 100, f"{state.log_task_id} Warning: {ports.wp.last_warning}")
             self._log(emit, state, self.step_index, step_name, 100, f"{state.log_task_id} WP Success: {state.wp_url}")
-            return PluginResult(self.name, "success", {"url": state.wp_url})
+            return PluginResult(self.name, "success", {"url": state.wp_url, "warnings": warnings})
         except Exception as e:
             state.status = "Partial Success (WP Error)"
             state.error_msg = str(e)

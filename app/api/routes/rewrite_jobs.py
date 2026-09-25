@@ -21,7 +21,7 @@ async def start_rewrite(data: RewriteJobInput, db: Session = Depends(get_db)):
     pipeline = db.query(models.Pipeline).filter(models.Pipeline.id == data.pipeline_id, models.Pipeline.is_active.is_(True)).first()
     if not pipeline:
         raise HTTPException(status_code=404, detail="Active pipeline not found")
-    if not (pipeline.step_accounts or {}).get("ai"):
+    if (pipeline.language or "").strip() and not (pipeline.step_accounts or {}).get("ai"):
         raise HTTPException(status_code=400, detail="Selected pipeline has no AI account")
     if not (pipeline.step_accounts or {}).get("wp"):
         raise HTTPException(status_code=400, detail="Selected pipeline has no WordPress account")
@@ -66,6 +66,7 @@ async def start_rewrite(data: RewriteJobInput, db: Session = Depends(get_db)):
             draft.id,
             mode="v2",
             use_proxy=data.use_proxy,
+            use_enrichment=data.use_enrichment,
         )
 
     workflow_runner.start(job.id, operation)

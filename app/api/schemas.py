@@ -37,6 +37,8 @@ class AppSettings(BaseModel):
     ai_request_timeout: int = Field(default=300, ge=30, le=900)
     translation_chunk_size: int = Field(default=6000, ge=1000, le=30000)
     auto_collect_patterns: bool = True
+    default_ai_enrichment: bool = False
+    enrichment_ai_account_id: str = ""
 
 
 class ProxyCheckInput(BaseModel):
