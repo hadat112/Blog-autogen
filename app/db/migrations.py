@@ -21,6 +21,7 @@ MIGRATIONS = (
     (8, "add article source slug identity"),
     (9, "archive fetched article source data"),
     (10, "add article enrichment records"),
+    (11, "add text story composition records"),
 )
 
 
@@ -191,6 +192,21 @@ def _migration_10(connection):
     ))
 
 
+def _migration_11(connection):
+    connection.execute(text(
+        "CREATE TABLE IF NOT EXISTS text_story_compositions ("
+        "id VARCHAR PRIMARY KEY, draft_id VARCHAR NOT NULL UNIQUE, "
+        "source_text TEXT NOT NULL, rewrite_text TEXT NOT NULL DEFAULT '', "
+        "continuation_text TEXT NOT NULL DEFAULT '', image_prompt TEXT NOT NULL DEFAULT '', "
+        "prompt_version VARCHAR NOT NULL, stage_status JSON NOT NULL DEFAULT '{}', "
+        "updated_at DATETIME NOT NULL)"
+    ))
+    connection.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_text_story_compositions_draft_id "
+        "ON text_story_compositions(draft_id)"
+    ))
+
+
 MIGRATION_FUNCTIONS = {
     1: _migration_1,
     2: _migration_2,
@@ -202,6 +218,7 @@ MIGRATION_FUNCTIONS = {
     8: _migration_8,
     9: _migration_9,
     10: _migration_10,
+    11: _migration_11,
 }
 
 

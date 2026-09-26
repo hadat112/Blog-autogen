@@ -4,7 +4,7 @@ from typing import List, Literal, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-DraftKind = Literal["rewrite", "generated", "manual", "article_workflow", "article_v1", "article_v2"]
+DraftKind = Literal["rewrite", "generated", "text_story", "manual", "article_workflow", "article_v1", "article_v2"]
 
 
 class DraftInput(BaseModel):

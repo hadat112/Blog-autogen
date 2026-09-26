@@ -90,6 +90,8 @@ class ContentDraftService:
         if draft.state in {"publishing", "wordpress_created"}:
             raise ValueError("Publishing or published drafts cannot be deleted")
         upload = draft.image_source if draft.image_kind == "upload" else None
+        if draft.kind == "text_story":
+            self.db.query(models.TextStoryComposition).filter_by(draft_id=draft_id).delete()
         self.db.delete(draft)
         self.db.commit()
         if upload:

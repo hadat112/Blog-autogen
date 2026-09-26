@@ -102,6 +102,20 @@ class ContentDraft(Base):
     )
 
 
+class TextStoryComposition(Base):
+    __tablename__ = "text_story_compositions"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    draft_id = Column(String, ForeignKey("content_drafts.id"), nullable=False, unique=True)
+    source_text = Column(Text, nullable=False)
+    rewrite_text = Column(Text, default="", nullable=False)
+    continuation_text = Column(Text, default="", nullable=False)
+    image_prompt = Column(Text, default="", nullable=False)
+    prompt_version = Column(String, nullable=False)
+    stage_status = Column(JSON, default=dict, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
 class Article(Base):
     __tablename__ = "articles"
 
