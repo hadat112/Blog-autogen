@@ -80,6 +80,11 @@ class GenerationJobInput(BaseModel):
     pipeline_id: str
 
 
+class TextStoryJobInput(BaseModel):
+    pipeline_id: str
+    source_text: str = Field(min_length=1)
+
+
 class WorkflowJobCreated(BaseModel):
     job_id: str
     draft_id: str

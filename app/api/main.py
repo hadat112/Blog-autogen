@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
-from app.api.routes import accounts, article_workflows, content_drafts, generation_jobs, jobs, languages, pattern_collection_sources, patterns, pipelines, rewrite_jobs, settings, theme_rules
+from app.api.routes import accounts, article_workflows, content_drafts, generation_jobs, jobs, languages, pattern_collection_sources, patterns, pipelines, rewrite_jobs, settings, text_story_jobs, theme_rules
 from app.services.language_service import LanguageService
 from app.db.session import Base, engine
 from app.db.session import SessionLocal
@@ -73,6 +73,7 @@ app.include_router(theme_rules.router)
 app.include_router(pattern_collection_sources.router)
 app.include_router(rewrite_jobs.router)
 app.include_router(generation_jobs.router)
+app.include_router(text_story_jobs.router)
 app.include_router(article_workflows.router)
 
 
@@ -97,7 +98,7 @@ def serve_frontend(path: str):
         "accounts", "pipelines", "jobs", "languages", "settings",
         "content-drafts", "patterns", "theme-rules",
         "rewrite-jobs", "generation-jobs", "pattern-analysis-pipelines",
-        "article-workflows",
+        "article-workflows", "text-story-jobs",
     )):
         return {"status": "not_found"}
 
