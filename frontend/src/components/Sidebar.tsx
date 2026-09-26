@@ -17,6 +17,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, isCollapsed = fals
     ] },
     { label: 'Content workflows', items: [
       { id: 'generate-story', path: '/generate-story', label: 'Generate Story', icon: <Sparkles size={20} /> },
+      { id: 'text-story', path: '/text-story', label: 'Text Story', icon: <Sparkles size={20} /> },
       { id: 'wordpress-publisher', path: '/wordpress-publisher', label: 'WP Publisher', icon: <Send size={20} /> },
       { id: 'pattern-library', path: '/pattern-library', label: 'Pattern Library', icon: <LibraryBig size={20} /> },
     ] },

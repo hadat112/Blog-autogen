@@ -105,7 +105,7 @@ export interface ContentDraft {
   id: string;
   pipeline_id?: string | null;
   wp_account_id?: string | null;
-  kind: 'rewrite' | 'generated' | 'manual' | 'article_workflow' | 'article_v1' | 'article_v2';
+  kind: 'rewrite' | 'generated' | 'text_story' | 'manual' | 'article_workflow' | 'article_v1' | 'article_v2';
   source_url?: string | null;
   language?: string | null;
   title: string;
@@ -123,6 +123,15 @@ export interface ContentDraft {
   wp_url?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface TextStoryArtifacts {
+  source_text: string;
+  rewrite_text: string;
+  continuation_text: string;
+  image_prompt: string;
+  prompt_version: string;
+  stage_status: Record<'rewrite' | 'title' | 'image_prompt' | 'enhance', string>;
 }
 
 export interface PatternArticle {

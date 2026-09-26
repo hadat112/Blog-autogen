@@ -1,5 +1,5 @@
 import client from './client';
-import type { ContentDraft } from './types';
+import type { ContentDraft, TextStoryArtifacts } from './types';
 import { normalizeSourceUrl } from '../utils/sourceUrl';
 
 export const getDrafts = (params?: { kind?: string; pipeline_id?: string; page?: number; page_size?: number }) =>
@@ -29,3 +29,9 @@ export const retryArticleWorkflow = (jobId: string) =>
   client.post<{ job_id: string; draft_id: string; status: string }>(`/article-workflows/${jobId}/retry`);
 export const startGeneration = (pipelineId: string) =>
   client.post<{ job_id: string; draft_id: string; status: string }>('/generation-jobs', { pipeline_id: pipelineId });
+export const startTextStory = (pipeline_id: string, source_text: string) =>
+  client.post<{ job_id: string; draft_id: string; status: string }>('/text-story-jobs', { pipeline_id, source_text });
+export const getTextStoryArtifacts = (draftId: string) =>
+  client.get<TextStoryArtifacts>(`/text-story-jobs/${draftId}/artifacts`);
+export const retryTextStory = (draftId: string) =>
+  client.post<{ job_id: string; draft_id: string; status: string }>(`/text-story-jobs/${draftId}/retry`);

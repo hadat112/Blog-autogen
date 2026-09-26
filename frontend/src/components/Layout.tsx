@@ -17,7 +17,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   // Extract the current path without the leading slash to use as the title
   const titleByPath: Record<string, string> = {
     dashboard: 'Dashboard', accounts: 'Accounts', pipelines: 'Pipelines', settings: 'Settings',
-    rewrite: 'Rewrite Article', 'generate-story': 'Generate Story', 'pattern-library': 'Pattern Library',
+    rewrite: 'Rewrite Article', 'generate-story': 'Generate Story', 'text-story': 'Text Story', 'pattern-library': 'Pattern Library',
     'wordpress-publisher': 'WordPress Publisher',
   };
   const pathKey = location.pathname.substring(1) || 'dashboard';

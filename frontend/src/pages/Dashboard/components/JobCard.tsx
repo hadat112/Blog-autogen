@@ -35,7 +35,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
   const canCancel = job.capabilities?.can_cancel ?? (isQueued || isRunning);
   const canRerun = job.capabilities?.can_rerun ?? isFailed;
   const outputUrl = typeof job.outputs?.wp_url === 'string' ? job.outputs.wp_url : '';
-  const recoveryPath = job.workflow_type === 'generate_story' ? '/generate-story' : job.workflow_type === 'wp_publish' ? '/wordpress-publisher' : job.workflow_type === 'pattern_analysis' ? '/pattern-library' : '';
+  const recoveryPath = job.workflow_type === 'text_story' ? '/text-story' : job.workflow_type === 'generate_story' ? '/generate-story' : job.workflow_type === 'wp_publish' ? '/wordpress-publisher' : job.workflow_type === 'pattern_analysis' ? '/pattern-library' : '';
 
   const formatTime = (isoString: string) => {
     if (!isoString) return '--:--';
