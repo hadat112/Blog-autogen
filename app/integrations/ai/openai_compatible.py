@@ -2,6 +2,7 @@ import json
 import os
 import re
 import time
+from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from html import unescape
 from html.parser import HTMLParser
@@ -32,6 +33,14 @@ TRANSLATION_CONTEXT_PARAGRAPHS = 1
 TRANSLATION_MODES = {"sequential", "parallel"}
 DEFAULT_TRANSLATION_MODE = "sequential"
 DEFAULT_TRANSLATION_MAX_CONCURRENCY = 2
+
+
+@dataclass(frozen=True)
+class AITextResult:
+    content: str
+    model: str
+    finish_reason: str | None
+    usage: dict
 TRANSLATION_PREFIX_RE = re.compile(
     r"^\s*(?:"
     r"(?:sure|certainly|of course)[,!.:\s-]+|"
@@ -586,6 +595,32 @@ class OpenAICompatibleAIClient(BaseAI):
         if not message.get("content") and not message.get("tool_calls"):
             raise ValueError("AI returned an empty message")
         return message
+
+    def chat_with_meta(self, messages, *, priority="foreground") -> AITextResult:
+        """Single-attempt plain-text chat, preserving completion metadata for validation."""
+        if not isinstance(messages, list) or not messages:
+            raise ValueError("At least one chat message is required")
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {"model": self.text_model, "messages": messages, "temperature": 0.2, "stream": False}
+        with self.scheduler.permit(self.account_key, self.request_limit, priority):
+            response = requests.post(
+                f"{self.base_url}/chat/completions", headers=headers, json=payload,
+                timeout=_get_ai_request_timeout(self.ai_request_timeout),
+            )
+            response.raise_for_status()
+        data = response.json()
+        try:
+            choice = data["choices"][0]
+            content = choice["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise ValueError("Unexpected AI response structure") from exc
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("AI returned an empty message")
+        return AITextResult(content, data.get("model") or self.text_model,
+                            choice.get("finish_reason"), data.get("usage") or {})
 
     def _chat_text(self, prompt: str, system_prompt: str = None) -> str:
         url = f"{self.base_url}/chat/completions"

@@ -45,3 +45,19 @@ def test_chat_includes_json_response_format_when_requested():
     )
 
     assert b'"response_format": {"type": "json_object"}' in responses.calls[0].request.body
+
+
+@responses.activate
+def test_chat_with_meta_retains_finish_reason_usage_and_model():
+    client = OpenAICompatibleAIClient("key", "requested", "image", base_url="https://ai.test/v1")
+    responses.add(
+        responses.POST,
+        "https://ai.test/v1/chat/completions",
+        json={"model": "actual", "usage": {"completion_tokens": 7}, "choices": [
+            {"finish_reason": "length", "message": {"content": "Partial story"}}
+        ]},
+        status=200,
+    )
+    outcome = client.chat_with_meta([{"role": "user", "content": "Tell a story"}])
+    assert (outcome.content, outcome.model, outcome.finish_reason) == ("Partial story", "actual", "length")
+    assert outcome.usage == {"completion_tokens": 7}
