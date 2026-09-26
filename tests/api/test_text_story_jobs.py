@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from app.api.main import app
 from app.db import models
 from app.db.session import Base, get_db
+from app.services.wordpress_publishing_service import WordPressPublishingService
 
 
 @pytest.fixture
@@ -71,3 +72,35 @@ def test_retry_active_job_conflicts(setup):
     with patch("app.api.routes.text_story_jobs.workflow_runner.start"):
         created = client.post("/text-story-jobs", json={"pipeline_id": "pipe", "source_text": "Story"}).json()
         assert client.post(f"/text-story-jobs/{created['draft_id']}/retry").status_code == 409
+
+
+def test_reviewed_text_story_uses_existing_wordpress_route_without_artifacts(setup, monkeypatch):
+    client, sessions = setup
+    posts = []
+
+    class Gateway:
+        def __init__(self, config):
+            pass
+
+        def create_post(self, title, content, status, category_id, media_id):
+            posts.append((title, content, status, category_id, media_id))
+            return {"id": "42", "link": "https://wp.test/story", "status": status}
+
+    monkeypatch.setattr("app.api.routes.content_drafts.WordPressPublishingService",
+                        lambda db: WordPressPublishingService(db, Gateway))
+    with sessions() as db:
+        db.add(models.ContentDraft(id="ready", kind="text_story", pipeline_id="pipe", state="ready_for_review",
+                                   title="The Door", content="Opening.\n\nEnding.", wp_status="draft"))
+        db.add(models.TextStoryComposition(draft_id="ready", source_text="SECRET SOURCE", image_prompt="SECRET IMAGE",
+                                           prompt_version="text-story-v1", stage_status={}))
+        db.add(models.ContentDraft(id="pending", kind="text_story", pipeline_id="pipe", state="generating",
+                                   title="Incomplete", content="Opening.", wp_status="draft"))
+        db.commit()
+    pending = client.post("/content-drafts/pending/publish", json={"confirmed": True})
+    assert pending.status_code == 409
+    assert not posts
+    response = client.post("/content-drafts/ready/publish", json={"confirmed": True})
+    assert response.status_code == 200, response.text
+    assert response.json()["kind"] == "text_story"
+    assert posts[0][1] == "<p>Opening.</p>\n<p>Ending.</p>"
+    assert "SECRET SOURCE" not in posts[0][1] and "SECRET IMAGE" not in posts[0][1]

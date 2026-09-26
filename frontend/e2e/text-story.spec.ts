@@ -13,7 +13,7 @@ async function setup(page: import('@playwright/test').Page, state = 'generating'
   await mockCommon(page);
   await page.route('**/pipelines*', route => route.fulfill({ json: [{ id: 'pipe', name: 'Story pipeline', type: 'rewrite', language: 'Italian', step_accounts: { ai: 'ai', wp: 'wp' }, settings: {}, is_active: true }] }));
   await page.route('**/content-drafts?*', route => route.fulfill({ json: { items: [], total: 0 } }));
-  await page.route('**/content-drafts/story-1', route => route.fulfill({ json: { ...baseDraft, state } }));
+  await page.route('**/content-drafts/story-1', route => route.fulfill({ json: { ...baseDraft, state, content: state === 'ready_for_review' ? 'The door opened.\n\nThe end.' : '' } }));
   await page.route('**/text-story-jobs/story-1/artifacts', route => route.fulfill({ json: artifacts }));
   await page.route('**/text-story-jobs', route => route.fulfill({ json: { job_id: 'job-story', draft_id: 'story-1', status: 'queued' } }));
   await page.route('**/jobs/job-story', route => route.fulfill({ json: { id: 'job-story', status: state === 'generation_failed' ? 'failed' : 'running', progress: 65, current_step: 'enhance', logs: [], outputs: {}, start_time: now } }));
@@ -41,4 +41,17 @@ test('failed continuation keeps artifacts and offers retry', async ({ page }) =>
   await expect(page.getByText('The door opened.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Retry failed stage' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create WP draft' })).toHaveCount(0);
+});
+
+test('completed story defaults to WordPress draft without automatic publication', async ({ page }) => {
+  await setup(page, 'ready_for_review');
+  let publishCount = 0;
+  await page.route('**/content-drafts/story-1/publish', route => { publishCount += 1; return route.fulfill({ json: {} }); });
+  await page.goto('/#/text-story');
+  await page.getByLabel('Pipeline').selectOption('pipe');
+  await page.getByLabel('Source story').fill('A long source story.');
+  await page.getByRole('button', { name: 'Create story' }).click();
+  await expect(page.getByRole('button', { name: 'Create WP draft' })).toBeVisible();
+  await expect(page.getByLabel('WordPress status')).toHaveValue('draft');
+  expect(publishCount).toBe(0);
 });

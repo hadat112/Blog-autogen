@@ -106,3 +106,15 @@ def test_non_prefix_caption_does_not_block_wordpress_publication(db):
 
     result = WordPressPublishingService(db, Gateway).publish("draft")
     assert result.state == "wordpress_created"
+
+
+def test_text_story_publisher_keeps_artifacts_out_of_post_body(db):
+    Gateway.posts.clear()
+    db.add(models.ContentDraft(id="text-story", kind="text_story", pipeline_id="pipeline", title="The Door",
+                               content="Opening.\n\nEnding.", state="ready_for_review", wp_status="draft"))
+    db.add(models.TextStoryComposition(draft_id="text-story", source_text="Private source",
+                                       image_prompt="Visual prompt", prompt_version="text-story-v1", stage_status={}))
+    db.commit()
+    result = WordPressPublishingService(db, Gateway).publish("text-story")
+    assert result.state == "wordpress_created"
+    assert Gateway.posts[0][1] == "<p>Opening.</p>\n<p>Ending.</p>"
