@@ -38,6 +38,13 @@ def validate_stage(stage: str, result: AITextResult, rewrite: str = "") -> str:
         continuation_paragraphs = {" ".join(p.split()) for p in re.split(r"\n\s*\n", text)}
         if rewrite_paragraphs & continuation_paragraphs:
             raise ValueError("Continuation must not repeat rewrite paragraphs")
+    elif stage in {"title", "image_prompt"}:
+        if (
+            re.search(r"```|<[^>]+>", text)
+            or re.match(r"^(?:[#>*-]\s|(?:title|image prompt)\s*:)", text, re.IGNORECASE)
+            or (stage == "title" and "\n" in text)
+        ):
+            raise ValueError(f"{stage} must be plain text without labels or markup")
     elif stage not in {"title", "image_prompt"}:
         raise ValueError(f"Unknown text story stage: {stage}")
     return text

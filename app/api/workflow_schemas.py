@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 DraftKind = Literal["rewrite", "generated", "text_story", "manual", "article_workflow", "article_v1", "article_v2"]
@@ -83,6 +83,13 @@ class GenerationJobInput(BaseModel):
 class TextStoryJobInput(BaseModel):
     pipeline_id: str
     source_text: str = Field(min_length=1)
+
+    @field_validator("source_text")
+    @classmethod
+    def source_must_have_words(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Source story is required")
+        return value
 
 
 class WorkflowJobCreated(BaseModel):

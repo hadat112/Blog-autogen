@@ -31,6 +31,15 @@ def test_continuation_rejects_copied_opening_and_short_or_incomplete_story():
         validate_stage("enhance", result("word " * 3100 + "unfinished"), rewrite)
 
 
+def test_title_and_image_prompt_reject_markup_and_labels():
+    with pytest.raises(ValueError, match="plain text"):
+        validate_stage("title", result("# A dramatic title"))
+    with pytest.raises(ValueError, match="plain text"):
+        validate_stage("image_prompt", result("```text\nA visual scene\n```"))
+    with pytest.raises(ValueError, match="plain text"):
+        validate_stage("title", result("Title: A dramatic title"))
+
+
 def test_assembly_keeps_rewrite_once_and_caption_exact():
     rewrite = "First sentence. Second sentence."
     content, caption = assemble_story(rewrite, "The end.")

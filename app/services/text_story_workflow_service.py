@@ -24,7 +24,17 @@ def check_cancelled(db, job_id):
         raise InterruptedError("Generation cancelled")
 
 
-def save_stage(db, composition, draft, job, stage, value, result, elapsed):
+def record_stage_meta(db, job, stage, result, elapsed):
+    outputs = dict(job.outputs or {})
+    outputs[stage] = {
+        "model": result.model, "finish_reason": result.finish_reason,
+        "usage": result.usage, "elapsed_seconds": round(elapsed, 2),
+    }
+    job.outputs = outputs
+    db.commit()
+
+
+def save_stage(db, composition, draft, stage, value):
     if stage == "rewrite":
         composition.rewrite_text = value
     elif stage == "title":
@@ -35,12 +45,6 @@ def save_stage(db, composition, draft, job, stage, value, result, elapsed):
         composition.continuation_text = value
     composition.stage_status = {**composition.stage_status, stage: "completed"}
     draft.version += 1
-    outputs = dict(job.outputs or {})
-    outputs[stage] = {
-        "model": result.model, "finish_reason": result.finish_reason,
-        "usage": result.usage, "elapsed_seconds": round(elapsed, 2),
-    }
-    job.outputs = outputs
     db.commit()
 
 
@@ -80,8 +84,9 @@ class TextStoryWorkflowService:
                     started = time.monotonic()
                     result = ai.chat_with_meta(messages)
                     check_cancelled(db, job_id)
+                    record_stage_meta(db, job, stage, result, time.monotonic() - started)
                     value = validate_stage(stage, result, composition.rewrite_text)
-                    save_stage(db, composition, draft, job, stage, value, result, time.monotonic() - started)
+                    save_stage(db, composition, draft, stage, value)
                 check_cancelled(db, job_id)
                 draft.content, draft.caption = assemble_story(composition.rewrite_text, composition.continuation_text)
                 draft.state = "ready_for_review"

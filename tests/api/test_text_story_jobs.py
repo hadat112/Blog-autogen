@@ -90,6 +90,14 @@ def test_unknown_capacity_is_marked_unverified(setup):
         assert db.get(models.Job, response.json()["job_id"]).outputs["capacity_unverified"] is True
 
 
+def test_whitespace_only_source_is_rejected_before_creating_a_draft(setup):
+    client, sessions = setup
+    response = client.post("/text-story-jobs", json={"pipeline_id": "pipe", "source_text": "   \n  "})
+    assert response.status_code == 422
+    with sessions() as db:
+        assert db.query(models.TextStoryComposition).count() == 0
+
+
 def test_retry_active_job_conflicts(setup):
     client, _ = setup
     with patch("app.api.routes.text_story_jobs.workflow_runner.start"):
