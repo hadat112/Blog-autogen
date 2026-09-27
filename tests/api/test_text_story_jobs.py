@@ -67,6 +67,29 @@ def test_missing_account_and_language_rejected(setup):
     assert client.post("/text-story-jobs", json={"pipeline_id": "pipe", "source_text": "Story"}).status_code == 400
 
 
+def test_known_capacity_rejection_saves_source_for_recovery(setup):
+    client, sessions = setup
+    with sessions() as db:
+        db.get(models.Account, "ai").config = {"api_key": "secret", "text_model": "m", "context_length": 7000}
+        db.commit()
+    response = client.post("/text-story-jobs", json={"pipeline_id": "pipe", "source_text": "A private long source " * 1000})
+    assert response.status_code == 400, response.text
+    assert "capacity" in response.json()["detail"].lower()
+    with sessions() as db:
+        item = db.query(models.TextStoryComposition).one()
+        assert item.source_text.startswith("A private long source")
+        assert db.get(models.ContentDraft, item.draft_id).state == "generation_failed"
+
+
+def test_unknown_capacity_is_marked_unverified(setup):
+    client, sessions = setup
+    with patch("app.api.routes.text_story_jobs.workflow_runner.start"):
+        response = client.post("/text-story-jobs", json={"pipeline_id": "pipe", "source_text": "Story"})
+    assert response.status_code == 200
+    with sessions() as db:
+        assert db.get(models.Job, response.json()["job_id"]).outputs["capacity_unverified"] is True
+
+
 def test_retry_active_job_conflicts(setup):
     client, _ = setup
     with patch("app.api.routes.text_story_jobs.workflow_runner.start"):
@@ -95,6 +118,8 @@ def test_reviewed_text_story_uses_existing_wordpress_route_without_artifacts(set
                                            prompt_version="text-story-v1", stage_status={}))
         db.add(models.ContentDraft(id="pending", kind="text_story", pipeline_id="pipe", state="generating",
                                    title="Incomplete", content="Opening.", wp_status="draft"))
+        db.add(models.ContentDraft(id="publish-failed", kind="text_story", pipeline_id="pipe", state="publish_failed",
+                                   title="Retry", content="Opening.\n\nEnding.", wp_status="draft"))
         db.commit()
     pending = client.post("/content-drafts/pending/publish", json={"confirmed": True})
     assert pending.status_code == 409
@@ -104,3 +129,5 @@ def test_reviewed_text_story_uses_existing_wordpress_route_without_artifacts(set
     assert response.json()["kind"] == "text_story"
     assert posts[0][1] == "<p>Opening.</p>\n<p>Ending.</p>"
     assert "SECRET SOURCE" not in posts[0][1] and "SECRET IMAGE" not in posts[0][1]
+    recovered = client.post("/content-drafts/publish-failed/publish", json={"confirmed": True})
+    assert recovered.status_code == 200, recovered.text

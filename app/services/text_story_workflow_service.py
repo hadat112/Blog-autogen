@@ -82,6 +82,7 @@ class TextStoryWorkflowService:
                     check_cancelled(db, job_id)
                     value = validate_stage(stage, result, composition.rewrite_text)
                     save_stage(db, composition, draft, job, stage, value, result, time.monotonic() - started)
+                check_cancelled(db, job_id)
                 draft.content, draft.caption = assemble_story(composition.rewrite_text, composition.continuation_text)
                 draft.state = "ready_for_review"
                 draft.error = None
@@ -93,13 +94,17 @@ class TextStoryWorkflowService:
                     outputs["warnings"] = ["Continuation exceeds 3,500 words; review pacing before publishing"]
                 jobs.complete(job_id, outputs)
             except InterruptedError:
-                if draft.state == "generating":
-                    draft.state, draft.error = "generation_failed", "Generation was cancelled"
-                    draft.version += 1
-                    db.commit()
+                # The runner owns cancellation. Its worker thread may outlive the cancelled
+                # task, and a newer attempt may already have set this draft to generating.
+                db.rollback()
             except Exception as exc:
+                db.rollback()
+                db.expire_all()
+                old_job = db.get(models.Job, job_id)
+                if not old_job or old_job.status not in {"queued", "running"}:
+                    return
                 safe_error = str(exc) if isinstance(exc, ValueError) else "AI request failed; retry this stage"
-                stage = job.current_step if job.current_step in STAGES else "rewrite"
+                stage = old_job.current_step if old_job.current_step in STAGES else "rewrite"
                 composition.stage_status = {**composition.stage_status, stage: "failed"}
                 draft.state, draft.error = "generation_failed", safe_error[:500]
                 draft.version += 1

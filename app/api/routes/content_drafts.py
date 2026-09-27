@@ -133,7 +133,7 @@ def publish_draft(draft_id: str, data: PublishDraftInput, db: Session = Depends(
     draft = ContentDraftService(db).get(draft_id)
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
-    if draft.kind == "text_story" and draft.state != "ready_for_review":
+    if draft.kind == "text_story" and draft.state not in {"ready_for_review", "publish_failed"}:
         raise HTTPException(status_code=409, detail="Story is not ready for review")
     workflow_type = {
         "manual": "wp_publish",

@@ -1,6 +1,7 @@
 """Start, inspect and retry text story composition."""
 
 import asyncio
+import json
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.workflow_schemas import TextStoryJobInput, WorkflowJobCreated
 from app.db import models
 from app.db.session import get_db
-from app.domain.text_story_prompts import PROMPT_VERSION
+from app.domain.text_story_prompts import PROMPT_VERSION, build_enhance_messages
 from app.domain.workflow_runner import workflow_runner
 from app.services.text_story_workflow_service import TextStoryWorkflowService
 from app.services.workflow_job_service import WorkflowJobService
@@ -19,26 +20,43 @@ STAGES = ("rewrite", "title", "image_prompt", "enhance")
 _retry_lock = asyncio.Lock()
 
 
-def _check_pipeline(db, pipeline_id, source_text=""):
+def _check_pipeline(db, pipeline_id):
     pipeline = db.query(models.Pipeline).filter_by(id=pipeline_id, is_active=True).first()
     if not pipeline:
         raise HTTPException(404, "Active pipeline not found")
     if not (pipeline.language or "").strip():
         raise HTTPException(400, "Selected pipeline has no target language")
+    ai_account = None
     for role, label in (("ai", "AI"), ("wp", "WordPress")):
         account_id = (pipeline.step_accounts or {}).get(role)
         account = db.get(models.Account, account_id) if account_id else None
         if not account or account.type != role:
             raise HTTPException(400, f"Selected pipeline has no {label} account")
         if role == "ai":
-            config = account.config or {}
-            context = config.get("context_length")
-            output = config.get("max_output_tokens")
-            if output and int(output) < 4500:
-                raise HTTPException(400, "AI output limit cannot fit the required continuation")
-            if context and len(source_text.split()) + 4500 > int(context):
-                raise HTTPException(400, "Source story exceeds the configured AI context capacity")
-    return pipeline
+            ai_account = account
+    return pipeline, ai_account
+
+
+def _capacity_error(account, source, language):
+    """Conservative token estimate for the largest request, including both prompts."""
+    config = account.config or {}
+    try:
+        context = int(config["context_length"]) if config.get("context_length") else None
+        output = int(config["max_output_tokens"]) if config.get("max_output_tokens") else None
+    except (TypeError, ValueError):
+        return "AI capacity settings must be positive numbers", False
+    if context is not None and context <= 0 or output is not None and output <= 0:
+        return "AI capacity settings must be positive numbers", False
+    # The rewrite does not exist yet. Reserve a generous 650-word placeholder so the
+    # continuation's manual history includes its actual shape and both instructions.
+    history = build_enhance_messages(source, "Rewritten " * 650, language)
+    estimated_input_tokens = (len(json.dumps(history, ensure_ascii=False)) + 2) // 3
+    required_output_tokens = 4500
+    if output is not None and output < required_output_tokens:
+        return "AI output capacity cannot fit the 3,000-word continuation", False
+    if context is not None and estimated_input_tokens + required_output_tokens > context:
+        return "Source story exceeds the configured AI context capacity for the full continuation", False
+    return None, context is None or output is None
 
 
 def _schedule(job_id, draft_id):
@@ -50,7 +68,7 @@ def _schedule(job_id, draft_id):
 @router.post("", response_model=WorkflowJobCreated)
 async def start_text_story(data: TextStoryJobInput, db: Session = Depends(get_db)):
     source = data.source_text.strip()
-    pipeline = _check_pipeline(db, data.pipeline_id, source)
+    pipeline, account = _check_pipeline(db, data.pipeline_id)
     draft = models.ContentDraft(
         kind="text_story", pipeline_id=pipeline.id, language=pipeline.language,
         wp_account_id=(pipeline.step_accounts or {}).get("wp"),
@@ -65,6 +83,16 @@ async def start_text_story(data: TextStoryJobInput, db: Session = Depends(get_db
     ))
     db.commit()
     job = WorkflowJobService(db).create(pipeline.id, "text_story", draft.id)
+    capacity_error, unverified = _capacity_error(account, source, pipeline.language)
+    if capacity_error:
+        draft.state, draft.error = "generation_failed", capacity_error
+        composition = db.query(models.TextStoryComposition).filter_by(draft_id=draft.id).one()
+        composition.stage_status = {**composition.stage_status, "rewrite": "failed"}
+        db.commit()
+        WorkflowJobService(db).fail(job.id, capacity_error)
+        raise HTTPException(400, f"{capacity_error}. Source saved in draft {draft.id}.")
+    job.outputs = {"capacity_unverified": unverified}
+    db.commit()
     _schedule(job.id, draft.id)
     return {"job_id": job.id, "draft_id": draft.id, "status": job.status}
 
@@ -94,9 +122,14 @@ async def retry_text_story(draft_id: str, db: Session = Depends(get_db)):
             raise HTTPException(409, "Text story generation is already active")
         if draft.state != "generation_failed":
             raise HTTPException(409, "Only a failed text story can be retried")
-        _check_pipeline(db, draft.pipeline_id, item.source_text)
+        _, account = _check_pipeline(db, draft.pipeline_id)
+        capacity_error, unverified = _capacity_error(account, item.source_text, draft.language)
+        if capacity_error:
+            raise HTTPException(400, capacity_error)
         draft.state, draft.error = "generating", None
         db.commit()
         job = WorkflowJobService(db).create(draft.pipeline_id, "text_story", draft.id)
+        job.outputs = {"capacity_unverified": unverified}
+        db.commit()
         _schedule(job.id, draft.id)
         return {"job_id": job.id, "draft_id": draft.id, "status": job.status}

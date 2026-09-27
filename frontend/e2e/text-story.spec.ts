@@ -55,3 +55,12 @@ test('completed story defaults to WordPress draft without automatic publication'
   await expect(page.getByLabel('WordPress status')).toHaveValue('draft');
   expect(publishCount).toBe(0);
 });
+
+test('definite WordPress failure keeps editor available for recovery', async ({ page }) => {
+  await setup(page, 'publish_failed');
+  await page.goto('/#/text-story');
+  await page.getByLabel('Pipeline').selectOption('pipe');
+  await page.getByLabel('Source story').fill('A long source story.');
+  await page.getByRole('button', { name: 'Create story' }).click();
+  await expect(page.getByRole('button', { name: 'Create WP draft' })).toBeVisible();
+});

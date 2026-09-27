@@ -82,3 +82,28 @@ def test_failed_continuation_keeps_artifacts_and_retry_skips_completed(seeded, m
     monkeypatch.setattr("app.services.text_story_workflow_service.create_ai_client", lambda account: RetryAI())
     TextStoryWorkflowService.execute("retry", "draft")
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("raises", [False, True])
+def test_cancelled_worker_cannot_corrupt_new_retry(seeded, monkeypatch, raises):
+    class OldAI:
+        def chat_with_meta(self, messages, **kwargs):
+            # A cancelled asyncio task leaves this worker thread running. A new retry begins
+            # before the original provider request returns or raises.
+            with seeded() as other:
+                other.get(models.Job, "job").status = "cancelled"
+                other.get(models.ContentDraft, "draft").state = "generating"
+                other.add(models.Job(id="new", pipeline_id="pipe", draft_id="draft",
+                                     workflow_type="text_story", status="queued"))
+                other.commit()
+            if raises:
+                raise RuntimeError("provider failed after cancellation")
+            return AITextResult(("Opening. " * 600).strip(), "fake", "stop", {})
+
+    monkeypatch.setattr("app.services.text_story_workflow_service.create_ai_client", lambda account: OldAI())
+    TextStoryWorkflowService.execute("job", "draft")
+    with seeded() as db:
+        assert db.get(models.ContentDraft, "draft").state == "generating"
+        assert db.get(models.Job, "new").status == "queued"
+        item = db.query(models.TextStoryComposition).filter_by(draft_id="draft").one()
+        assert item.stage_status["rewrite"] == "pending"

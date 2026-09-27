@@ -43,7 +43,7 @@ export default function TextStory() {
     setDraftId(data.draft_id); setJobId(data.job_id); setError(''); drafts.refetch(); relatedJobs.refetch();
   };
   const run = useMutation({ mutationFn: () => startTextStory(pipelineId, sourceText), onSuccess: ({ data }) => onCreated(data),
-    onError: (reason: any) => setError(reason.response?.data?.detail || 'Could not start story creation.') });
+    onError: (reason: any) => { setError(reason.response?.data?.detail || 'Could not start story creation.'); drafts.refetch(); } });
   const retry = useMutation({ mutationFn: () => retryTextStory(draftId), onSuccess: ({ data }) => { onCreated(data); draft.refetch(); artifacts.refetch(); },
     onError: (reason: any) => setError(reason.response?.data?.detail || 'Could not retry story creation.') });
   const cancel = useMutation({ mutationFn: () => cancelJob(jobId), onSuccess: async () => { setError(''); await Promise.all([job.refetch(), draft.refetch(), artifacts.refetch()]); },
@@ -58,7 +58,7 @@ export default function TextStory() {
     setDraftId(item.id); setPipelineId(item.pipeline_id || '');
     setJobId(relatedJobs.data?.find(job => job.draft_id === item.id)?.id || ''); setError('');
   };
-  const ready = draft.data && ['ready_for_review', 'publishing', 'wordpress_created', 'publish_unknown'].includes(draft.data.state);
+  const ready = draft.data && ['ready_for_review', 'publish_failed', 'publishing', 'wordpress_created', 'publish_unknown'].includes(draft.data.state);
 
   return <div className="space-y-6">
     <header><p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">Story composition</p><h1 className="mt-2 text-2xl font-bold text-content-primary">Text Story</h1><p className="mt-1 text-sm text-content-secondary">Paste a story, review its opening and complete ending, then prepare a WordPress draft.</p></header>
@@ -71,7 +71,7 @@ export default function TextStory() {
           <Button className="w-full" disabled={!pipelineId || !sourceText.trim() || run.isPending} onClick={() => run.mutate()}>{run.isPending ? 'Starting…' : 'Create story'}</Button>
           {draft.data?.state === 'generation_failed' && <Button className="w-full" variant="outline" disabled={retry.isPending} onClick={() => retry.mutate()}>{retry.isPending ? 'Retrying…' : 'Retry failed stage'}</Button>}
         </CardContent></Card>
-        {job.data && <Card><CardHeader><div className="flex items-center justify-between gap-3"><CardTitle>Progress</CardTitle>{['queued', 'running'].includes(job.data.status) && <Button variant="outline" size="sm" disabled={cancel.isPending} onClick={() => cancel.mutate()}>Cancel</Button>}</div></CardHeader><CardContent><ProgressTimeline progress={job.data.progress} current={job.data.current_step} status={job.data.status} detail={job.data.logs?.at(-1)?.detail} startedAt={job.data.start_time} updatedAt={job.data.updated_at || job.data.logs?.at(-1)?.timestamp} failedStep={job.data.outputs?.failed_step} cancelledStep={job.data.outputs?.cancelled_step} steps={steps} logs={job.data.logs} /></CardContent></Card>}
+        {job.data && <Card><CardHeader><div className="flex items-center justify-between gap-3"><CardTitle>Progress</CardTitle>{['queued', 'running'].includes(job.data.status) && <Button variant="outline" size="sm" disabled={cancel.isPending} onClick={() => cancel.mutate()}>Cancel</Button>}</div></CardHeader><CardContent className="space-y-3"><ProgressTimeline progress={job.data.progress} current={job.data.current_step} status={job.data.status} detail={job.data.logs?.at(-1)?.detail} startedAt={job.data.start_time} updatedAt={job.data.updated_at || job.data.logs?.at(-1)?.timestamp} failedStep={job.data.outputs?.failed_step} cancelledStep={job.data.outputs?.cancelled_step} steps={steps} logs={job.data.logs} />{job.data.outputs?.capacity_unverified && <InlineStatus tone="warning">AI context capacity is unverified. Review the full result before publishing.</InlineStatus>}</CardContent></Card>}
       </div>
       <div className="space-y-5">
         <Card><CardHeader><div className="flex items-center justify-between"><CardTitle>Short rewrite</CardTitle><CopyButton value={artifacts.data?.rewrite_text || ''} /></div></CardHeader><CardContent><div className="whitespace-pre-wrap text-sm leading-7 text-content-primary">{artifacts.data?.rewrite_text || 'The 550–650 word opening appears here after the first step.'}</div></CardContent></Card>
