@@ -53,7 +53,7 @@ class StoryOrchestrator:
                 "translation_mode": config.get("translation_mode", "sequential"),
                 "translation_max_concurrency": config.get("translation_max_concurrency", 2),
                 "ai_request_timeout": config.get("ai_request_timeout", 300),
-                "translation_chunk_size": config.get("translation_chunk_size", 6000),
+                "translation_chunk_size": config.get("translation_chunk_size", 50000),
             }
             wp_config = {
                 "url": config.get("wordpress_url"),
@@ -90,6 +90,8 @@ class StoryOrchestrator:
         # Initialize providers
         self.ai = OpenAICompatibleAIClient(
             api_key=ai_config.get("api_key"),
+            max_concurrency=ai_config.get("max_concurrency", 2),
+            account_key=ai_config.get("account_id"),
             text_model=ai_config.get("text_model"),
             image_model=ai_config.get("image_model"),
             fallback_text_model=ai_config.get("fallback_text_model"),
@@ -97,7 +99,7 @@ class StoryOrchestrator:
             translation_mode=ai_config.get("translation_mode", "sequential"),
             translation_max_concurrency=ai_config.get("translation_max_concurrency", 2),
             ai_request_timeout=ai_config.get("ai_request_timeout", 300),
-            translation_chunk_size=ai_config.get("translation_chunk_size", 6000),
+            translation_chunk_size=ai_config.get("translation_chunk_size", 50000),
         ) if ai_config else None
 
         self.wp = WordPressPublisher(

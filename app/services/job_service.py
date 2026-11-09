@@ -3,6 +3,7 @@ from math import ceil
 from typing import Optional
 
 from sqlalchemy.orm import Session
+from sqlalchemy import exists
 
 from app.domain.job_runner import job_runner
 from app.domain.workflow_runner import workflow_runner
@@ -16,15 +17,19 @@ class JobService:
 
     def list_jobs(self, page: int = 1, page_size: int = 10, workflow_type: Optional[str] = None, status_group: Optional[str] = None, status: Optional[str] = None):
         jobs_query = self.db.query(models.Job)
+        manual_source = exists().where(models.WorkflowRecovery.draft_id == models.Job.draft_id).where(
+            models.WorkflowRecovery.manifest['source_kind'].as_string() == 'manual')
         if not workflow_type or workflow_type == "all":
             # Enrichment jobs are monitored from Pattern Library and should
             # not pollute the main Dashboard activity feed.
             jobs_query = jobs_query.filter(~models.Job.workflow_type.like("article_enrichment_%"))
         else:
-            if workflow_type == "legacy":
-                jobs_query = jobs_query.filter(models.Job.workflow_type.in_(["legacy", "article_v1"]))
+            if workflow_type == 'article_v3':
+                jobs_query = jobs_query.filter(manual_source, models.Job.workflow_type.in_(['article_v1', 'article_v2']))
+            elif workflow_type == "legacy":
+                jobs_query = jobs_query.filter(models.Job.workflow_type.in_(["legacy", "article_v1"]), ~manual_source)
             elif workflow_type == "rewrite":
-                jobs_query = jobs_query.filter(models.Job.workflow_type.in_(["rewrite", "article_v2"]))
+                jobs_query = jobs_query.filter(models.Job.workflow_type.in_(["rewrite", "article_v2"]), ~manual_source)
             elif workflow_type == "article_enrichment":
                 jobs_query = jobs_query.filter(models.Job.workflow_type.like("article_enrichment_%"))
             else:
@@ -82,6 +87,19 @@ class JobService:
                     if candidate.startswith(("http://", "https://")):
                         outputs["wp_url"] = candidate
                         break
+        if job.draft_id:
+            draft = self.db.get(models.ContentDraft, job.draft_id)
+            recovery = self.db.get(models.WorkflowRecovery, job.draft_id)
+            artifacts = (recovery.artifacts or {}) if recovery else {}
+            uncertain = [name for name in ("facebook", "telegram") if artifacts.get(name + "_pending") and not artifacts.get(name)]
+            if draft and draft.state in {"publish_unknown", "publishing"} and not draft.wp_post_id:
+                uncertain.insert(0, "wordpress")
+            outputs["uncertain_deliveries"] = uncertain
+            if recovery:
+                outputs['source_kind'] = (recovery.manifest or {}).get('source_kind', 'url')
+                outputs["resumed_stage"] = outputs.get("failed_step") or outputs.get("cancelled_step")
+            if draft and draft.wp_url:
+                outputs["wp_url"] = draft.wp_url
         job.outputs = outputs
         job.capabilities = {
             "can_cancel": job.status in {"queued", "running"},

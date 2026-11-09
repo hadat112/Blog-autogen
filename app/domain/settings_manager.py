@@ -1,3 +1,4 @@
+from app.domain.translation_settings import normalize_translation_chars, DEFAULT_TRANSLATION_CHARS
 import os
 from urllib.parse import quote, urlparse
 
@@ -8,7 +9,7 @@ TRANSLATION_MODE_CHOICES = ["sequential", "parallel"]
 DEFAULT_TRANSLATION_MODE = "sequential"
 DEFAULT_TRANSLATION_MAX_CONCURRENCY = 2
 DEFAULT_AI_REQUEST_TIMEOUT = 300
-DEFAULT_TRANSLATION_CHUNK_SIZE = 6000
+DEFAULT_TRANSLATION_CHUNK_SIZE = DEFAULT_TRANSLATION_CHARS
 DEFAULT_AUTO_COLLECT_PATTERNS = True
 DEFAULT_AI_ENRICHMENT = False
 
@@ -77,11 +78,7 @@ def normalize_ai_request_timeout(value):
 
 
 def normalize_translation_chunk_size(value):
-    try:
-        chunk_size = int(value)
-    except (TypeError, ValueError):
-        chunk_size = DEFAULT_TRANSLATION_CHUNK_SIZE
-    return max(1000, min(chunk_size, 30000))
+    return normalize_translation_chars(value)
 
 
 def normalize_auto_collect_patterns(value):
@@ -125,6 +122,10 @@ class SettingsManager:
         self.config["ai_request_timeout"] = normalize_ai_request_timeout(
             self.config.get("ai_request_timeout")
         )
+        if self.config.get("translation_settings_version", 0) < 1:
+            self.config["translation_chunk_size"] = DEFAULT_TRANSLATION_CHARS
+            self.config["translation_settings_version"] = 1
+            self.save_config()
         self.config["translation_chunk_size"] = normalize_translation_chunk_size(
             self.config.get("translation_chunk_size")
         )

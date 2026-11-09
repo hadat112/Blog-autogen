@@ -1,3 +1,4 @@
+from app.domain.workflow_threads import run_workflow_blocking
 import asyncio
 from datetime import datetime
 
@@ -41,26 +42,39 @@ async def start_rewrite(data: RewriteJobInput, db: Session = Depends(get_db)):
         source_url = normalize_source_url(data.source_url)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    draft = models.ContentDraft(
-        kind="rewrite",
-        pipeline_id=pipeline.id,
-        source_url=source_url,
-        language=pipeline.language,
-        category_id=(pipeline.settings or {}).get("wp_category_id"),
-        wp_status="publish",
-        state="generating",
-    )
+    draft = db.get(models.ContentDraft, previous_job.draft_id) if previous_job and previous_job.draft_id else None
+    if draft:
+        if normalize_source_url(draft.source_url) != source_url:
+            raise HTTPException(status_code=400, detail="Resume must use the original source URL; start a fresh run for a different source")
+        active = db.query(models.Job.id).filter(models.Job.draft_id == draft.id, models.Job.status.in_(["queued", "running"])).first()
+        if active:
+            raise HTTPException(status_code=409, detail="This draft already has an active attempt")
+    else:
+        draft = models.ContentDraft(
+            kind="rewrite",
+            pipeline_id=pipeline.id,
+            source_url=source_url,
+            language=pipeline.language,
+            category_id=(pipeline.settings or {}).get("wp_category_id"),
+            wp_status="publish",
+            state="generating",
+        )
     db.add(draft)
     db.commit()
     db.refresh(draft)
     job = WorkflowJobService(db).create(pipeline.id, "rewrite", draft.id, input_text=source_url)
     if previous_job:
-        previous_job.rerun_at = datetime.utcnow()
-        previous_job.rerun_job_id = job.id
+        claimed = db.query(models.Job).filter(models.Job.id == previous_job.id,
+            models.Job.rerun_job_id.is_(None), models.Job.status.in_(["failed", "cancelled"])
+        ).update({"rerun_at": datetime.utcnow(), "rerun_job_id": job.id}, synchronize_session=False)
+        if claimed != 1:
+            db.delete(job)
+            db.commit()
+            raise HTTPException(status_code=409, detail="This job already has a retry")
         db.commit()
 
     async def operation():
-        await asyncio.to_thread(
+        await run_workflow_blocking(
             ArticleWorkflowService.execute,
             job.id,
             draft.id,

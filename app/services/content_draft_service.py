@@ -92,6 +92,7 @@ class ContentDraftService:
         upload = draft.image_source if draft.image_kind == "upload" else None
         if draft.kind == "text_story":
             self.db.query(models.TextStoryComposition).filter_by(draft_id=draft_id).delete()
+        self.db.query(models.WorkflowRecovery).filter_by(draft_id=draft_id).delete()
         self.db.delete(draft)
         self.db.commit()
         if upload:

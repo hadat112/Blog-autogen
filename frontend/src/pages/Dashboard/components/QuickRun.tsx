@@ -7,16 +7,17 @@ import { normalizeSourceUrl } from '../../../utils/sourceUrl';
 import { Card, CardHeader, CardTitle, CardContent } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
-import { ArticleWorkflowPipeline, ArticleWorkflowVersion, useArticleWorkflowVersion } from '../../../features/workflows/ArticleWorkflowOptions';
+import { ArticleWorkflowPipeline } from '../../../features/workflows/ArticleWorkflowOptions';
 
 interface QuickRunProps {
   onRunStarted?: (jobId: string) => void;
+  version: 'v1' | 'v2';
+  versionControl: React.ReactNode;
 }
 
-const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
+const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted, version, versionControl }) => {
   const [selectedPipeline, setSelectedPipeline] = useState('');
   const [input, setInput] = useState('');
-  const [version, setVersion] = useArticleWorkflowVersion();
   const [useProxy, setUseProxy] = useState(() => window.localStorage.getItem('story-autogen-source-proxy') === 'true');
   const [useEnrichment, setUseEnrichment] = useState(false);
 
@@ -100,7 +101,7 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
 
   return (
     <Card className="border-border-default shadow-sm overflow-hidden">
-      <CardHeader className="flex-row items-center justify-between gap-3 p-5 pb-0">
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 p-5 pb-0">
         <CardTitle className="flex min-w-0 items-center space-x-2 text-base font-bold text-content-primary">
           <div className="shrink-0 rounded-md bg-accent/10 p-1.5 text-accent">
             <Zap size={16} fill="currentColor" />
@@ -108,7 +109,7 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
           <span>Run workflow</span>
         </CardTitle>
         <div className="flex shrink-0 items-center gap-2">
-          <ArticleWorkflowVersion mode={version} onChange={setVersion} />
+          {versionControl}
           <button
             type="button"
             role="switch"

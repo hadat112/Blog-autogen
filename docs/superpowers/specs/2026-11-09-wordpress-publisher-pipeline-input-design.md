@@ -1,5 +1,13 @@
 # WordPress Publisher: nhập nội dung và chạy pipeline
 
+## Tên phiên bản hiện tại
+
+Theo yêu cầu đổi tên mới nhất: V1 = dịch từ URL, V2 = nhập title/content/ảnh tùy chọn, V3 = viết lại từ URL. Nút, bộ lọc, badge job và timeline dùng cùng cách đặt tên này. Các mã engine/API/manifest đã lưu giữ nguyên để retry không thay đổi. Phần ghi chú lịch sử bên dưới dùng tên phiên bản tại thời điểm thiết kế.
+
+## Điều chỉnh giao diện sau triển khai
+
+Theo yêu cầu mới nhất của người dùng, form nhập tay nằm trong Dashboard dưới lựa chọn V3 cạnh V1/V2. Dùng chung Active Tasks và Recent Activity, bỏ mục Latest workflow và menu/màn Pipeline Workflow riêng. Trong V3 vẫn chọn Translate (V1) hoặc Rewrite (V2); đây là lựa chọn engine hiện có, không tạo engine dịch mới. Job có nguồn manual được gắn nhãn và lọc V3 theo manifest đã lưu, kể cả các job nhập tay trước thay đổi này. Đường dẫn `/pipeline-workflow` cũ chuyển đến Dashboard V3. WordPress Publisher vẫn là màn đăng trực tiếp. Yêu cầu này thay thế phần chuyển tab và màn riêng trong thiết kế ban đầu bên dưới. Chuyển V1/V2/V3 giữ nội dung/ảnh nhập trong phiên và không hủy request đã gửi. Không cần migration DB. Không thay đổi các bước thực thi, concurrency hay retry.
+
 ## Mục tiêu và quyết định đã thống nhất
 
 Thêm chế độ nhập nội dung vào WordPress Publisher, chạy đúng luồng xử lý và đăng bài của Dashboard. Người dùng chọn pipeline và V1/V2, nhập title, content và ảnh tùy chọn. Chế độ đăng trực tiếp hiện tại tiếp tục hoạt động như cũ.

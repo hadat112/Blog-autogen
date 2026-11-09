@@ -1,4 +1,6 @@
 export interface AccountConfig {
+  translation_chunk_size?: number | string;
+  max_concurrency?: number;
   url?: string;
   username?: string;
   password?: string;

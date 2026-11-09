@@ -1,58 +1,46 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ImagePlus, Send, X } from 'lucide-react';
-import { cancelJob, getJob, getPipelines } from '../../../api/client';
-import { retryArticleWorkflow, startManualArticleWorkflow } from '../../../api/workflows';
+import { getPipelines } from '../../../api/client';
+import { startManualArticleWorkflow } from '../../../api/workflows';
 import { Button } from '../../../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card';
 import { InlineStatus } from '../../../components/ui/InlineStatus';
 import { Input } from '../../../components/ui/Input';
 import { Textarea } from '../../../components/ui/Textarea';
-import { ArticleWorkflowPipeline, ArticleWorkflowVersion, useArticleWorkflowVersion } from '../../../features/workflows/ArticleWorkflowOptions';
-import JobCard from '../../Dashboard/components/JobCard';
-import JobDetailsModal from '../../Dashboard/components/JobDetailsModal';
+import { ArticleWorkflowPipeline } from '../../../features/workflows/ArticleWorkflowOptions';
+import { Select } from '../../../components/ui/Select';
 
-const savedJobKey = 'story-autogen-publisher-pipeline-job';
+const processingKey = 'story-autogen-manual-processing-mode';
 
-export function PipelinePublisher() {
+export function ManualArticleRun({ versionControl, onRunStarted }: { versionControl: ReactNode; onRunStarted: (jobId: string) => void }) {
   const queryClient = useQueryClient();
   const contentId = useId();
+  const processingId = useId();
   const [pipelineId, setPipelineId] = useState('');
-  const [mode, setMode] = useArticleWorkflowVersion();
+  const [mode, setMode] = useState<'v1' | 'v2'>(() => (window.localStorage.getItem(processingKey) || window.localStorage.getItem('story-autogen-workflow-version')) === 'v2' ? 'v2' : 'v1');
+  useEffect(() => { window.localStorage.setItem(processingKey, mode); }, [mode]);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [image, setImage] = useState<File>();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [jobId, setJobId] = useState(() => window.localStorage.getItem(savedJobKey) || '');
-  const [showDetails, setShowDetails] = useState(false);
   const [error, setError] = useState('');
   const pipelines = useQuery({ queryKey: ['pipelines'], queryFn: async () => (await getPipelines(true)).data });
   const available = (pipelines.data ?? []).filter(p => p.is_active && p.step_accounts?.ai && p.step_accounts?.wp);
   useEffect(() => {
     if (!available.some(p => p.id === pipelineId)) setPipelineId(available[0]?.id ?? '');
   }, [pipelines.data, pipelineId]);
-  const job = useQuery({
-    queryKey: ['jobs', jobId], queryFn: async () => (await getJob(jobId)).data,
-    enabled: Boolean(jobId), retry: false,
-    refetchInterval: query => ['queued', 'running'].includes(query.state.data?.status ?? '') ? 3000 : false,
-  });
-  const selectJob = (id: string) => {
-    setJobId(id);
-    window.localStorage.setItem(savedJobKey, id);
-    setError('');
-    queryClient.invalidateQueries({ queryKey: ['jobs'] });
-  };
   const reportError = (reason: any) => setError(reason.response?.data?.detail || reason.message || 'Workflow failed.');
   const run = useMutation({
     mutationFn: () => startManualArticleWorkflow({ pipelineId, mode, title, content,
       imageUrl: imageUrl.trim() || undefined, image }),
-    onSuccess: ({ data }) => selectJob(data.job_id), onError: reportError,
+    onSuccess: ({ data }) => {
+      setError('');
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      onRunStarted(data.job_id);
+    }, onError: reportError,
   });
-  const retry = useMutation({ mutationFn: () => retryArticleWorkflow(jobId),
-    onSuccess: ({ data }) => selectJob(data.job_id), onError: reportError });
-  const cancel = useMutation({ mutationFn: () => cancelJob(jobId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }), onError: reportError });
   const removeImage = () => {
     setImage(undefined); setImageUrl('');
     if (fileRef.current) fileRef.current.value = '';
@@ -62,13 +50,20 @@ export function PipelinePublisher() {
     <Card>
       <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
         <CardTitle>Run workflow</CardTitle>
-        <ArticleWorkflowVersion mode={mode} onChange={setMode} disabled={run.isPending} />
+        {versionControl}
       </CardHeader>
       <CardContent>
         <form className="space-y-5" onSubmit={event => { event.preventDefault(); if (pipelineId && title.trim() && content.trim()) run.mutate(); }}>
-          <ArticleWorkflowPipeline pipelines={available} value={pipelineId} onChange={setPipelineId} disabled={run.isPending} />
+          <div className="grid grid-cols-2 items-end gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <ArticleWorkflowPipeline pipelines={available} value={pipelineId} onChange={setPipelineId} disabled={run.isPending} />
+            <div className="min-w-0 text-sm font-medium"><label htmlFor={processingId}>Processing mode</label>
+              <Select id={processingId} className="mt-1" value={mode} onChange={event => setMode(event.target.value as 'v1' | 'v2')} disabled={run.isPending}>
+                <option value="v1">Translate (V1)</option>
+                <option value="v2">Rewrite (V3)</option>
+              </Select>
+            </div>
+          </div>
           {pipelines.isError && <InlineStatus tone="error">Could not load pipelines. Reload the page to try again.</InlineStatus>}
-          <p className="text-sm text-content-secondary">Runs the Dashboard workflow and publishes automatically to the pipeline’s configured channels.</p>
           <label className="block text-sm font-medium">Source title
             <Input className="mt-1" required value={title} onChange={e => setTitle(e.target.value)} disabled={run.isPending} />
           </label>
@@ -98,11 +93,5 @@ export function PipelinePublisher() {
         </form>
       </CardContent>
     </Card>
-    {job.isError && <InlineStatus tone="error">Could not load the saved job. Open Dashboard to check its status.</InlineStatus>}
-    {job.data && <section className="space-y-3"><h2 className="text-lg font-bold">Latest workflow</h2>
-      <JobCard job={job.data} onClick={() => setShowDetails(true)} onRerun={() => retry.mutate()}
-        isRerunning={retry.isPending} onCancel={() => cancel.mutate()} isCancelling={cancel.isPending} />
-    </section>}
-    {showDetails && job.data && <JobDetailsModal job={job.data} onClose={() => setShowDetails(false)} />}
   </div>;
 }

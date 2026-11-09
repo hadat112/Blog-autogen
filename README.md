@@ -46,6 +46,7 @@
 - **Pattern Library:** Collect themes and narrative structures in local SQLite with independent background analysis.
 - **Generate Story:** Let a bounded tool-calling agent choose stored patterns and prepare a reviewable draft.
 - **WordPress Publisher:** Compose manual title/content/category/image input and publish to WordPress from one dedicated screen.
+- **Dashboard V2:** Select V2 next to V1/V3 to enter content directly. It accepts a title, plain text content and an optional image URL or upload, then runs the same translation/rewrite processing and automatic WordPress/Facebook/Telegram delivery as Dashboard using the selected pipeline. It skips URL fetching, URL-based pattern collection and source enrichment. Retry resumes the saved original input, image and completed stages; request character limits and concurrency remain shared with Dashboard. Jobs use the shared Dashboard Active Tasks and Recent Activity lists with a V2 badge/filter; choose Translate (V1) or Rewrite (V3) inside V2. No new database migration is required for this mode.
 - **Safe handoff:** Published Rewrite/Generate items expose caption and link copy actions; manual publishing exposes link only.
 
 ### 📊 Alerts
@@ -384,3 +385,17 @@ pnpm test:e2e
 
 ---
 *Built with precision for the modern content era.*
+
+### Translation recovery and account concurrency
+
+- Translation chunks default to **50,000 source characters**, configurable from 1,000 to 50,000 in Settings. An existing installation is upgraded once; later edits are retained. Longer articles are split in order, never truncated to this character limit.
+- Configure **Maximum concurrent AI requests** on each AI account (default 2, range 1–8). Pipelines share that account's request slots. Duplicate accounts using the same endpoint and API key share the stricter configured limit. Different provider keys can still share an organization-level quota, so this setting cannot guarantee avoidance of all rate limits.
+- Settings' **Parallel chunks per article** controls workers within one article; it does not multiply the AI account limit. Sequential translation orders chunks within the article while other pipelines may run concurrently. Scheduling is shared within one backend process.
+- Translation prompts place invariant instructions and source text before target-language/context fields to allow provider prefix caching. Cache hits remain provider-dependent; the app does not send additional warm-up requests.
+- **Resume** creates a new job linked to the existing draft. Successful source fetching, title/chunk generation, and publication results are retained in the database, including across restarts. A WordPress failure does not require another translation. A changed generation model or prompt version requires a fresh run to avoid mixing outputs; credentials on the original saved account may be repaired.
+- The frozen retry manifest retains the original language, chunk layout, sequential/parallel mode, source options, and destination accounts. Historical jobs can only reuse data that still exists.
+- If publication might have succeeded before a timeout, verify the destination and use **Save verified result** on the Dashboard before resuming. Enter an existing post ID/URL when delivery succeeded; permit retry only after confirming it did not. Confirmed results are retained even when cancellation arrives during the external request.
+- HTTP 429 applies an account cooldown with `Retry-After` support. Resumable translation/rewrite requests make at most three automatic attempts. Existing single-attempt benchmark behavior is preserved and also observes account cooldowns.
+- Explicit output-token truncation is a failed generation stage, not a completed translation. Model output limits still apply independently of the source-character setting. No provider API credits or live publishing calls are required by the regression tests.
+
+Each AI account can optionally override **Maximum source characters per request** (1,000–50,000). Leave it blank to inherit Settings. Fresh runs use the account override; resumed runs keep the chunk size already stored in their recovery manifest. This field is independent of account concurrency and requires no additional database migration.

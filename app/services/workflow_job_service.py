@@ -33,8 +33,16 @@ class WorkflowJobService:
         job = self.db.query(models.Job).filter(models.Job.id == job_id).first()
         if not job:
             return None
-        if job.status not in {"queued", "running"}:
+        # Status-filtered write acquires the DB write lock before reading mutable
+        # progress. A stale session must never resurrect a cancelled attempt.
+        live = self.db.query(models.Job).filter(models.Job.id == job_id,
+            models.Job.status.in_(["queued", "running"])).update(
+                {"status": models.Job.status}, synchronize_session=False)
+        if not live:
+            self.db.rollback()
+            self.db.refresh(job)
             return job
+        self.db.refresh(job)
         job.status = "running"
         job.current_step = step
         job.progress = progress
@@ -49,8 +57,16 @@ class WorkflowJobService:
         job = self.db.query(models.Job).filter(models.Job.id == job_id).first()
         if not job:
             return None
-        if job.status not in {"queued", "running"}:
+        # Status-filtered write acquires the DB write lock before reading mutable
+        # progress. A stale session must never resurrect a cancelled attempt.
+        live = self.db.query(models.Job).filter(models.Job.id == job_id,
+            models.Job.status.in_(["queued", "running"])).update(
+                {"status": models.Job.status}, synchronize_session=False)
+        if not live:
+            self.db.rollback()
+            self.db.refresh(job)
             return job
+        self.db.refresh(job)
         job.status = "success"
         job.progress = 100
         job.current_step = "Completed"
@@ -64,8 +80,16 @@ class WorkflowJobService:
         job = self.db.query(models.Job).filter(models.Job.id == job_id).first()
         if not job:
             return None
-        if job.status not in {"queued", "running"}:
+        # Status-filtered write acquires the DB write lock before reading mutable
+        # progress. A stale session must never resurrect a cancelled attempt.
+        live = self.db.query(models.Job).filter(models.Job.id == job_id,
+            models.Job.status.in_(["queued", "running"])).update(
+                {"status": models.Job.status}, synchronize_session=False)
+        if not live:
+            self.db.rollback()
+            self.db.refresh(job)
             return job
+        self.db.refresh(job)
         outputs = dict(job.outputs or {})
         if job.current_step:
             outputs["failed_step"] = job.current_step
@@ -87,6 +111,12 @@ class WorkflowJobService:
         ).all()
         for job in jobs:
             outputs = dict(job.outputs or {})
+            if job.workflow_type == "model_benchmark":
+                outputs["results"] = [
+                    {**row, "status": "error", "error": "Interrupted by restart"} if row.get("status") == "running"
+                    else {**row, "status": "cancelled"} if row.get("status") == "waiting" else row
+                    for row in outputs.get("results", [])
+                ]
             if job.current_step:
                 outputs["failed_step"] = job.current_step
             job.status = "failed"

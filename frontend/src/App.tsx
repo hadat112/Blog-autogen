@@ -9,6 +9,7 @@ import GenerateStory from './pages/GenerateStory';
 import TextStory from './pages/TextStory';
 import PatternLibrary from './pages/PatternLibrary';
 import WordPressPublisher from './pages/WordPressPublisher';
+import ModelBenchmark from './pages/ModelBenchmark';
 
 const App: React.FC = () => {
   return (
@@ -22,7 +23,9 @@ const App: React.FC = () => {
         <Route path="/rewrite" element={<Navigate to="/dashboard" replace />} />
         <Route path="/generate-story" element={<GenerateStory />} />
         <Route path="/text-story" element={<TextStory />} />
+        <Route path="/model-benchmark" element={<ModelBenchmark />} />
         <Route path="/pattern-library" element={<PatternLibrary />} />
+        <Route path="/pipeline-workflow" element={<Navigate to="/dashboard?input=v3" replace />} />
         <Route path="/wordpress-publisher" element={<WordPressPublisher />} />
         <Route path="*" element={<div>Page not found</div>} />
       </Routes>

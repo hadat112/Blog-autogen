@@ -1,3 +1,4 @@
+from app.domain.workflow_threads import run_workflow_blocking
 """Start, inspect and retry text story composition."""
 
 import asyncio
@@ -61,7 +62,7 @@ def _capacity_error(account, source, language):
 
 def _schedule(job_id, draft_id):
     async def operation():
-        await asyncio.to_thread(TextStoryWorkflowService.execute, job_id, draft_id)
+        await run_workflow_blocking(TextStoryWorkflowService.execute, job_id, draft_id)
     workflow_runner.start(job_id, operation)
 
 

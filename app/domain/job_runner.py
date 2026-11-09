@@ -1,3 +1,5 @@
+from app.domain.translation_settings import resolve_translation_chunk_size
+from app.domain.workflow_threads import run_workflow_blocking
 import asyncio
 import logging
 from datetime import datetime
@@ -29,7 +31,7 @@ class JobRunner:
     def _get_run_lock(self):
         loop = asyncio.get_running_loop()
         if self._run_lock is None or self._run_lock_loop is not loop:
-            self._run_lock = asyncio.Lock()
+            self._run_lock = asyncio.Semaphore(8)
             self._run_lock_loop = loop
         return self._run_lock
 
@@ -64,10 +66,11 @@ class JobRunner:
         ai_config = None
         if account_configs.get("ai"):
             ai_config = dict(account_configs["ai"])
+            ai_config["account_id"] = (pipeline.step_accounts or {}).get("ai")
             ai_config["translation_mode"] = app_config.get("translation_mode", "sequential")
             ai_config["translation_max_concurrency"] = app_config.get("translation_max_concurrency", 2)
             ai_config["ai_request_timeout"] = app_config.get("ai_request_timeout", 300)
-            ai_config["translation_chunk_size"] = app_config.get("translation_chunk_size", 6000)
+            ai_config["translation_chunk_size"] = resolve_translation_chunk_size(ai_config, app_config)
         wp_config = dict(account_configs.get("wp") or {})
         wp_config.pop("category_id", None)
         pipeline_settings = pipeline.settings if isinstance(pipeline.settings, dict) else {}
@@ -217,9 +220,9 @@ class JobRunner:
             if prompt:
                 # Quick run for a single prompt/url
                 if pipeline_type == "crawl" or (isinstance(prompt, str) and prompt.startswith("http")):
-                    result = await asyncio.to_thread(story_orchestrator.process_crawl, prompt)
+                    result = await run_workflow_blocking(story_orchestrator.process_crawl, prompt)
                 else:
-                    result = await asyncio.to_thread(story_orchestrator.process_prompt, prompt)
+                    result = await run_workflow_blocking(story_orchestrator.process_prompt, prompt)
 
                 if self._is_job_cancelled(job_id):
                     return
@@ -232,7 +235,7 @@ class JobRunner:
                     self._add_log_event(job_id, "Completed", f"Processed {pipeline_type}: {prompt[:50]}...", res_status)
             else:
                 # Full run from prompts file
-                results = await asyncio.to_thread(story_orchestrator.run, prompts_file)
+                results = await run_workflow_blocking(story_orchestrator.run, prompts_file)
 
                 if self._is_job_cancelled(job_id):
                     return

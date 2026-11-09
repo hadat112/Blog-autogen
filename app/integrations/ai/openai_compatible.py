@@ -1,7 +1,13 @@
+from app.domain.translation_settings import normalize_translation_chars, DEFAULT_TRANSLATION_CHARS
+from app.domain.translation_prompts import build_translation_messages
 import json
 import os
 import re
 import time
+import random
+from email.utils import parsedate_to_datetime
+from datetime import datetime, timezone
+from .quota import quota_identity, normalize_concurrency
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from html import unescape
@@ -28,7 +34,7 @@ TRANSLATION_MAX_RETRIES = 4
 TRANSLATION_RETRY_DELAYS = (2, 5, 10)
 TRANSLATION_TEMPERATURE = 0.2
 CHUNKED_ARTICLE_THRESHOLD = 8000
-TRANSLATION_CHUNK_SIZE = 6000
+TRANSLATION_CHUNK_SIZE = DEFAULT_TRANSLATION_CHARS
 TRANSLATION_CONTEXT_PARAGRAPHS = 1
 TRANSLATION_MODES = {"sequential", "parallel"}
 DEFAULT_TRANSLATION_MODE = "sequential"
@@ -304,11 +310,7 @@ def _normalize_translation_max_concurrency(value) -> int:
 
 
 def _normalize_translation_chunk_size(value) -> int:
-    try:
-        chunk_size = int(value)
-    except (TypeError, ValueError):
-        chunk_size = TRANSLATION_CHUNK_SIZE
-    return max(1000, min(chunk_size, 30000))
+    return normalize_translation_chars(value)
 
 
 def _format_seconds(seconds: float) -> str:
@@ -489,6 +491,8 @@ class OpenAICompatibleAIClient(BaseAI):
         translation_chunk_size=TRANSLATION_CHUNK_SIZE,
         account_key=None,
         scheduler=None,
+        max_concurrency=None,
+        cancelled=None,
     ):
         self.api_key = api_key
         self.text_model = text_model
@@ -503,12 +507,17 @@ class OpenAICompatibleAIClient(BaseAI):
         self.translation_chunk_size = _normalize_translation_chunk_size(
             translation_chunk_size
         )
-        self.account_key = account_key or f"{self.base_url}|{self.api_key or ''}"
+        self.account_key = quota_identity(self.base_url, self.api_key)
+        self.max_concurrency = normalize_concurrency(max_concurrency if max_concurrency is not None else translation_max_concurrency)
+        self.cancelled = cancelled
+        self.recovery = None
+        self.retry_transient = False
         self.scheduler = scheduler or ai_request_scheduler
+        self.scheduler.register(self.account_key, account_key or self.account_key, self.max_concurrency)
 
     @property
     def request_limit(self):
-        return 1 if self.translation_mode == "sequential" else self.translation_max_concurrency
+        return self.max_concurrency
 
     def _request_payload_for_attempt(self, data: dict, attempt: int) -> dict:
         if (
@@ -522,35 +531,50 @@ class OpenAICompatibleAIClient(BaseAI):
             return fallback_data
         return data
 
-    def _post_json(self, url: str, headers: dict, data: dict):
-        last_error = None
-        with self.scheduler.permit(self.account_key, self.request_limit, "foreground"):
-            for attempt in range(1, AI_MAX_ATTEMPTS + 1):
+    def _check_cancelled(self):
+        if self.cancelled and self.cancelled():
+            raise InterruptedError("AI request cancelled")
+
+    def _retry_delay(self, response, attempt):
+        value = response.headers.get("Retry-After") if response is not None else None
+        if value:
+            try:
+                return max(0, float(value))
+            except (TypeError, ValueError):
                 try:
-                    response = requests.post(
-                        url,
-                        headers=headers,
-                        json=self._request_payload_for_attempt(data, attempt),
-                        timeout=_get_ai_request_timeout(self.ai_request_timeout),
-                    )
-                except requests.RequestException as e:
-                    last_error = e
-                else:
-                    if response.status_code not in TRANSIENT_STATUS_CODES:
-                        response.raise_for_status()
-                        return response
+                    return max(0, (parsedate_to_datetime(value) - datetime.now(timezone.utc)).total_seconds())
+                except (ValueError, TypeError, OverflowError):
+                    pass
+        return min(30, 2 ** attempt) + random.uniform(0, .25)
 
-                    last_error = requests.HTTPError(
-                        f"{response.status_code} Server Error from AI endpoint: {response.text[:500]}",
-                        response=response,
-                    )
-
-                if attempt < AI_MAX_ATTEMPTS:
-                    time.sleep(min(2 ** (attempt - 1), 8))
-
-        if isinstance(last_error, requests.HTTPError):
-            raise last_error
-        raise requests.HTTPError(f"AI request failed after {AI_MAX_ATTEMPTS} attempts: {last_error}")
+    def _post_json(self, url, headers, data, *, allow_fallback=True, attempts=3, priority="foreground"):
+        last_error = None
+        for attempt in range(attempts):
+            self._check_cancelled()
+            response = None
+            try:
+                with self.scheduler.permit(self.account_key, self.request_limit, priority, cancelled=self.cancelled):
+                    self._check_cancelled()
+                    response = requests.post(url, headers=headers, json=self._request_payload_for_attempt(data, attempt + 1) if allow_fallback else data,
+                                             timeout=_get_ai_request_timeout(self.ai_request_timeout))
+                    response.raise_for_status()
+                self._check_cancelled()
+                return response
+            except requests.RequestException as exc:
+                last_error = exc
+                status = getattr(response, "status_code", None)
+                if status is not None and status not in TRANSIENT_STATUS_CODES:
+                    raise
+                delay = self._retry_delay(response, attempt)
+                if status == 429:
+                    self.scheduler.cooldown(self.account_key, delay)
+                if attempt == attempts - 1:
+                    raise
+                deadline = time.monotonic() + delay
+                while time.monotonic() < deadline:
+                    self._check_cancelled()
+                    time.sleep(min(.1, max(0, deadline - time.monotonic())))
+        raise last_error
 
     def chat(
         self,
@@ -579,19 +603,15 @@ class OpenAICompatibleAIClient(BaseAI):
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        with self.scheduler.permit(self.account_key, self.request_limit, priority):
-            response = requests.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=_get_ai_request_timeout(self.ai_request_timeout),
-            )
-            response.raise_for_status()
+        response = self._post_json(f"{self.base_url}/chat/completions", headers, payload,
+            allow_fallback=False, attempts=3 if self.retry_transient else 1, priority=priority)
         result = response.json()
         try:
             message = result["choices"][0]["message"]
         except (KeyError, IndexError, TypeError) as exc:
             raise ValueError("Unexpected AI response structure") from exc
+        if result["choices"][0].get("finish_reason") in {"length", "max_tokens"}:
+            raise ValueError("AI response was cut off by the model output limit")
         if not message.get("content") and not message.get("tool_calls"):
             raise ValueError("AI returned an empty message")
         return message
@@ -605,12 +625,8 @@ class OpenAICompatibleAIClient(BaseAI):
             "Content-Type": "application/json",
         }
         payload = {"model": self.text_model, "messages": messages, "temperature": 0.2, "stream": False}
-        with self.scheduler.permit(self.account_key, self.request_limit, priority):
-            response = requests.post(
-                f"{self.base_url}/chat/completions", headers=headers, json=payload,
-                timeout=_get_ai_request_timeout(self.ai_request_timeout),
-            )
-            response.raise_for_status()
+        response = self._post_json(f"{self.base_url}/chat/completions", headers, payload,
+            allow_fallback=False, attempts=1, priority=priority)
         data = response.json()
         try:
             choice = data["choices"][0]
@@ -639,109 +655,35 @@ class OpenAICompatibleAIClient(BaseAI):
             "stream": False
         }
 
-        response = self._post_json(url, headers, data)
+        # Long chunks need an explicit output allowance; a server's small default
+        # otherwise cuts every retry off at the same position. This is a ceiling,
+        # not a request to generate extra text.
+        budget = min(65536, max(4096, int(len(prompt) * 1.5) + 2048))
+        field = "max_completion_tokens" if str(self.text_model or "").startswith(("gpt-5", "gpt-6", "o1", "o3", "o4")) else "max_tokens"
+        data[field] = budget
+        response = self._post_json(url, headers, data, allow_fallback=False)
         result = response.json()
         try:
             content = result["choices"][0]["message"]["content"]
         except (KeyError, IndexError):
             raise ValueError(f"Unexpected AI response structure: {result}")
+        if result["choices"][0].get("finish_reason") in {"length", "max_tokens"}:
+            raise ValueError("Translation was cut off by the model output limit; retry this stage")
         if not content:
             raise ValueError("AI returned empty content.")
         return content.strip()
 
-    def _translate_text(
-        self,
-        text: str,
-        language: str,
-        *,
-        article_title: str = "",
-        previous_translation_context: str = "",
-        previous_source_context: str = "",
-    ) -> str:
-        source_paragraph_count = len(_paragraphs(text))
-        context_lines = []
-        if article_title:
-            context_lines.append(f"Article title: {article_title}")
-        if previous_translation_context:
-            context_lines.append(
-                f"Previous translated context already written in {language}. Use it only to keep names, "
-                "pronouns, terminology, tone, and style consistent. Do not repeat, rewrite, summarize, or "
-                "include any part of this context in the output:\n"
-                f"{previous_translation_context}"
-            )
-        if previous_source_context:
-            context_lines.append(
-                "Previous source context from the original article, not translated yet. Use it only to "
-                "understand continuity, names, pronouns, terminology, tone, and references. Do not translate, "
-                "repeat, rewrite, summarize, or include any part of this source context in the output:\n"
-                f"{previous_source_context}"
-            )
-
-        context_block = "\n\n".join(context_lines)
-        system_prompt = (
-            "You are a deterministic translation engine, not a conversational assistant. Translate every "
-            "translatable part of <source_text> into the exact target language supplied by the user. This "
-            "includes narration, dialogue inside quotation marks, short replies, stage directions, captions, "
-            "headings, and text that is already in a third language. Preserve only proper names, brand names, "
-            "URLs, code, and numbers when appropriate. Never expose analysis, reasoning, self-correction, "
-            "editorial notes, translation notes, comments, warnings, refusals, copyright text, policy text, "
-            "summaries, explanations, labels, introductions, markdown fences, or closing comments. Never "
-            "output source sentences beside their translations. Output only the final translated text."
-        )
-        prompt = (
-            f"TARGET LANGUAGE (authoritative, preserve exactly as written): {language}\n\n"
-            f"Source paragraph count: {source_paragraph_count}\n\n"
-            f"Translate all content inside <source_text> into {language}. The source may contain mixed "
-            "languages; translate every translatable sentence from every source language into the single "
-            f"target language {language}.\n\n"
-            "NON-NEGOTIABLE OUTPUT RULES:\n"
-            f"- Output only the finished translation in {language}, with no prefix or suffix.\n"
-            "- Translate every narration sentence and every quoted line of dialogue, including one-word or "
-            "very short replies such as \"What?\", \"Yes\", \"No secrets\", or \"I'm learning\".\n"
-            "- Quotation marks do not make text exempt from translation. Do not preserve English dialogue "
-            "merely because it is quoted, recorded, displayed on screen, or presented as evidence.\n"
-            "- Translate stage directions, labels that belong to the source article, and embedded passages "
-            "written in a different language.\n"
-            f"- Do not output any ordinary prose in English or another non-{language} language.\n"
-            "- Never output internal notes or self-corrections. Forbidden output includes lines or fragments "
-            "beginning with \"Note:\", \"Wait:\", \"Inconsistent:\", \"Correction:\", \"Translation:\", "
-            "\"Here is\", \"//\", or bracketed editorial commentary.\n"
-            "- Never apologize, refuse, discuss copyright or permission, or claim that translation is not "
-            "possible. The source is user-provided and must be translated in full.\n"
-            "- Never include both the source sentence and its translation.\n"
-            "- Do not add facts, explanations, annotations, summaries, or commentary.\n"
-            f"- Use exactly {language}; do not substitute a related language, dialect, or locale.\n"
-            f"- The output must contain exactly {source_paragraph_count} paragraphs, matching the source paragraph order.\n"
-            "- Keep only proper names, brand names, URLs, code, and numbers unchanged when appropriate.\n"
-            "- Do not summarize, expand, omit, reorder, explain, sanitize, or rewrite the story.\n"
-            "- If the source text is a title or headline, translate that title directly; do not make it catchier, shorter, longer, or different.\n"
-            "- Preserve every event, fact, name, relationship, number, date, chronology, point of view, tense, and tone.\n"
-            "- Keep the translated output as close as naturally possible to the source length and sentence-by-sentence structure.\n"
-            "- Preserve paragraph breaks.\n"
-            "- Translate relationship words naturally for the target language, but keep them consistent.\n\n"
-            "SILENT FINAL CHECK (perform internally; never print this check):\n"
-            "1. Verify every quoted dialogue line was translated.\n"
-            "2. Verify no complete source-language sentence remains.\n"
-            "3. Verify there are no notes, corrections, refusals, explanations, or analysis fragments.\n"
-            f"4. Verify every reader-facing sentence is in {language}.\n"
-            "5. Verify paragraph count and order match the source.\n\n"
-            f"{context_block}\n\n"
-            f"<source_text>\n{text}\n</source_text>"
+    def _translate_text(self, text, language, *, article_title="", previous_translation_context="", previous_source_context=""):
+        system_prompt, prompt = build_translation_messages(
+            text, language, article_title=article_title,
+            previous_translation_context=previous_translation_context,
+            previous_source_context=previous_source_context,
         )
         return _clean_translation_output(self._chat_text(prompt, system_prompt=system_prompt))
 
-    def _translate_text_with_retry(self, *args, **kwargs) -> str:
-        last_error = None
-        for attempt in range(TRANSLATION_MAX_RETRIES):
-            try:
-                return self._translate_text(*args, **kwargs)
-            except requests.HTTPError as e:
-                last_error = e
-                status_code = getattr(getattr(e, "response", None), "status_code", None)
-                if status_code != 429 or attempt == TRANSLATION_MAX_RETRIES - 1:
-                    raise
-                time.sleep(TRANSLATION_RETRY_DELAYS[min(attempt, len(TRANSLATION_RETRY_DELAYS) - 1)])
-        raise last_error
+    def _translate_text_with_retry(self, *args, **kwargs):
+        self._check_cancelled()
+        return self._translate_text(*args, **kwargs)
 
     def _extract_article_chunked(self, clean_html: str, article_url: str, language: str) -> dict:
         fields = _extract_article_fields_locally(clean_html)
@@ -764,7 +706,11 @@ class OpenAICompatibleAIClient(BaseAI):
         progress_callback=None,
     ) -> dict:
         translated_title = self.translate_title(title, language)
-        chunks = _split_text_chunks(content, max_chars=self.translation_chunk_size)
+        chunks = self.recovery.get("translation:chunks") if self.recovery else None
+        if chunks is None:
+            chunks = _split_text_chunks(content, max_chars=self.translation_chunk_size)
+            if self.recovery:
+                self.recovery.save("translation:chunks", chunks)
         total_words = _word_count(content)
         translated_chunks = self._translate_chunks(
             chunks,
@@ -783,7 +729,27 @@ class OpenAICompatibleAIClient(BaseAI):
 
     def translate_title(self, title: str, language: str) -> str:
         """Translate a headline directly, preserving its meaning and structure."""
-        return self._translate_text_with_retry(title, language, article_title=title)
+        saved = self.recovery.get("title") if self.recovery else None
+        if saved is not None:
+            return saved
+        value = self._translate_text_with_retry(title, language, article_title=title)
+        if not value or not value.strip():
+            raise ValueError("AI returned an empty translated title")
+        if self.recovery:
+            self.recovery.save("title", value)
+        return value
+
+    def _cached_translation(self, index, chunk, language, **kwargs):
+        key = f"translation:chunk:{index}"
+        saved = self.recovery.get(key) if self.recovery else None
+        if saved is not None:
+            return saved
+        value = self._translate_text_with_retry(chunk, language, **kwargs)
+        if not value or not value.strip():
+            raise ValueError("AI returned an empty translated chunk")
+        if self.recovery:
+            self.recovery.save(key, value)
+        return value
 
     def _translate_chunks_sequential(
         self,
@@ -802,8 +768,8 @@ class OpenAICompatibleAIClient(BaseAI):
                 progress_callback(
                     f"Step 2: chunk{index} start ({_word_count(chunk)} words)"
                 )
-            translated_chunk = self._translate_text_with_retry(
-                chunk,
+            translated_chunk = self._cached_translation(
+                index - 1, chunk,
                 language,
                 article_title=translated_title,
                 previous_translation_context=previous_translation_context,
@@ -822,8 +788,8 @@ class OpenAICompatibleAIClient(BaseAI):
         return translated_chunks
 
     def _translate_chunk_parallel_job(self, index: int, chunk: str, language: str, translated_title: str, previous_source_context: str):
-        translated_chunk = self._translate_text_with_retry(
-            chunk,
+        translated_chunk = self._cached_translation(
+            index - 1, chunk,
             language,
             article_title=translated_title,
             previous_source_context=previous_source_context,

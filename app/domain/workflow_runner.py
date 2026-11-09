@@ -11,25 +11,43 @@ class WorkflowRunner:
         self.active_jobs = {}
         self.queue = []
         self.worker_task = None
+        self._wake = None
 
     def start(self, job_id, operation):
         self.queue.append((job_id, operation))
         if self.worker_task is None or self.worker_task.done():
+            self._wake = asyncio.Event()
             self.worker_task = asyncio.create_task(self._drain_queue())
+        self._wake.set()
         return self.worker_task
 
     async def _drain_queue(self):
-        while self.queue:
-            job_id, operation = self.queue.pop(0)
-            task = asyncio.create_task(self._run(job_id, operation))
-            self.active_jobs[job_id] = task
-            try:
-                await task
-            except asyncio.CancelledError:
-                # _run records cancellation; keep the queue moving.
-                pass
-            finally:
-                self.active_jobs.pop(job_id, None)
+        # Account quotas are enforced around HTTP requests, not around whole jobs.
+        pending = set()
+        while self.queue or pending:
+            while self.queue and len(pending) < 8:
+                job_id, operation = self.queue.pop(0)
+                task = asyncio.create_task(self._run(job_id, operation))
+                self.active_jobs[job_id] = task
+                pending.add(task)
+            if pending:
+                self._wake.clear()
+                wake_task = asyncio.create_task(self._wake.wait())
+                done, _ = await asyncio.wait(pending | {wake_task}, return_when=asyncio.FIRST_COMPLETED)
+                if wake_task not in done:
+                    wake_task.cancel()
+                    try:
+                        await wake_task
+                    except asyncio.CancelledError:
+                        pass
+                done.discard(wake_task)
+                pending.difference_update(done)
+                for task in done:
+                    if not task.cancelled():
+                        error = task.exception()
+                        if error:
+                            import logging
+                            logging.getLogger(__name__).error("Workflow operation failed", exc_info=(type(error), error, error.__traceback__))
 
     async def _run(self, job_id, operation):
         try:
@@ -45,6 +63,11 @@ class WorkflowRunner:
             job = db.query(models.Job).filter(models.Job.id == job_id).first()
             if job and job.status in {"queued", "running"}:
                 outputs = dict(job.outputs or {})
+                if job.workflow_type == "model_benchmark":
+                    outputs["results"] = [
+                        {**row, "status": "cancelled"} if row.get("status") in {"waiting", "running"} else row
+                        for row in outputs.get("results", [])
+                    ]
                 if job.current_step:
                     outputs["cancelled_step"] = job.current_step
                 job.status = "cancelled"

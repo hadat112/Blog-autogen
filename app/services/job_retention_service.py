@@ -48,6 +48,11 @@ class JobRetentionService:
         ).order_by(models.ContentDraft.updated_at.desc(), models.ContentDraft.id.desc()).all()
         compacted = 0
         for draft in drafts[limit:]:
+            recovery = self.db.get(models.WorkflowRecovery, draft.id)
+            if recovery and not (recovery.artifacts or {}).get("complete"):
+                continue
+            if recovery:
+                recovery.artifacts = {"complete": True}
             draft.content = ""
             draft.caption = None
             compacted += 1

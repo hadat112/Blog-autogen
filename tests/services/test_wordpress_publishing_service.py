@@ -118,3 +118,19 @@ def test_text_story_publisher_keeps_artifacts_out_of_post_body(db):
     result = WordPressPublishingService(db, Gateway).publish("text-story")
     assert result.state == "wordpress_created"
     assert Gateway.posts[0][1] == "<p>Opening.</p>\n<p>Ending.</p>"
+
+
+def test_confirmed_wordpress_result_survives_cancellation_during_request(db):
+    cancelled = [False]
+    class ConfirmedGateway(Gateway):
+        def create_post(self, *args, **kwargs):
+            cancelled[0] = True
+            return {'id':'confirmed', 'link':'https://wp.test/confirmed', 'status':'draft'}
+    def guard():
+        if cancelled[0]:
+            raise InterruptedError('Cancelled')
+    draft = models.ContentDraft(id='cancel-receipt',kind='manual',pipeline_id='pipeline',title='Title',content='Body',wp_status='draft',state='ready_for_review')
+    db.add(draft);db.commit()
+    published = WordPressPublishingService(db, ConfirmedGateway).publish(draft.id, guard=guard)
+    assert published.wp_post_id == 'confirmed'
+    assert published.state == 'wordpress_created'

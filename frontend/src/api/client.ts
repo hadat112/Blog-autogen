@@ -13,6 +13,11 @@ export const testAccount = (data: { id?: string; type?: string; config?: Account
 export const getWPCategories = (config: AccountConfig) => client.post('/accounts/wp-categories', config);
 export const getAIModels = (config: Pick<AccountConfig, 'base_url' | 'api_key'>) =>
   client.post<AIModel[]>('/accounts/ai-models', config);
+export interface BenchmarkSample { id: string; source_language: string; target_language: string; word_count: number; text: string }
+export const getBenchmarkSample = () => client.get<BenchmarkSample>('/model-benchmarks/sample');
+export const getBenchmarkModels = (accountId: string) => client.get<AIModel[]>(`/model-benchmarks/accounts/${accountId}/models`);
+export const startBenchmark = (accountId: string, modelIds: string[]) =>
+  client.post<{ job_id: string; status: string }>('/model-benchmarks', { account_id: accountId, model_ids: modelIds });
 
 export const getPipelines = (includeWorkflows = false) => client.get<Pipeline[]>('/pipelines', { params: { include_workflows: includeWorkflows } });
 export const createPipeline = (data: Partial<Pipeline>) => client.post<Pipeline>('/pipelines', data);

@@ -174,3 +174,13 @@ class ThemeRule(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class WorkflowRecovery(Base):
+    __tablename__ = "workflow_recoveries"
+    draft_id = Column(String, ForeignKey("content_drafts.id"), primary_key=True)
+    active_job_id = Column(String, nullable=False)
+    manifest = Column(JSON, nullable=False, default=dict)
+    artifacts = Column(JSON, nullable=False, default=dict)
+    revision = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)

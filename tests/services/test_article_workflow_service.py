@@ -182,6 +182,7 @@ def test_original_article_workflow_skips_ai_and_publishes_source(test_db, mode):
     session, TestingSession = test_db
     pipeline = session.get(models.Pipeline, "pipe_1")
     pipeline.language = ""
+    pipeline.step_accounts = {"wp": "wp_1"}
     session.commit()
 
     draft = models.ContentDraft(

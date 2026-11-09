@@ -41,17 +41,19 @@ class WordPressPublishingService:
             raise ValueError("WordPress account is unavailable")
         return pipeline, account
 
-    def publish(self, draft_id, confirmed=False, source_proxy_url=""):
+    def publish(self, draft_id, confirmed=False, source_proxy_url="", guard=None, retain_upload=False):
+        guard = guard or (lambda: None)
+        guard()
         lock = _draft_locks[draft_id]
         if not lock.acquire(blocking=False):
             raise ValueError("This draft is already being published")
         try:
-            draft = self.db.query(models.ContentDraft).filter(models.ContentDraft.id == draft_id).first()
+            draft = self.db.query(models.ContentDraft).populate_existing().filter(models.ContentDraft.id == draft_id).first()
             if not draft:
                 return None
             if draft.wp_post_id or draft.state == "wordpress_created":
                 raise ValueError("This draft was already created in WordPress")
-            if draft.state == "publish_unknown":
+            if draft.state in {"publish_unknown", "publishing"}:
                 raise ValueError("Verify the ambiguous WordPress result before retrying")
             if draft.wp_status == "publish" and not confirmed:
                 raise ValueError("Publishing now requires explicit confirmation")
@@ -67,6 +69,7 @@ class WordPressPublishingService:
             media_id = draft.wp_media_id
             publish_warning = None
             try:
+                guard()
                 if draft.image_source and not media_id:
                     try:
                         if draft.image_kind == "url":
@@ -75,8 +78,11 @@ class WordPressPublishingService:
                             media_id = gateway.upload_file(draft.image_source)
                         else:
                             raise ValueError("Unsupported image source")
+                        # A confirmed external receipt remains valuable after cancellation.
                         draft.wp_media_id = str(media_id)
                         self.db.commit()
+                    except InterruptedError:
+                        raise
                     except Exception as exc:
                         media_id = None
                         publish_warning = f"Published without featured image: {sanitize_error(str(exc))}"
@@ -86,6 +92,7 @@ class WordPressPublishingService:
                             sanitize_error(str(exc)),
                         )
                 content = draft.content if draft.content_format == "html" else plain_text_to_html(draft.content)
+                guard()
                 result = gateway.create_post(
                     draft.title,
                     content,
@@ -93,6 +100,8 @@ class WordPressPublishingService:
                     category_id=draft.category_id,
                     media_id=media_id,
                 )
+            except InterruptedError:
+                raise
             except AmbiguousWordPressResult as exc:
                 draft.state = "publish_unknown"
                 draft.error = sanitize_error(str(exc))
@@ -103,6 +112,8 @@ class WordPressPublishingService:
                 draft.error = sanitize_error(str(exc))
                 self.db.commit()
                 raise
+            # Save the confirmed receipt even if cancellation arrived while the
+            # HTTP request was in flight. Never send a second create request.
             draft.state = "wordpress_created"
             draft.wp_post_id = result["id"]
             draft.wp_url = result["link"]
@@ -112,7 +123,7 @@ class WordPressPublishingService:
             draft.version += 1
             self.db.commit()
             self.db.refresh(draft)
-            if draft.image_kind == "upload" and draft.image_source:
+            if not retain_upload and draft.image_kind == "upload" and draft.image_source:
                 path = Path(draft.image_source)
                 if path.is_file() and "var/uploads" in path.as_posix():
                     path.unlink(missing_ok=True)

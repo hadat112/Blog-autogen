@@ -1,3 +1,4 @@
+from app.domain.workflow_threads import run_workflow_blocking
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -34,7 +35,7 @@ async def start_generation(data: GenerationJobInput, db: Session = Depends(get_d
     job = WorkflowJobService(db).create(pipeline.id, "generate_story", draft.id)
 
     async def operation():
-        await asyncio.to_thread(GenerateStoryWorkflowService.execute, job.id, draft.id)
+        await run_workflow_blocking(GenerateStoryWorkflowService.execute, job.id, draft.id)
 
     workflow_runner.start(job.id, operation)
     return {"job_id": job.id, "draft_id": draft.id, "status": job.status}

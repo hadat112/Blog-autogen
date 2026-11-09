@@ -152,3 +152,34 @@ def test_article_workflow_draft_can_be_published_again():
         res = client.post("/content-drafts/publishable_article_v2/publish", json={"confirmed": True})
 
     assert res.status_code == 200, res.text
+
+
+def test_retry_reuses_existing_draft_instead_of_regenerating():
+    with TestingSession() as db:
+        db.add(models.ContentDraft(id='kept-draft', kind='article_v1', pipeline_id='pipe_ok', source_url='https://source.test/kept', language='Italian', title='Tradotto', content='Already translated', state='publish_failed'))
+        db.add(models.Job(id='kept-job', pipeline_id='pipe_ok', workflow_type='article_v1', draft_id='kept-draft', input_text='https://source.test/kept', status='failed'))
+        db.commit()
+    with patch('app.services.article_workflow_service.ArticleWorkflowService.execute'):
+        result = client.post('/article-workflows/kept-job/retry')
+    assert result.status_code == 200, result.text
+    assert result.json()['draft_id'] == 'kept-draft'
+    with TestingSession() as db:
+        assert db.query(models.ContentDraft).count() == 1
+        assert db.get(models.ContentDraft, 'kept-draft').content == 'Already translated'
+
+
+def test_uncertain_wordpress_requires_confirmed_resolution():
+    with TestingSession() as db:
+        db.add(models.ContentDraft(id='uncertain',kind='article_v1',pipeline_id='pipe_ok',source_url='https://source.test/uncertain',title='Title',content='Translation',state='publish_unknown'))
+        db.add(models.Job(id='uncertain-job',pipeline_id='pipe_ok',draft_id='uncertain',workflow_type='article_v1',status='failed'))
+        db.commit()
+    path = '/article-workflows/uncertain-job/resolve-delivery'
+    rejected = client.post(path,json={'channel':'wordpress','outcome':'not_sent'})
+    assert rejected.status_code == 400
+    resolved = client.post(path,json={'channel':'wordpress','outcome':'sent','external_id':'901','url':'https://wp.test/901','confirmed':True})
+    assert resolved.status_code == 200, resolved.text
+    with TestingSession() as db:
+        draft = db.get(models.ContentDraft,'uncertain')
+        assert draft.wp_post_id == '901'
+        assert draft.state == 'wordpress_created'
+        assert draft.content == 'Translation'

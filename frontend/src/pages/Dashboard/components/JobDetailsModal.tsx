@@ -5,6 +5,7 @@ import { syncJob } from '../../../api/client';
 import { Job } from '../../../api/types';
 import { ProgressTimeline } from '../../../components/ui/ProgressTimeline';
 import { InlineStatus } from '../../../components/ui/InlineStatus';
+import { getArticleWorkflowLabel } from '../../../utils/workflowVersion';
 
 interface JobExtended extends Job {
   pipeline_name?: string;
@@ -60,7 +61,7 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ job, onClose }) => {
     : inputLog?.url || stepOneLog?.detail?.split('Step 1: Extracting article from ')[1]?.trim() || '';
   const outputUrl = typeof job.outputs?.wp_url === 'string' ? job.outputs.wp_url : '';
   const warnings = Array.isArray(job.outputs?.warnings) ? job.outputs.warnings.filter(Boolean) : [];
-  const version = (job.workflow_type === 'rewrite' || job.workflow_type === 'article_v2') ? 'V2' : 'V1';
+  const version = getArticleWorkflowLabel(job) ?? 'V1';
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center items-end sm:items-center p-0 sm:p-4">

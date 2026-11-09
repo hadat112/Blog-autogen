@@ -1,10 +1,12 @@
 import React from 'react';
+import { DeliveryRecovery } from './DeliveryRecovery';
 import { Clock, Loader2, Copy, ExternalLink, RotateCw, XCircle } from 'lucide-react';
 import { Job } from '../../../api/types';
 import { Card, CardHeader, CardContent } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { cn } from '../../../lib/utils';
 import { Link } from 'react-router-dom';
+import { getArticleWorkflowLabel } from '../../../utils/workflowVersion';
 
 interface JobExtended extends Job {
   pipeline_name?: string;
@@ -106,7 +108,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
                 {job.status.replace('_', ' ')}
               </span>
               <span className="text-[10px] text-content-tertiary font-mono">#{job.id.slice(0, 8)}</span>
-              <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-content-secondary">{job.workflow_type === 'legacy' || job.workflow_type === 'article_v1' || !job.workflow_type ? 'V1' : job.workflow_type === 'rewrite' || job.workflow_type === 'article_v2' ? 'V2' : job.workflow_type.replaceAll('_', ' ')}</span>
+              <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-content-secondary">{getArticleWorkflowLabel(job) ?? job.workflow_type?.replaceAll('_', ' ')}</span>
             </div>
             <h4 className="font-bold text-content-primary truncate mt-1 text-sm">{job.pipeline_name || 'Pipeline Run'}</h4>
           </div>
@@ -201,11 +203,14 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
           </div>
         )}
 
-        {isFailed && canRerun && (
+        {(isFailed || isCancelled) && Array.isArray(job.outputs?.uncertain_deliveries) && job.outputs.uncertain_deliveries.length > 0 && (
+          <DeliveryRecovery jobId={job.id} channels={job.outputs.uncertain_deliveries as string[]} />
+        )}
+        {(isFailed || isCancelled) && canRerun && (
           <div className="flex items-center justify-between gap-3 pt-1">
             {hasBeenRerun ? (
               <span className="text-[10px] font-bold uppercase tracking-wider text-content-tertiary">
-                {job.rerun_job_id ? `Rerun queued #${job.rerun_job_id.slice(0, 8)}` : 'Rerun queued'}
+                {job.rerun_job_id ? `Resume queued #${job.rerun_job_id.slice(0, 8)}` : 'Resume queued'}
               </span>
             ) : (
               <span className="text-[10px] text-content-tertiary">
@@ -221,7 +226,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onRerun, isRerunning = 
               className="h-8 px-3 shrink-0"
             >
               <RotateCw size={13} className={cn("mr-1.5", isRerunning && "animate-spin")} />
-              <span className="text-xs font-bold">{hasBeenRerun ? 'Queued' : isRerunning ? 'Running' : 'Rerun'}</span>
+              <span className="text-xs font-bold">{hasBeenRerun ? 'Queued' : isRerunning ? 'Running' : 'Resume'}</span>
             </Button>
           </div>
         )}

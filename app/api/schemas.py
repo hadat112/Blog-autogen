@@ -35,7 +35,7 @@ class AppSettings(BaseModel):
     translation_mode: str = Field(default="sequential")
     translation_max_concurrency: int = Field(default=2, ge=1, le=8)
     ai_request_timeout: int = Field(default=300, ge=30, le=900)
-    translation_chunk_size: int = Field(default=6000, ge=1000, le=30000)
+    translation_chunk_size: int = Field(default=50000, ge=1000, le=50000)
     auto_collect_patterns: bool = True
     default_ai_enrichment: bool = False
     enrichment_ai_account_id: str = ""

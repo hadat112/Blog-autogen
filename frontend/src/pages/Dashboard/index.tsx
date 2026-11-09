@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cancelJob, getJobs, runPipeline } from '../../api/client';
 import { startArticleWorkflow, startRewrite, retryArticleWorkflow } from '../../api/workflows';
-import QuickRun from './components/QuickRun';
+import { RunWorkflow } from './components/RunWorkflow';
 import JobCard from './components/JobCard';
 import JobDetailsModal from './components/JobDetailsModal';
 import DashboardSkeleton from './components/DashboardSkeleton';
@@ -28,6 +28,7 @@ const getJobInput = (job: Job) => {
 };
 
 const Dashboard = () => {
+  const queryClient = useQueryClient();
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [rerunningJobId, setRerunningJobId] = useState<string | null>(null);
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
@@ -114,9 +115,12 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-8">
-      <QuickRun onRunStarted={() => refetch()} />
+      <RunWorkflow onRunStarted={() => {
+        setActivePage(1); setHistoryPage(1); setWorkflowFilter('all'); setStatusFilter('all');
+        queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      }} />
 
-      <div className="flex flex-col justify-end gap-3 sm:flex-row"><label className="w-full max-w-xs text-sm font-medium text-content-secondary">Workflow filter<Select className="mt-1" value={workflowFilter} onChange={event => { setWorkflowFilter(event.target.value); setActivePage(1); setHistoryPage(1); }}><option value="all">All workflows</option><option value="legacy">V1</option><option value="rewrite">V2</option><option value="generate_story">Generate Story</option><option value="pattern_analysis">Pattern Analysis</option><option value="wp_publish">WordPress Publisher</option></Select></label><label className="w-full max-w-xs text-sm font-medium text-content-secondary">Status filter<Select className="mt-1" value={statusFilter} onChange={event => { setStatusFilter(event.target.value); setActivePage(1); setHistoryPage(1); }}><option value="all">All statuses</option><option value="success">Success</option><option value="failed">Error</option><option value="cancelled">Cancelled</option></Select></label></div>
+      <div className="flex flex-col justify-end gap-3 sm:flex-row"><label className="w-full max-w-xs text-sm font-medium text-content-secondary">Workflow filter<Select className="mt-1" value={workflowFilter} onChange={event => { setWorkflowFilter(event.target.value); setActivePage(1); setHistoryPage(1); }}><option value="all">All workflows</option><option value="legacy">V1</option><option value="article_v3">V2</option><option value="rewrite">V3</option><option value="generate_story">Generate Story</option><option value="pattern_analysis">Pattern Analysis</option><option value="wp_publish">WordPress Publisher</option></Select></label><label className="w-full max-w-xs text-sm font-medium text-content-secondary">Status filter<Select className="mt-1" value={statusFilter} onChange={event => { setStatusFilter(event.target.value); setActivePage(1); setHistoryPage(1); }}><option value="all">All statuses</option><option value="success">Success</option><option value="failed">Error</option><option value="cancelled">Cancelled</option></Select></label></div>
 
       <div className="space-y-4">
         <h3 className="text-xl font-bold text-content-primary flex items-center space-x-2">

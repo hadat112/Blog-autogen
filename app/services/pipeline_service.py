@@ -116,6 +116,20 @@ class PipelineService:
             if not prompt:
                 raise ValueError("Rerun input was not found")
 
+        if isinstance(prompt, str) and prompt.startswith(("http://", "https://")) and (pipeline.step_accounts or {}).get("wp"):
+            # URL pipelines use the same recoverable article executor as the current UI.
+            from app.api.routes.article_workflows import run_article_workflow
+            from app.api.workflow_schemas import ArticleWorkflowRunInput
+            from fastapi import HTTPException
+            try:
+                result = await run_article_workflow(ArticleWorkflowRunInput(
+                    pipeline_id=pipeline_id, source_url=prompt, mode="v1",
+                    rerun_from_job_id=rerun_from_job_id,
+                ), self.db)
+            except HTTPException as exc:
+                raise ValueError(str(exc.detail)) from exc
+            return result["job_id"]
+
         job_id = await job_runner.start_pipeline_run(
             pipeline_id=pipeline_id,
             db=self.db,

@@ -4,52 +4,65 @@ import { mockCommon } from './helpers/mockApi';
 const failedJob = {
   id: 'manual-job', pipeline_id: 'pipeline-generate', pipeline_name: 'Generate pipeline',
   workflow_type: 'article_v1', input_text: null, input_type: 'prompt', status: 'failed',
-  current_step: 'Failed', progress: 90, logs: [], outputs: {},
+  current_step: 'Failed', progress: 90, logs: [], outputs: { source_kind: 'manual' } as Record<string, string>,
   start_time: '2026-11-09T08:00:00Z',
   capabilities: { can_rerun: true, can_cancel: false, can_open_draft: true, can_copy_link: false },
 };
 
 async function setup(page: import('@playwright/test').Page) {
   await mockCommon(page);
+  const state = { jobs: [] as Array<typeof failedJob> };
+  await page.route('**/jobs?**', route => {
+    const params = new URL(route.request().url()).searchParams;
+    const active = params.get('status_group') === 'active';
+    const items = state.jobs.filter(job => ['queued', 'running'].includes(job.status) === active);
+    return route.fulfill({ json: { items, total: items.length, page: 1, page_size: 9, total_pages: items.length ? 1 : 0 } });
+  });
   await page.route('**/settings', route => route.fulfill({ json: { default_ai_enrichment: false } }));
   await page.route('**/jobs/manual-job', route => route.fulfill({ json: failedJob }));
+  return state;
 }
 
 async function openPipeline(page: import('@playwright/test').Page) {
-  await page.goto('/#/wordpress-publisher');
-  await page.getByRole('tab', { name: 'Pipeline workflow', exact: true }).click();
-  await expect(page.getByLabel('Select Pipeline', { exact: true })).toHaveValue('pipeline-generate');
+  await page.goto('/#/dashboard');
+  await page.getByRole('button', { name: 'V2', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'V2 manual input' }).getByLabel('Select Pipeline', { exact: true })).toHaveValue('pipeline-generate');
 }
 
-test('switching modes preserves both input forms without submitting', async ({ page }) => {
+test('Dashboard V2 shares task lists and replaces the separate screen', async ({ page }) => {
   await setup(page);
   await openPipeline(page);
-  await page.getByLabel('Source title', { exact: true }).fill('Original title');
-  await page.getByLabel('Source content', { exact: true }).fill('Paragraph one.\n\nParagraph two.');
-  await page.getByRole('tab', { name: 'Direct publishing', exact: true }).click();
-  await expect(page.getByLabel('WordPress account')).toBeVisible();
-  await page.getByRole('tab', { name: 'Pipeline workflow', exact: true }).click();
-  await expect(page.getByLabel('Source title', { exact: true })).toHaveValue('Original title');
-  await expect(page.getByLabel('Source content', { exact: true })).toHaveValue('Paragraph one.\n\nParagraph two.');
-  await expect(page.getByRole('button', { name: /Proxy/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'V2', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('group', { name: 'Workflow version' }).getByRole('button')).toHaveText(['V1', 'V2', 'V3']);
+  await expect(page.getByRole('heading', { name: 'Active Tasks', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Recent Activity', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Pipeline Workflow', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Latest workflow', exact: true })).toHaveCount(0);
+  await page.getByLabel('Source content', { exact: true }).fill('Keep this content');
+  await page.getByRole('button', { name: 'V1', exact: true }).click();
+  await expect(page.getByPlaceholder('Paste an article URL (https://...)...')).toBeVisible();
+  await page.getByRole('button', { name: 'V2', exact: true }).click();
+  await expect(page.getByLabel('Source content', { exact: true })).toHaveValue('Keep this content');
 });
 
-test('manual pipeline posts multipart and resumes the saved job without a URL', async ({ page }) => {
-  await setup(page);
+test('manual pipeline posts multipart and resumes through shared recent activity', async ({ page }) => {
+  const state = await setup(page);
   let body = '';
   await page.route('**/article-workflows/run-text', async route => {
     expect(route.request().headers()['content-type']).toContain('multipart/form-data');
     body = route.request().postData() ?? '';
+    state.jobs = [failedJob];
     await route.fulfill({ json: { job_id: 'manual-job', draft_id: 'draft-manual', status: 'queued' } });
   });
   let retried = false;
   await page.route('**/article-workflows/manual-job/retry', route => {
     retried = true;
+    state.jobs = [{ ...failedJob, id: 'manual-job-2', status: 'success', progress: 100, outputs: { source_kind: 'manual', wp_url: 'https://wp.test/story' } }];
     return route.fulfill({ json: { job_id: 'manual-job-2', draft_id: 'draft-manual', status: 'queued' } });
   });
   await page.route('**/jobs/manual-job-2', route => route.fulfill({ json: { ...failedJob, id: 'manual-job-2', status: 'success', progress: 100, outputs: { wp_url: 'https://wp.test/story' } } }));
   await openPipeline(page);
-  await page.getByRole('button', { name: 'V2', exact: true }).click();
+  await page.getByLabel('Processing mode', { exact: true }).selectOption('v2');
   await page.getByLabel('Source title', { exact: true }).fill('Original title');
   await page.getByLabel('Source content', { exact: true }).fill('Paragraph one.\n\nParagraph two.');
   await page.getByRole('button', { name: 'Run workflow', exact: true }).click();
@@ -62,7 +75,6 @@ test('manual pipeline posts multipart and resumes the saved job without a URL', 
   await expect(page.getByTitle('Open WordPress link')).toBeVisible();
   expect(retried).toBe(true);
   await page.reload();
-  await page.getByRole('tab', { name: 'Pipeline workflow', exact: true }).click();
   await expect(page.getByTitle('Open WordPress link')).toBeVisible();
 });
 
@@ -110,8 +122,8 @@ test('manual input fits mobile viewport', async ({ page }) => {
   await page.screenshot({ path: '/tmp/story-publisher-pipeline-mobile.png', fullPage: true });
 });
 
-test('image upload and pending request survive switching modes', async ({ page }) => {
-  await setup(page);
+test('pending V2 upload and input survive switching versions', async ({ page }) => {
+  const state = await setup(page);
   let submitted = 0;
   let release: () => void = () => {};
   const pending = new Promise<void>(resolve => { release = resolve; });
@@ -121,6 +133,7 @@ test('image upload and pending request survive switching modes', async ({ page }
     expect(body).toContain('filename="photo.jpg"');
     expect(body).not.toContain('name="image_url"');
     await pending;
+    state.jobs = [failedJob];
     await route.fulfill({ json: { job_id: 'manual-job', draft_id: 'draft', status: 'queued' } });
   });
   await openPipeline(page);
@@ -129,8 +142,9 @@ test('image upload and pending request survive switching modes', async ({ page }
   await page.getByLabel('Source image upload').setInputFiles({ name: 'photo.jpg', mimeType: 'image/jpeg', buffer: Buffer.from([255, 216, 255, 1]) });
   await page.getByRole('button', { name: 'Run workflow', exact: true }).click();
   await expect.poll(() => submitted).toBe(1);
-  await page.getByRole('tab', { name: 'Direct publishing', exact: true }).click();
-  await page.getByRole('tab', { name: 'Pipeline workflow', exact: true }).click();
+  await page.getByRole('button', { name: 'V1', exact: true }).click();
+  await expect(page.getByPlaceholder('Paste an article URL (https://...)...')).toBeVisible();
+  await page.getByRole('button', { name: 'V2', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Starting…', exact: true })).toBeDisabled();
   await expect(page.getByLabel('Source content', { exact: true })).toHaveValue('Body');
   release();
@@ -138,17 +152,48 @@ test('image upload and pending request survive switching modes', async ({ page }
   expect(submitted).toBe(1);
 });
 
-test('version preference is shared with Dashboard and missing pipelines disable run', async ({ page }) => {
+test('V2 selection and processing mode persist and missing pipelines disable run', async ({ page }) => {
   await setup(page);
   await openPipeline(page);
+  await page.getByLabel('Processing mode', { exact: true }).selectOption('v2');
+  await page.getByRole('button', { name: 'V3', exact: true }).click();
+  await expect(page.getByPlaceholder('Paste an article URL (https://...)...')).toBeVisible();
   await page.getByRole('button', { name: 'V2', exact: true }).click();
-  await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'V2', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await page.route('**/pipelines?**', route => route.fulfill({ json: [] }));
-  await page.goto('/#/wordpress-publisher');
+  await expect(page.getByLabel('Processing mode', { exact: true })).toHaveValue('v2');
   await page.reload();
-  await page.getByRole('tab', { name: 'Pipeline workflow', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'V2', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Processing mode', { exact: true })).toHaveValue('v2');
+  await page.route('**/pipelines?**', route => route.fulfill({ json: [] }));
+  await page.reload();
   await page.getByLabel('Source title', { exact: true }).fill('Title');
   await page.getByLabel('Source content', { exact: true }).fill('Body');
   await expect(page.getByRole('button', { name: 'Run workflow', exact: true })).toBeDisabled();
+});
+
+test('V2 job moves from shared Active Tasks to Recent Activity', async ({ page }) => {
+  const state = await setup(page);
+  await page.route('**/article-workflows/run-text', route => {
+    state.jobs = [{ ...failedJob, status: 'queued', progress: 0 }];
+    return route.fulfill({ json: { job_id: 'manual-job', draft_id: 'draft', status: 'queued' } });
+  });
+  await openPipeline(page);
+  await page.getByLabel('Source title', { exact: true }).fill('Title');
+  await page.getByLabel('Source content', { exact: true }).fill('Body');
+  await page.getByRole('button', { name: 'Run workflow', exact: true }).click();
+  const active = page.getByRole('heading', { name: 'Active Tasks', exact: true }).locator('..');
+  const recent = page.getByRole('heading', { name: 'Recent Activity', exact: true }).locator('..');
+  await expect(active.getByRole('heading', { name: 'Generate pipeline', exact: true })).toBeVisible();
+  await expect(active.getByText('V2', { exact: true })).toBeVisible();
+  state.jobs = [{ ...failedJob, status: 'success', progress: 100 }];
+  await expect(recent.getByRole('heading', { name: 'Generate pipeline', exact: true })).toBeVisible();
+  await expect(active.getByRole('heading', { name: 'Generate pipeline', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Latest workflow', exact: true })).toHaveCount(0);
+});
+
+test('old pipeline page opens Dashboard V2', async ({ page }) => {
+  await setup(page);
+  await page.goto('/#/pipeline-workflow');
+  await expect(page).toHaveURL(/dashboard/);
+  await expect(page.getByRole('button', { name: 'V2', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Source content', { exact: true })).toBeVisible();
 });

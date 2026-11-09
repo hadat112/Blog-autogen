@@ -17,7 +17,7 @@ type ProgressTimelineProps = {
   cancelledStep?: string;
   steps?: ProgressTimelineStep[];
   logs?: WorkflowLog[];
-  version?: 'V1' | 'V2';
+  version?: 'V1' | 'V2' | 'V3';
 };
 
 export type WorkflowLog = {
@@ -89,7 +89,7 @@ function formatLogDuration(logs: WorkflowLog[]) {
   return '';
 }
 
-function ExecutionLogTimeline({ logs, version, status }: { logs: WorkflowLog[]; version?: 'V1' | 'V2'; status: string }) {
+function ExecutionLogTimeline({ logs, version, status }: { logs: WorkflowLog[]; version?: 'V1' | 'V2' | 'V3'; status: string }) {
   const groups = useMemo(() => {
     const result: Array<{ name: string; logs: WorkflowLog[]; children: WorkflowLog[] }> = [];
     logs.forEach(log => {

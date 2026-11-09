@@ -1,11 +1,15 @@
+from app.domain.translation_settings import normalize_account_character_limit
 import requests
 from requests.auth import HTTPBasicAuth
 from sqlalchemy.orm import Session
 
 from app.db import models
+from app.integrations.ai.quota import normalize_concurrency, quota_identity
+from app.integrations.ai.scheduler import ai_request_scheduler
 
 
 SUPPORTED_ACCOUNT_TYPES = {"wp", "fb", "ai", "tg"}
+DEFAULT_AI_BASE_URL = "http://localhost:20128/v1"
 
 
 class AccountService:
@@ -25,6 +29,9 @@ class AccountService:
     def create_account(self, account_data):
         if account_data.type not in SUPPORTED_ACCOUNT_TYPES:
             raise ValueError(f"Unsupported account type: {account_data.type}")
+        if account_data.type == "ai":
+            account_data.config = normalize_account_character_limit(account_data.config)
+            account_data.config["max_concurrency"] = normalize_concurrency(account_data.config.get("max_concurrency"))
         account = models.Account(
             name=account_data.name,
             type=account_data.type,
@@ -33,6 +40,10 @@ class AccountService:
         self.db.add(account)
         self.db.commit()
         self.db.refresh(account)
+        if account.type == "ai":
+            ai_request_scheduler.register(quota_identity(account.config.get("base_url") or DEFAULT_AI_BASE_URL, account.config.get("api_key")), account.id, account.config.get("max_concurrency", 2))
+        else:
+            ai_request_scheduler.unregister(account.id)
         return account
 
     def update_account(self, account_id: str, account_data):
@@ -44,9 +55,16 @@ class AccountService:
 
         account.name = account_data.name
         account.type = account_data.type
+        if account_data.type == "ai":
+            account_data.config = normalize_account_character_limit(account_data.config)
+            account_data.config["max_concurrency"] = normalize_concurrency(account_data.config.get("max_concurrency"))
         account.config = account_data.config
         self.db.commit()
         self.db.refresh(account)
+        if account.type == "ai":
+            ai_request_scheduler.register(quota_identity(account.config.get("base_url") or DEFAULT_AI_BASE_URL, account.config.get("api_key")), account.id, account.config.get("max_concurrency", 2))
+        else:
+            ai_request_scheduler.unregister(account.id)
         return account
 
     def delete_account(self, account_id: str) -> bool:
@@ -69,6 +87,7 @@ class AccountService:
             if active_draft:
                 raise ValueError("WordPress account is used by an unpublished draft")
 
+        ai_request_scheduler.unregister(account.id)
         self.db.delete(account)
         self.db.commit()
         return True
@@ -128,16 +147,20 @@ def perform_connection_test(account_type: str, config: dict):
 
 
 def fetch_ai_models(config: dict):
-    base_url = (config.get("base_url") or "").rstrip("/")
-    if not base_url:
-        raise ValueError("Base URL is required")
+    base_url = (config.get("base_url") or DEFAULT_AI_BASE_URL).rstrip("/")
 
     headers = {"ngrok-skip-browser-warning": "true"}
     api_key = config.get("api_key")
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
-    resp = requests.get(f"{base_url}/models", headers=headers, timeout=15)
+    for attempt in range(2):
+        try:
+            resp = requests.get(f"{base_url}/models", headers=headers, timeout=15)
+            break
+        except (requests.Timeout, requests.ConnectionError):
+            if attempt:
+                raise
     resp.raise_for_status()
     payload = resp.json()
     models = payload.get("data")

@@ -72,7 +72,7 @@ const Settings = () => {
     translation_mode: 'sequential',
     translation_max_concurrency: 2,
     ai_request_timeout: 300,
-    translation_chunk_size: 6000,
+    translation_chunk_size: 50000,
     auto_collect_patterns: true,
     default_ai_enrichment: false,
     enrichment_ai_account_id: '',
@@ -365,7 +365,7 @@ const Settings = () => {
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-content-primary">
-                      Max Concurrency
+                      Parallel chunks per article
                     </label>
                     <Input
                       type="number"
@@ -381,7 +381,7 @@ const Settings = () => {
                       }
                     />
                     <p className="text-xs leading-5 text-content-secondary">
-                      Parallel uses previous source text as context and preserves chunk order.
+                      Parallel preserves chunk order. Total AI requests are limited by each account’s concurrency setting.
                     </p>
                     <div className="flex flex-wrap gap-2 pt-1">
                       {concurrencyPresets.map((preset) => (
@@ -435,7 +435,7 @@ const Settings = () => {
                     <Input
                       type="number"
                       min={1000}
-                      max={30000}
+                      max={50000}
                       step={500}
                       value={settingsForm.translation_chunk_size}
                       onChange={(event) =>
@@ -446,7 +446,7 @@ const Settings = () => {
                       }
                     />
                     <p className="text-xs leading-5 text-content-secondary">
-                      Maximum characters sent in each translated article chunk.
+                      Maximum source characters per chunk (up to 50,000). Longer articles are split without losing content.
                     </p>
                   </div>
                 </div>

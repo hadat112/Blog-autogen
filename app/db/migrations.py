@@ -22,6 +22,7 @@ MIGRATIONS = (
     (9, "archive fetched article source data"),
     (10, "add article enrichment records"),
     (11, "add text story composition records"),
+    (12, "add durable article workflow recovery"),
 )
 
 
@@ -207,6 +208,15 @@ def _migration_11(connection):
     ))
 
 
+def _migration_12(connection):
+    connection.execute(text(
+        "CREATE TABLE IF NOT EXISTS workflow_recoveries ("
+        "draft_id VARCHAR PRIMARY KEY REFERENCES content_drafts(id), active_job_id VARCHAR NOT NULL, "
+        "manifest JSON NOT NULL DEFAULT '{}', artifacts JSON NOT NULL DEFAULT '{}', "
+        "revision INTEGER NOT NULL DEFAULT 0, updated_at DATETIME NOT NULL)"
+    ))
+
+
 MIGRATION_FUNCTIONS = {
     1: _migration_1,
     2: _migration_2,
@@ -219,6 +229,7 @@ MIGRATION_FUNCTIONS = {
     9: _migration_9,
     10: _migration_10,
     11: _migration_11,
+    12: _migration_12,
 }
 
 

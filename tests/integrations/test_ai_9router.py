@@ -478,7 +478,7 @@ def test_translation_prompt_preserves_custom_language_text():
 
 @responses.activate
 def test_translate_article_fields_uses_previous_translation_for_later_chunks():
-    ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1")
+    ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1", translation_chunk_size=6000)
     responses.add(
         responses.POST,
         "https://api.9router.ai/v1/chat/completions",
@@ -526,7 +526,7 @@ def test_translate_article_fields_uses_previous_translation_for_later_chunks():
 
 @responses.activate
 def test_translate_text_with_source_context_writes_prompt_clearly():
-    ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1")
+    ai = NineRouterAI("test_key", "gpt-4o", "dall-e-3", base_url="https://api.9router.ai/v1", translation_chunk_size=6000)
     responses.add(
         responses.POST,
         "https://api.9router.ai/v1/chat/completions",
@@ -556,6 +556,7 @@ def test_parallel_translation_preserves_chunk_order_and_uses_source_context(monk
         "dall-e-3",
         translation_mode="parallel",
         translation_max_concurrency=2,
+        translation_chunk_size=6000,
     )
     calls = []
 

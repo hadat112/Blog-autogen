@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, GitBranch, Settings, X, Zap, ChevronLeft, ChevronRight, Sparkles, LibraryBig, Send } from 'lucide-react';
+import { LayoutDashboard, Users, GitBranch, Settings, X, Zap, ChevronLeft, ChevronRight, Sparkles, LibraryBig, Send, Timer } from 'lucide-react';
 import { version } from '../../package.json';
 
 interface SidebarProps {
@@ -18,6 +18,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, isCollapsed = fals
     { label: 'Content workflows', items: [
       { id: 'generate-story', path: '/generate-story', label: 'Generate Story', icon: <Sparkles size={20} /> },
       { id: 'text-story', path: '/text-story', label: 'Text Story', icon: <Sparkles size={20} /> },
+      { id: 'model-benchmark', path: '/model-benchmark', label: 'Model Benchmark', icon: <Timer size={20} /> },
       { id: 'wordpress-publisher', path: '/wordpress-publisher', label: 'WP Publisher', icon: <Send size={20} /> },
       { id: 'pattern-library', path: '/pattern-library', label: 'Pattern Library', icon: <LibraryBig size={20} /> },
     ] },

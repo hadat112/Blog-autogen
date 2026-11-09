@@ -68,13 +68,22 @@ class RewriteEngine:
     def __init__(self, ai_client, chunk_size=6000):
         self.ai = ai_client
         self.chunk_size = chunk_size
+        self.recovery = None
 
     def rewrite(self, title, content, language, progress=None):
-        chunks = _split_text_chunks(content, max_chars=self.chunk_size)
+        chunks = self.recovery.get("rewrite:chunks") if self.recovery else None
+        if chunks is None:
+            chunks = _split_text_chunks(content, max_chars=self.chunk_size)
+            if self.recovery:
+                self.recovery.save("rewrite:chunks", chunks)
         if not chunks:
             raise ValueError("Source article has no content")
         translate_title = getattr(self.ai, "translate_title", None)
-        translated_title = translate_title(title, language) if callable(translate_title) else None
+        translated_title = self.recovery.get("title") if self.recovery else None
+        if translated_title is None:
+            translated_title = translate_title(title, language) if callable(translate_title) else None
+            if self.recovery and isinstance(translated_title, str):
+                self.recovery.save("title", translated_title)
         system = REWRITE_SYSTEM_PROMPT.format(language=language)
         turns = []
         for index, chunk in enumerate(chunks, start=1):
@@ -91,11 +100,15 @@ class RewriteEngine:
                     f"{chunk}\n</source_chunk>"
                 ),
             })
-            message = self.ai.chat(messages, temperature=0.7)
-            value = (message.get("content") or "").strip()
+            value = self.recovery.get(f"rewrite:chunk:{index}") if self.recovery else None
+            if value is None:
+                message = self.ai.chat(messages, temperature=0.7)
+                value = (message.get("content") or "").strip()
             if not value:
                 raise ValueError(f"AI returned an empty rewrite for chunk {index}")
             value = normalize_target_quotes(value, language)
+            if self.recovery:
+                self.recovery.save(f"rewrite:chunk:{index}", value)
             turns.append((chunk, value))
             if progress:
                 progress(index, len(chunks), "rewriting", {
@@ -116,7 +129,9 @@ class RewriteEngine:
                 f"Original reference title: {title}"
             ),
         })
-        metadata = parse_json_object(self.ai.chat(final_messages, temperature=0.5).get("content"))
+        metadata = self.recovery.get("rewrite:metadata") if self.recovery else None
+        if metadata is None:
+            metadata = parse_json_object(self.ai.chat(final_messages, temperature=0.5).get("content"))
         new_title = str(metadata.get("title") or "").strip()
         final_title = translated_title or new_title
         caption = str(metadata.get("caption") or "").strip()
@@ -125,6 +140,8 @@ class RewriteEngine:
             raise ValueError("AI returned an empty translated title")
         if not caption:
             raise ValueError("AI returned an empty rewritten caption")
+        if self.recovery:
+            self.recovery.save("rewrite:metadata", metadata)
         caption_match = caption_matches_prefix(story, caption)
         original_words = max(1, len((content or "").split()))
         ratio = len(story.split()) / original_words

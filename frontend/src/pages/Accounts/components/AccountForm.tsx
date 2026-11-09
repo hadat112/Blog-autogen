@@ -83,7 +83,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
     }
   };
 
-  const handleConfigChange = (key: keyof AccountConfig, value: string) => {
+  const handleConfigChange = (key: keyof AccountConfig, value: string | number) => {
     setFormData({
       ...formData,
       config: {
@@ -253,6 +253,22 @@ const AccountForm: React.FC<AccountFormProps> = ({
                 </p>
               )}
             </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Maximum concurrent AI requests</label>
+              <input aria-label="Maximum concurrent AI requests" type="number" min={1} max={8}
+                className="w-full rounded-md border p-2"
+                value={formData.config?.max_concurrency ?? 2}
+                onChange={(e) => handleConfigChange("max_concurrency", Number(e.target.value))} />
+              <p className="mt-1 text-xs">Shared by all pipelines using this account. Default: 2.</p>
+            </div>
+            <div>
+              <label htmlFor="ai-request-characters" className="mb-1 block text-sm font-medium">Maximum source characters per request</label>
+              <Input id="ai-request-characters" type="number" min={1000} max={50000} step={1}
+                placeholder="Use global setting"
+                value={formData.config?.translation_chunk_size ?? ""}
+                onChange={(event) => handleConfigChange("translation_chunk_size", event.target.value === "" ? "" : Number(event.target.value))} />
+              <p className="mt-1 text-xs text-content-secondary">Optional: 1,000–50,000 source characters. Leave blank to use Settings. Existing retries keep their saved chunk size.</p>
+            </div>
             {renderModelField("Text Model", "text_model", "gpt-4o")}
             {renderModelField("Fallback Text Model", "fallback_text_model", "", false)}
             {renderModelField("Image Model", "image_model", "dall-e-3")}
@@ -327,8 +343,8 @@ const AccountForm: React.FC<AccountFormProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-md overflow-hidden shadow-xl border-none">
-        <CardHeader className="flex flex-row justify-between items-center border-b border-border-subtle p-6">
+      <Card className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden shadow-xl border-none">
+        <CardHeader className="flex shrink-0 flex-row justify-between items-center border-b border-border-subtle p-6">
           <CardTitle className="text-xl">
             {account ? "Edit Account" : "Add New Account"}
           </CardTitle>
@@ -342,8 +358,8 @@ const AccountForm: React.FC<AccountFormProps> = ({
           </Button>
         </CardHeader>
 
-        <form onSubmit={handleSubmit}>
-          <CardContent className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-6">
             <div className="space-y-1">
               <label className="text-sm font-medium text-content-primary">
                 Account Name
@@ -387,7 +403,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
             </div>
           </CardContent>
 
-          <CardFooter className="p-6 border-t border-border-subtle flex flex-col space-y-3">
+          <CardFooter className="shrink-0 p-6 border-t border-border-subtle flex flex-col space-y-3">
             {testResult && (
               <div
                 className={`w-full p-3 rounded-lg text-sm flex items-start space-x-2 ${
@@ -405,7 +421,7 @@ const AccountForm: React.FC<AccountFormProps> = ({
               </div>
             )}
 
-            <div className="flex justify-between items-center w-full pt-2">
+            <div className="flex flex-wrap justify-between items-center gap-3 w-full pt-2">
               <Button
                 type="button"
                 variant="ghost"

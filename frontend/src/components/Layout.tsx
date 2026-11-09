@@ -18,7 +18,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const titleByPath: Record<string, string> = {
     dashboard: 'Dashboard', accounts: 'Accounts', pipelines: 'Pipelines', settings: 'Settings',
     rewrite: 'Rewrite Article', 'generate-story': 'Generate Story', 'text-story': 'Text Story', 'pattern-library': 'Pattern Library',
-    'wordpress-publisher': 'WordPress Publisher',
+    'wordpress-publisher': 'WordPress Publisher', 'model-benchmark': 'Model Benchmark',
   };
   const pathKey = location.pathname.substring(1) || 'dashboard';
   const activeTab = titleByPath[pathKey] || pathKey;
@@ -51,7 +51,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   return (
-    <div className="flex h-screen bg-canvas overflow-hidden relative">
+    <div className="relative flex h-screen h-dvh overflow-hidden bg-canvas">
       <Sidebar
         isOpen={isSidebarOpen}
         setIsOpen={setIsSidebarOpen}
@@ -59,7 +59,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         toggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
 
-      <div className="flex-1 flex flex-col overflow-hidden w-full transition-all duration-150">
+      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden transition-all duration-150">
         <header className="h-16 bg-surface border-b border-border-default flex items-center justify-between px-4 md:px-8 shadow-sm z-10 shrink-0">
           <div className="flex items-center space-x-4">
             <button
@@ -92,7 +92,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+        <main className="min-h-0 flex-1 overflow-y-auto p-4 pb-8 md:p-8">
           <div className="max-w-7xl mx-auto w-full">
             {children}
           </div>
