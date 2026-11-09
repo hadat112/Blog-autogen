@@ -19,7 +19,7 @@ class FacebookPagePublisher:
             body = {}
 
         if resp.status_code >= 400:
-            raise Exception(f"Facebook API error {resp.status_code}: {resp.text[:300]}")
+            raise requests.HTTPError(f"Facebook API error {resp.status_code}: {resp.text[:300]}", response=resp)
         return body
 
     def publish_photo_caption(self, caption: str, image_url: str) -> str:

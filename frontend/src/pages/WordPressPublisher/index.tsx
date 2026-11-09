@@ -11,9 +11,12 @@ import { InlineStatus } from '../../components/ui/InlineStatus';
 import { DraftEditor } from '../../features/workflows/DraftEditor';
 import { DraftHistory } from '../../features/workflows/DraftHistory';
 import { Select } from '../../components/ui/Select';
+import { Tabs } from '../../components/ui/Tabs';
+import { PipelinePublisher } from './components/PipelinePublisher';
 
 export default function WordPressPublisher() {
   const queryClient = useQueryClient();
+  const [mode, setMode] = useState<'direct' | 'pipeline'>('direct');
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [active, setActive] = useState<ContentDraft | null>(null);
   const [error, setError] = useState('');
@@ -66,10 +69,13 @@ export default function WordPressPublisher() {
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">Focused publishing</p>
         <h1 className="mt-2 text-2xl font-bold">WordPress Publisher</h1>
         <p className="mt-1 text-sm text-content-secondary">
-          Write, preview, and publish to WordPress directly without managing pipelines.
+          Publish directly, or translate and publish through a Dashboard pipeline.
         </p>
       </header>
 
+      <Tabs value={mode} onChange={setMode} items={[{ value: 'direct', label: 'Direct publishing' }, { value: 'pipeline', label: 'Pipeline workflow' }]} />
+      <div role="tabpanel" aria-label="Pipeline workflow" hidden={mode !== 'pipeline'}><PipelinePublisher /></div>
+      <div role="tabpanel" aria-label="Direct publishing" hidden={mode !== 'direct'} className="space-y-6">
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(280px,0.75fr)_minmax(0,1.6fr)]">
         <Card className="lg:sticky lg:top-0">
           <CardHeader>
@@ -140,6 +146,7 @@ export default function WordPressPublisher() {
           onDelete={remove}
         />
       </section>
+      </div>
     </div>
   );
 }

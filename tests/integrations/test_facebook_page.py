@@ -77,3 +77,17 @@ def test_photo_file_uses_multipart_and_closes_handle(tmp_path, monkeypatch):
     monkeypatch.setattr(module.requests, 'post', post)
     assert FacebookPagePublisher('page', 'token').publish_photo_file('Caption', str(image)) == 'post-1'
     assert captured['files']['source'].closed
+
+
+def test_photo_file_rejection_exposes_http_status_for_safe_retry(tmp_path, monkeypatch):
+    import requests
+    import app.integrations.publishers.facebook_page as module
+    image = tmp_path / 'photo.jpg'
+    image.write_bytes(b'\xff\xd8\xffimage')
+    response = requests.Response()
+    response.status_code = 429
+    response._content = b'{"error":"limited"}'
+    monkeypatch.setattr(module.requests, 'post', lambda *a, **kw: response)
+    with pytest.raises(requests.HTTPError) as error:
+        FacebookPagePublisher('page', 'token').publish_photo_file('Caption', str(image))
+    assert error.value.response.status_code == 429

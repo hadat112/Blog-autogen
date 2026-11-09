@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import { cancelJob, getJobs, runPipeline } from '../../api/client';
-import { startArticleWorkflow, startRewrite } from '../../api/workflows';
+import { startArticleWorkflow, startRewrite, retryArticleWorkflow } from '../../api/workflows';
 import QuickRun from './components/QuickRun';
 import JobCard from './components/JobCard';
 import JobDetailsModal from './components/JobDetailsModal';
@@ -76,15 +76,15 @@ const Dashboard = () => {
 
   const rerunMutation = useMutation({
     mutationFn: (job: Job) => {
+      if (['article_v1', 'article_v2', 'article_workflow'].includes(job.workflow_type ?? '')) {
+        return retryArticleWorkflow(job.id);
+      }
       const prompt = getJobInput(job);
       if (!prompt) {
         throw new Error('Job input was not found in logs');
       }
-      if (job.workflow_type === 'article_v2' || job.workflow_type === 'rewrite') {
+      if (job.workflow_type === 'rewrite') {
         return startArticleWorkflow(job.pipeline_id, prompt, 'v2', isSourceProxyEnabled(), job.id);
-      }
-      if (job.workflow_type === 'article_v1') {
-        return startArticleWorkflow(job.pipeline_id, prompt, 'v1', isSourceProxyEnabled(), job.id);
       }
       return runPipeline(job.pipeline_id, { prompt, rerun_from_job_id: job.id });
     },

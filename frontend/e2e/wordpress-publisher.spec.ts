@@ -10,12 +10,12 @@ test('manual publisher writes, previews, and only shows copy link on success', a
   await page.goto('/#/wordpress-publisher');
   await page.getByLabel('WordPress account').selectOption('wp1');
   await page.getByRole('button', { name: 'New post draft' }).click();
-  await page.getByLabel('Title').fill('Manual title');
-  await page.getByLabel('Content').fill('<script>alert(1)</script><p>Safe copy</p>');
+  await page.getByLabel('Title', { exact: true }).fill('Manual title');
+  await page.getByRole('tabpanel', { name: 'Direct publishing' }).getByLabel('Content').fill('<script>alert(1)</script><p>Safe copy</p>');
   await page.getByLabel(/Featured image URL/).fill('https://images.test/story.jpg');
-  await expect(page.locator('input[type="file"]')).toBeDisabled();
+  await expect(page.getByRole('tabpanel', { name: 'Direct publishing' }).locator('input[type="file"]')).toBeDisabled();
   await page.getByLabel(/Featured image URL/).fill('');
-  await expect(page.locator('input[type="file"]')).toBeEnabled();
+  await expect(page.getByRole('tabpanel', { name: 'Direct publishing' }).locator('input[type="file"]')).toBeEnabled();
   await page.getByRole('tab', { name: 'HTML' }).click();
   await page.getByRole('tab', { name: 'Preview' }).click();
   await expect(page.getByText('Safe copy')).toBeVisible();

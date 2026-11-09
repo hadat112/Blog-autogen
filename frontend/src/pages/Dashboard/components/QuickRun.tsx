@@ -7,7 +7,7 @@ import { normalizeSourceUrl } from '../../../utils/sourceUrl';
 import { Card, CardHeader, CardTitle, CardContent } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
-import { Select } from '../../../components/ui/Select';
+import { ArticleWorkflowPipeline, ArticleWorkflowVersion, useArticleWorkflowVersion } from '../../../features/workflows/ArticleWorkflowOptions';
 
 interface QuickRunProps {
   onRunStarted?: (jobId: string) => void;
@@ -16,16 +16,10 @@ interface QuickRunProps {
 const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
   const [selectedPipeline, setSelectedPipeline] = useState('');
   const [input, setInput] = useState('');
-  const [version, setVersion] = useState<'v1' | 'v2'>(() => {
-    const saved = window.localStorage.getItem('story-autogen-workflow-version');
-    return saved === 'v2' ? 'v2' : 'v1';
-  });
+  const [version, setVersion] = useArticleWorkflowVersion();
   const [useProxy, setUseProxy] = useState(() => window.localStorage.getItem('story-autogen-source-proxy') === 'true');
   const [useEnrichment, setUseEnrichment] = useState(false);
 
-  useEffect(() => {
-    window.localStorage.setItem('story-autogen-workflow-version', version);
-  }, [version]);
   useEffect(() => {
     window.localStorage.setItem('story-autogen-source-proxy', String(useProxy));
   }, [useProxy]);
@@ -96,11 +90,6 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
     runMutation.mutate({ pipelineId: selectedPipeline, sourceUrl: normalizedSourceUrl, useProxy, useEnrichment });
   };
 
-  const handlePipelineChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedPipeline(e.target.value);
-    inputRef.current?.focus();
-  };
-
   const handleProxyToggle = () => {
     if (!proxyConfigured) {
       alert('No valid proxy is configured. Open Settings and configure a proxy first.');
@@ -119,19 +108,7 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
           <span>Run workflow</span>
         </CardTitle>
         <div className="flex shrink-0 items-center gap-2">
-          <div className="flex h-7 rounded-md border border-border-default bg-surface-subtle p-0.5" role="group" aria-label="Version">
-            {(['v1', 'v2'] as const).map(option => (
-              <button
-                key={option}
-                type="button"
-                aria-pressed={version === option}
-                onClick={() => setVersion(option)}
-                className={`min-w-10 rounded px-2 text-[10px] font-bold transition-colors ${version === option ? 'bg-surface text-accent shadow-sm' : 'text-content-tertiary hover:text-content-primary'}`}
-              >
-                {option.toUpperCase()}
-              </button>
-            ))}
-          </div>
+          <ArticleWorkflowVersion mode={version} onChange={setVersion} />
           <button
             type="button"
             role="switch"
@@ -156,18 +133,7 @@ const QuickRun: React.FC<QuickRunProps> = ({ onRunStarted }) => {
       <CardContent className="p-5">
         <form onSubmit={handleRun} className="flex flex-col md:flex-row gap-4 items-end">
           <div className="w-full space-y-1.5 md:w-52 md:flex-none">
-            <label className="text-[10px] font-bold text-content-tertiary uppercase tracking-widest ml-0.5">Select Pipeline</label>
-            <Select 
-              size="default"
-              className="bg-surface-subtle focus:bg-surface transition-colors border-border-default"
-              value={selectedPipeline}
-              onChange={handlePipelineChange}
-            >
-              {availablePipelines.map(p => (
-                <option key={p.id} value={p.id}>{p.name} ({p.language})</option>
-              ))}
-              {availablePipelines.length === 0 && <option value="">No AI + WP pipeline found</option>}
-            </Select>
+            <ArticleWorkflowPipeline pipelines={availablePipelines} value={selectedPipeline} onChange={value => { setSelectedPipeline(value); inputRef.current?.focus(); }} />
           </div>
           
           <div className="flex-[2] w-full space-y-1.5">
