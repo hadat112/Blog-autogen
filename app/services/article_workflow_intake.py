@@ -30,6 +30,8 @@ def build_article_manifest(db: Session, draft: models.ContentDraft, *, mode: str
 
 def create_manual_article_attempt(db: Session, *, pipeline_id: str, mode: str,
                                   title: str, content: str, image_kind=None, image_source=None):
+    # Browser multipart forms use CRLF; match the LF text produced by URL fetch.
+    content = content.replace('\r\n', '\n').replace('\r', '\n')
     if mode not in {'v1', 'v2'} or not title.strip() or not content.strip():
         raise ValueError('A title, content and valid V1/V2 mode are required')
     pipeline = db.get(models.Pipeline, pipeline_id)

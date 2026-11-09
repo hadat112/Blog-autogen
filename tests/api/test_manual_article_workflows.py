@@ -62,6 +62,36 @@ def test_manual_intake_is_durable_before_dispatch(manual_api, mode):
     start.assert_called_once()
 
 
+@pytest.mark.parametrize('newline', ['\n', '\r\n', '\r'])
+def test_manual_multipart_keeps_paragraphs_like_url_source(manual_api, newline):
+    from app.domain.translation_prompts import build_translation_messages
+    from app.integrations.ai.openai_compatible import _split_text_chunks
+    import hashlib
+    client, factory, start = manual_api
+    source = (
+        "The first person through the door was a tall man in a sheriff's uniform.\n\n"
+        'Behind him came a woman carrying a sleeping toddler.\n\n'
+        'Eleven people altogether.'
+    )
+    fields = payload(content=source.replace('\n', newline))
+    # Browser FormData serializes textarea newlines as CRLF. The previous
+    # urlencoded API tests did not exercise that boundary.
+    response = client.post('/article-workflows/run-text', files={
+        key: (None, value) for key, value in fields.items()
+    })
+    assert response.status_code == 200, response.text
+    with factory() as db:
+        recovery = db.get(models.WorkflowRecovery, response.json()['draft_id'])
+        saved = recovery.artifacts['source']['content']
+        assert saved == source
+        assert recovery.artifacts['source_hash'] == hashlib.sha256(source.encode()).hexdigest()
+        chunks = _split_text_chunks(saved, 50000)
+        assert chunks == [source]
+        _, prompt = build_translation_messages(chunks[0], 'Italian')
+        assert 'Source paragraph count: 3' in prompt
+    start.assert_called_once()
+
+
 @pytest.mark.parametrize('changes', [
     {'title': '   '}, {'content': '\n  '}, {'mode': 'v3'},
     {'pipeline_id': 'missing'}, {'image_url': 'file:///private/image'},
