@@ -8,10 +8,11 @@ class FacebookPagePublisher:
         self.graph_version = (graph_version or "v23.0").strip()
         self.base_url = f"https://graph.facebook.com/{self.graph_version}"
 
-    def _post(self, path: str, data: dict) -> dict:
+    def _post(self, path: str, data: dict, files=None) -> dict:
         url = f"{self.base_url}/{path.lstrip('/')}"
         payload = {**data, "access_token": self.access_token}
-        resp = requests.post(url, data=payload, timeout=30)
+        kwargs = {"files": files} if files is not None else {}
+        resp = requests.post(url, data=payload, timeout=30, **kwargs)
         try:
             body = resp.json()
         except Exception:
@@ -45,6 +46,16 @@ class FacebookPagePublisher:
         post_id = body.get("id")
         if not post_id:
             raise Exception(f"Facebook API error: missing post id in response {body}")
+        return post_id
+
+    def publish_photo_file(self, caption: str, image_path: str) -> str:
+        with open(image_path, 'rb') as source:
+            body = self._post(f'{self.page_id}/photos',
+                              {'caption': caption, 'published': 'true'},
+                              files={'source': source})
+        post_id = body.get('post_id') or body.get('id')
+        if not post_id:
+            raise ValueError('Facebook response is missing a post id')
         return post_id
 
     def comment_on_post(self, post_id: str, message: str) -> str:

@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import List, Optional, Union
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -11,7 +10,8 @@ from app.db.session import get_db
 from app.services.content_draft_service import ContentDraftService, DraftConflictError
 from app.services.workflow_job_service import WorkflowJobService
 from app.services.wordpress_publishing_service import WordPressPublishingService
-from app.integrations.wordpress.destination import ALLOWED_IMAGE_MIME, MAX_IMAGE_BYTES, AmbiguousWordPressResult, validate_image_signature
+from app.integrations.wordpress.destination import AmbiguousWordPressResult
+from app.services.draft_image_storage import store_draft_image
 from app.services.account_service import fetch_wp_categories
 
 
@@ -91,37 +91,20 @@ async def upload_draft_image(draft_id: str, image: UploadFile = File(...), db: S
     draft = ContentDraftService(db).get(draft_id)
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
-    if image.content_type not in ALLOWED_IMAGE_MIME:
-        raise HTTPException(status_code=400, detail="Image must be JPEG, PNG, WebP, or GIF")
-    suffix = {
-        "image/jpeg": ".jpg",
-        "image/png": ".png",
-        "image/webp": ".webp",
-        "image/gif": ".gif",
-    }[image.content_type]
-    upload_dir = Path("var/uploads")
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    target = upload_dir / f"{uuid4()}{suffix}"
-    size = 0
-    header = b""
     try:
-        with target.open("wb") as handle:
-            while chunk := await image.read(64 * 1024):
-                size += len(chunk)
-                if len(header) < 16:
-                    header = (header + chunk)[:16]
-                if size > MAX_IMAGE_BYTES:
-                    raise ValueError("Image exceeds the 10 MiB limit")
-                handle.write(chunk)
-        validate_image_signature(header, image.content_type)
-    except Exception as exc:
-        target.unlink(missing_ok=True)
+        target = await store_draft_image(image)
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     previous = draft.image_source if draft.image_kind == "upload" else None
     draft.image_kind = "upload"
     draft.image_source = str(target)
     draft.version += 1
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        Path(target).unlink(missing_ok=True)
+        raise
     db.refresh(draft)
     if previous:
         Path(previous).unlink(missing_ok=True)
