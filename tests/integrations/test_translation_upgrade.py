@@ -87,3 +87,64 @@ def test_long_translation_reserves_enough_completion_tokens():
         client._translate_text('a' * 40000, 'Italian')
         payload = json.loads(mocked.calls[0].request.body)
         assert payload['max_tokens'] >= 30000
+
+
+def test_cancelled_http_failure_is_not_retried(monkeypatch):
+    import threading
+    import requests
+    from app.integrations.ai.scheduler import AIRequestScheduler
+    cancelled = threading.Event()
+    client = OpenAICompatibleAIClient('cancel-test', 'm', None, scheduler=AIRequestScheduler(), cancelled=cancelled.is_set)
+    calls = []
+    def post(*args, **kwargs):
+        calls.append(1)
+        cancelled.set()
+        raise requests.Timeout('slow provider')
+    monkeypatch.setattr(requests, 'post', post)
+    monkeypatch.setattr(client, '_retry_delay', lambda *args: 0)
+    with pytest.raises(InterruptedError):
+        client._post_json('https://fake.test', {}, {}, attempts=1)
+    assert len(calls) == 1
+    assert client.scheduler.snapshot(client.account_key)['active'] == 0
+
+
+def test_retry_after_is_capped_and_ignores_nonfinite_values():
+    import requests
+    client = OpenAICompatibleAIClient('delay-test', 'm', None)
+    response = requests.Response()
+    for value in ('86400', 'inf', 'nan'):
+        response.headers['Retry-After'] = value
+        delay = client._retry_delay(response, 0)
+        assert 0 <= delay <= 30
+
+
+def test_translation_reports_title_before_network_request(monkeypatch):
+    client = OpenAICompatibleAIClient('title-progress', 'm', None)
+    events = []
+    def translate(text, *args, **kwargs):
+        assert events, 'UI must leave queued state before the first network call'
+        return 'Translated ' + text
+    monkeypatch.setattr(client, '_translate_text', translate)
+    client.translate_article_fields('Title', 'Body', language='Italian', progress_callback=events.append)
+    assert 'title' in events[0].lower()
+
+
+def test_request_timeout_does_not_restart_full_budget_for_each_retry(monkeypatch):
+    import requests
+    from types import SimpleNamespace
+    import app.integrations.ai.openai_compatible as module
+    from app.integrations.ai.scheduler import AIRequestScheduler
+    clock = [0.0]
+    calls = []
+    client = OpenAICompatibleAIClient('budget-test', 'm', None, scheduler=AIRequestScheduler())
+    monkeypatch.setattr(module, 'time', SimpleNamespace(monotonic=lambda: clock[0], sleep=lambda value: None))
+    monkeypatch.setattr(module, '_get_ai_request_timeout', lambda value: 30)
+    monkeypatch.setattr(client, '_retry_delay', lambda *args: 0)
+    def post(*args, **kwargs):
+        calls.append(kwargs['timeout'])
+        clock[0] += 31
+        raise requests.Timeout('provider stalled')
+    monkeypatch.setattr(requests, 'post', post)
+    with pytest.raises(requests.Timeout, match='budget exhausted'):
+        client._post_json('https://fake.test', {}, {})
+    assert calls == [30]

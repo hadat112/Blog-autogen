@@ -5,6 +5,8 @@ import os
 import re
 import time
 import random
+import math
+import logging
 from email.utils import parsedate_to_datetime
 from datetime import datetime, timezone
 from .quota import quota_identity, normalize_concurrency
@@ -510,6 +512,7 @@ class OpenAICompatibleAIClient(BaseAI):
         self.account_key = quota_identity(self.base_url, self.api_key)
         self.max_concurrency = normalize_concurrency(max_concurrency if max_concurrency is not None else translation_max_concurrency)
         self.cancelled = cancelled
+        self.request_progress = None
         self.recovery = None
         self.retry_transient = False
         self.scheduler = scheduler or ai_request_scheduler
@@ -539,29 +542,52 @@ class OpenAICompatibleAIClient(BaseAI):
         value = response.headers.get("Retry-After") if response is not None else None
         if value:
             try:
-                return max(0, float(value))
+                seconds = float(value)
+                if math.isfinite(seconds):
+                    return max(0, min(30, seconds))
             except (TypeError, ValueError):
                 try:
-                    return max(0, (parsedate_to_datetime(value) - datetime.now(timezone.utc)).total_seconds())
+                    return max(0, min(30, (parsedate_to_datetime(value) - datetime.now(timezone.utc)).total_seconds()))
                 except (ValueError, TypeError, OverflowError):
                     pass
-        return min(30, 2 ** attempt) + random.uniform(0, .25)
+        return min(30, 2 ** attempt + random.uniform(0, .25))
+
+    def _request_notice(self, message):
+        logging.getLogger(__name__).info("AI request: %s", message)
+        if self.request_progress:
+            self.request_progress(message)
 
     def _post_json(self, url, headers, data, *, allow_fallback=True, attempts=3, priority="foreground"):
         last_error = None
+        budget = _get_ai_request_timeout(self.ai_request_timeout)
+        deadline = time.monotonic() + budget
         for attempt in range(attempts):
             self._check_cancelled()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise requests.Timeout(f"AI request retry budget exhausted after {budget}s") from last_error
             response = None
             try:
-                with self.scheduler.permit(self.account_key, self.request_limit, priority, cancelled=self.cancelled):
+                def waiting(state):
+                    self._request_notice(f"Waiting for AI slot: active={state['active']}/{state['capacity']}, "
+                                         f"queued={state['waiting']}, cooldown={state['cooldown_seconds']:.0f}s")
+                with self.scheduler.permit(self.account_key, self.request_limit, priority, cancelled=self.cancelled,
+                                           wait_timeout=remaining, on_wait=waiting):
                     self._check_cancelled()
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise requests.Timeout(f"AI request retry budget exhausted after {budget}s")
+                    self._request_notice(f"Calling AI (attempt {attempt + 1}/{attempts}, timeout {remaining:.0f}s)")
                     response = requests.post(url, headers=headers, json=self._request_payload_for_attempt(data, attempt + 1) if allow_fallback else data,
-                                             timeout=_get_ai_request_timeout(self.ai_request_timeout))
+                                             timeout=remaining)
                     response.raise_for_status()
                 self._check_cancelled()
                 return response
             except requests.RequestException as exc:
                 last_error = exc
+                # Cancellation wins even on the final HTTP failure. It must not
+                # create another retry/cooldown or mark a cancelled job failed.
+                self._check_cancelled()
                 status = getattr(response, "status_code", None)
                 if status is not None and status not in TRANSIENT_STATUS_CODES:
                     raise
@@ -570,10 +596,13 @@ class OpenAICompatibleAIClient(BaseAI):
                     self.scheduler.cooldown(self.account_key, delay)
                 if attempt == attempts - 1:
                     raise
-                deadline = time.monotonic() + delay
-                while time.monotonic() < deadline:
+                if time.monotonic() + delay >= deadline:
+                    raise requests.Timeout(f"AI request retry budget exhausted after {budget}s") from exc
+                self._request_notice(f"AI attempt failed ({status or type(exc).__name__}); retrying in {delay:.1f}s")
+                retry_at = time.monotonic() + delay
+                while time.monotonic() < retry_at:
                     self._check_cancelled()
-                    time.sleep(min(.1, max(0, deadline - time.monotonic())))
+                    time.sleep(min(.1, max(0, retry_at - time.monotonic())))
         raise last_error
 
     def chat(
@@ -705,6 +734,8 @@ class OpenAICompatibleAIClient(BaseAI):
         language: str = "Ukrainian",
         progress_callback=None,
     ) -> dict:
+        if progress_callback:
+            progress_callback("Translating title")
         translated_title = self.translate_title(title, language)
         chunks = self.recovery.get("translation:chunks") if self.recovery else None
         if chunks is None:

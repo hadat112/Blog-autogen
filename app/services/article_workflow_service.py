@@ -210,6 +210,13 @@ class ArticleWorkflowService:
                 def check_cancelled():
                     recovery.check_active()
 
+                def request_progress(detail):
+                    # Parallel chunk requests must not share the workflow's
+                    # SQLAlchemy session when reporting admission/retries.
+                    with SessionLocal() as progress_db:
+                        step = "translate_story" if mode == "v1" else "rewrite_story"
+                        WorkflowJobService(progress_db).progress(job_id, step, 50, detail)
+
                 if assembled:
                     res_title, res_content, res_caption = assembled["title"], assembled["content"], assembled["caption"]
                     res_caption_matches_prefix = assembled.get("caption_matches_prefix", False)
@@ -229,6 +236,7 @@ class ArticleWorkflowService:
                         ai_client.recovery = recovery
                         ai_client.retry_transient = True
                         ai_client.cancelled = recovery.cancelled
+                        ai_client.request_progress = request_progress
                         ai_client.translation_chunk_size = manifest["chunk_size"]
                         ai_client.translation_mode = manifest.get("translation_mode", "sequential")
                         # Mode V1: Deterministic Translation
@@ -258,6 +266,7 @@ class ArticleWorkflowService:
                         ai_client.recovery = recovery
                         ai_client.retry_transient = True
                         ai_client.cancelled = recovery.cancelled
+                        ai_client.request_progress = request_progress
                         ai_client.translation_chunk_size = manifest["chunk_size"]
                         ai_client.translation_mode = manifest.get("translation_mode", "sequential")
                         def v2_progress(index, total, phase, meta=None):

@@ -509,12 +509,13 @@ def test_translate_article_fields_uses_previous_translation_for_later_chunks():
     )
 
     assert article["content"] == "Translated first chunk\n\nTranslated second chunk"
-    assert progress_messages[0] == "Step 2: chunk1 start (3 words)"
-    assert progress_messages[1].startswith("Step 2: chunk1 done in ")
-    assert progress_messages[1].endswith(" 33% (3/9 words)")
-    assert progress_messages[2] == "Step 2: chunk2 start (6 words)"
-    assert progress_messages[3].startswith("Step 2: chunk2 done in ")
-    assert progress_messages[3].endswith(" 100% (9/9 words)")
+    assert progress_messages[0] == "Translating title"
+    assert progress_messages[1] == "Step 2: chunk1 start (3 words)"
+    assert progress_messages[2].startswith("Step 2: chunk1 done in ")
+    assert progress_messages[2].endswith(" 33% (3/9 words)")
+    assert progress_messages[3] == "Step 2: chunk2 start (6 words)"
+    assert progress_messages[4].startswith("Step 2: chunk2 done in ")
+    assert progress_messages[4].endswith(" 100% (9/9 words)")
     second_payload = json.loads(responses.calls[2].request.body.decode("utf-8"))
     second_prompt = second_payload["messages"][1]["content"]
     assert "Previous translated context already written in Italian" in second_prompt

@@ -1,9 +1,12 @@
 import mimetypes
+import base64
+import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import requests
 from requests.auth import HTTPBasicAuth
+from app.services.error_sanitizer import sanitize_error
 
 
 ALLOWED_IMAGE_MIME = {"image/jpeg", "image/png", "image/webp", "image/gif"}
@@ -41,6 +44,31 @@ class WordPressDestinationGateway:
         self.session.max_redirects = 3
         self.remote_proxy_url = remote_proxy_url or ""
 
+    def _raise_for_status(self, response):
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            # Keep useful WP codes without recording raw HTML, headers, or
+            # arbitrary response objects that could contain credentials.
+            details = ""
+            try:
+                body = response.json()
+                if isinstance(body, dict):
+                    details = ": ".join(str(body[key]) for key in ("code", "message")
+                                        if isinstance(body.get(key), str))
+            except ValueError:
+                pass
+            if not details and "html" in response.headers.get("Content-Type", "").lower():
+                details = "Server returned an HTML rejection; check hosting/firewall logs"
+            message = f"WordPress HTTP {response.status_code}: {details or 'Request rejected'}"
+            basic = base64.b64encode(f"{self.auth.username}:{self.auth.password}".encode('latin1')).decode('ascii')
+            message = re.sub(r"(Basic\s+)[^\s,;]+", r"\1[redacted]", message, flags=re.IGNORECASE)
+            for secret in (basic, self.auth.password):
+                if secret:
+                    message = message.replace(str(secret), "[redacted]")
+            message = " ".join(sanitize_error(message).split())[:450]
+            raise requests.HTTPError(message, response=response, request=exc.request) from exc
+
     def categories(self):
         response = self.session.get(
             f"{self.url}/wp-json/wp/v2/categories",
@@ -48,7 +76,7 @@ class WordPressDestinationGateway:
             params={"per_page": 100},
             timeout=15,
         )
-        response.raise_for_status()
+        self._raise_for_status(response)
         return response.json()
 
     def _upload_bytes(self, content, filename, mime):
@@ -61,7 +89,7 @@ class WordPressDestinationGateway:
             data=content,
             timeout=60,
         )
-        response.raise_for_status()
+        self._raise_for_status(response)
         return str(response.json()["id"])
 
     def upload_file(self, source):
@@ -126,6 +154,6 @@ class WordPressDestinationGateway:
             )
         except (requests.Timeout, requests.ConnectionError) as exc:
             raise AmbiguousWordPressResult("WordPress may have created the post; verify it before retrying") from exc
-        response.raise_for_status()
+        self._raise_for_status(response)
         result = response.json()
         return {"id": str(result["id"]), "link": result["link"], "status": result.get("status", status)}

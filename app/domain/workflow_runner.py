@@ -4,6 +4,8 @@ from datetime import datetime
 from app.db import models
 from app.db.session import SessionLocal
 from app.services.job_retention_service import JobRetentionService
+from app.services.workflow_job_service import WorkflowJobService
+from app.services.error_sanitizer import sanitize_error
 
 
 class WorkflowRunner:
@@ -55,6 +57,18 @@ class WorkflowRunner:
         except asyncio.CancelledError:
             self._mark_cancelled(job_id)
             raise
+        except Exception as exc:
+            # Admission/setup can fail before the service's own error handler
+            # starts. Never leave that job queued forever.
+            with SessionLocal() as db:
+                job = db.get(models.Job, job_id)
+                if job and job.status in {"queued", "running"}:
+                    draft = db.get(models.ContentDraft, job.draft_id) if job.draft_id else None
+                    if draft and draft.state == "generating":
+                        draft.state = "generation_failed"
+                        draft.error = sanitize_error(str(exc))[:500]
+                    WorkflowJobService(db).fail(job_id, sanitize_error(str(exc)))
+            raise
         finally:
             self.active_jobs.pop(job_id, None)
 
@@ -74,6 +88,11 @@ class WorkflowRunner:
                 job.current_step = "Cancelled"
                 job.outputs = outputs
                 job.end_time = datetime.utcnow()
+                logs = list(job.logs or [])
+                logs.append({"timestamp": job.end_time.isoformat(), "step_name": "Cancelled",
+                             "progress": job.progress, "event": "cancelled",
+                             "detail": "Workflow cancelled. An in-flight network request may retain its slot until it finishes or times out; no further AI retries will start."})
+                job.logs = logs[-120:]
                 if job.draft_id:
                     draft = db.query(models.ContentDraft).filter(models.ContentDraft.id == job.draft_id).first()
                     if draft and draft.state == "generating":
